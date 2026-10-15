@@ -15,12 +15,43 @@ object I18n {
     data class ColorOption(val key: String, val hex: String)
 
     val COLORS: List<ColorOption> = listOf(
-        ColorOption("red", "#d95f4c"),
+        ColorOption("green", "#5aa25f"),
         ColorOption("orange", "#e9963e"),
         ColorOption("blue", "#4d74aa"),
         ColorOption("lightblue", "#74b8ca"),
-        ColorOption("green", "#5aa25f")
+        ColorOption("red", "#d95f4c")
     )
+
+    fun getMoodName(hex: String, language: String): String {
+        val rtl = isRtl(language)
+        return when (hex.lowercase()) {
+            "#5aa25f" -> if (rtl) "سكينة خضراء" else "Calm Green"
+            "#e9963e" -> if (rtl) "دفء الشمس" else "Warm Sun"
+            "#4d74aa" -> if (rtl) "هدوء المساء" else "Evening Blue"
+            "#74b8ca" -> if (rtl) "غيمة صافية" else "Clear Sky"
+            "#d95f4c" -> if (rtl) "نبض وشغف" else "Lively Spark"
+            else -> if (rtl) "لون فريد" else "Unique Mood"
+        }
+    }
+
+    val GENTLE_PROMPTS_AR = listOf(
+        "ما هي اللحظة الصغيرة التي تود لو تحتفظ بها من اليوم؟",
+        "لو كان لهذا اليوم طعم أو رائحة، ماذا سيكون؟",
+        "شيء بسيط جعل قلبك أهدأ اليوم…",
+        "كلمة واحدة تلخص شعورك الآن؟",
+        "ما الذي أدهشك أو جعلك تبتسم اليوم؟"
+    )
+
+    val GENTLE_PROMPTS_EN = listOf(
+        "What tiny moment from today do you want to keep?",
+        "If today had a scent or sound, what would it be?",
+        "One small thing that brought you peace today…",
+        "One word that sums up how you feel right now?",
+        "What made you smile or pause today?"
+    )
+
+    fun getGentlePrompts(language: String): List<String> =
+        if (isRtl(language)) GENTLE_PROMPTS_AR else GENTLE_PROMPTS_EN
 
     data class Strings(
         val dir: String,

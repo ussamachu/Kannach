@@ -244,6 +244,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun getPreviousEntryDateKey(currentKey: String): String? {
+        val sortedKeys = entries.value.keys.filter {
+            val e = entries.value[it]
+            e != null && (e.text.isNotBlank() || e.strokes.isNotEmpty())
+        }.sorted()
+        val index = sortedKeys.indexOf(currentKey)
+        return if (index > 0) sortedKeys[index - 1] else null
+    }
+
+    fun getNextEntryDateKey(currentKey: String): String? {
+        val sortedKeys = entries.value.keys.filter {
+            val e = entries.value[it]
+            e != null && (e.text.isNotBlank() || e.strokes.isNotEmpty())
+        }.sorted()
+        val index = sortedKeys.indexOf(currentKey)
+        return if (index >= 0 && index < sortedKeys.size - 1) sortedKeys[index + 1] else null
+    }
+
+    fun getRandomEntryDateKey(): String? {
+        val validKeys = entries.value.keys.filter {
+            val e = entries.value[it]
+            e != null && (e.text.isNotBlank() || e.strokes.isNotEmpty())
+        }
+        return if (validKeys.isNotEmpty()) validKeys.random() else null
+    }
+
     fun switchToEditMode() {
         vibrate(6)
         _sheetMode.value = SheetMode.EDIT

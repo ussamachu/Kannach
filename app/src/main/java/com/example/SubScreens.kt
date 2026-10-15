@@ -101,6 +101,13 @@ fun GalleryScreen(
     val totalYearDays = if (currentYear % 4 == 0 && (currentYear % 100 != 0 || currentYear % 400 == 0)) 366 else 365
     val remainingDays = (totalYearDays - yearEntries.size).coerceAtLeast(0)
 
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredEntries = remember(yearEntries, searchQuery) {
+        if (searchQuery.isBlank()) yearEntries.toList()
+        else yearEntries.filter { it.value.text.contains(searchQuery, ignoreCase = true) }.toList()
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -153,7 +160,7 @@ fun GalleryScreen(
                 Text(
                     text = I18n.formatYear(currentYear, language),
                     fontSize = 18.sp,
-                    fontFamily = FontFamily.Cursive,
+                    fontFamily = LocalKannachHandFont.current,
                     color = palette.greenDeep
                 )
             }
@@ -170,30 +177,136 @@ fun GalleryScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Year Wrap Button
+            // Light Paper Search Bar
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .clip(CircleShape)
-                    .background(palette.greenSoft)
-                    .border(1.5.dp, palette.greenLine, CircleShape)
-                    .clickable { viewModel.openWrap() }
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .shadow(3.dp, RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(palette.paperHi)
+                    .border(1.2.dp, palette.line, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Text(
-                    text = strings.wrapBtn,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = palette.greenDeep
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    KannachIcon(
+                        icon = KannachIconType.SPROUT,
+                        tint = palette.green,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                text = if (I18n.isRtl(language)) "ابحث في كلمات ذكرياتك…" else "Search your memories…",
+                                fontSize = 13.sp,
+                                fontFamily = LocalKannachUiFont.current,
+                                color = palette.inkFaint
+                            )
+                        }
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            textStyle = TextStyle(
+                                fontSize = 13.sp,
+                                fontFamily = LocalKannachUiFont.current,
+                                color = palette.ink
+                            ),
+                            cursorBrush = SolidColor(palette.greenDeep),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { searchQuery = "" },
+                            modifier = Modifier.size(20.dp)
+                        ) {
+                            KannachIcon(
+                                icon = KannachIconType.X,
+                                tint = palette.inkFaint,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            if (yearEntries.isEmpty()) {
+            // Action Buttons: Year Wrap & Surprise Me
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Year Wrap Button
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(palette.greenSoft)
+                        .border(1.5.dp, palette.greenLine, CircleShape)
+                        .clickable { viewModel.openWrap() }
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = strings.wrapBtn,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.greenDeep
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Surprise Me Button
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(palette.paperHi)
+                        .border(1.5.dp, palette.line, CircleShape)
+                        .clickable {
+                            val randKey = viewModel.getRandomEntryDateKey()
+                            if (randKey != null) {
+                                viewModel.closeGallery()
+                                viewModel.openSheet(randKey)
+                            } else {
+                                viewModel.showToast(if (I18n.isRtl(language)) "لا توجد ذكريات مكتوبة بعد" else "No written memories yet")
+                            }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        KannachIcon(
+                            icon = KannachIconType.SPARKLE,
+                            tint = palette.orange,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (I18n.isRtl(language)) "فاجئني بذكرى ✨" else "Surprise me ✨",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = palette.ink
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (filteredEntries.isEmpty()) {
                 Text(
-                    text = strings.galleryEmpty,
+                    text = if (searchQuery.isNotBlank()) {
+                        if (I18n.isRtl(language)) "لم نجد رسماً أو تدوينة تطابق «$searchQuery»" else "No doodles or notes matched \"$searchQuery\""
+                    } else strings.galleryEmpty,
                     fontSize = 15.sp,
+                    fontFamily = LocalKannachHandFont.current,
                     color = palette.inkFaint,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
@@ -201,42 +314,85 @@ fun GalleryScreen(
                         .padding(24.dp)
                 )
             } else {
-                // Dense Mosaic of written days
+                // Mosaic of written days as paper cards with organic rotation & dates
                 FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    yearEntries.forEach { (dateKey, entry) ->
+                    filteredEntries.forEachIndexed { idx, (dateKey, entry) ->
                         val glyphColor = try {
                             Color(android.graphics.Color.parseColor(entry.color))
                         } catch (_: Exception) {
                             palette.green
                         }
+                        val rot = if (idx % 3 == 0) -1.8f else if (idx % 2 == 0) 1.5f else 0f
 
-                        Box(
+                        val dayNum = dateKey.substringAfterLast("-").toIntOrNull() ?: 1
+                        val monthNum = dateKey.substring(5, 7).toIntOrNull() ?: 1
+                        val monthShort = I18n.forLanguage(language).months.getOrElse(monthNum - 1) { "" }.take(4)
+                        val dateLabel = "$dayNum $monthShort"
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
-                                .padding(2.dp)
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .padding(4.dp)
+                                .rotate(rot)
+                                .shadow(3.dp, RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(palette.paperHi)
+                                .border(1.dp, palette.line.copy(alpha = 0.8f), RoundedCornerShape(10.dp))
                                 .clickable {
                                     viewModel.closeGallery()
                                     viewModel.openSheet(dateKey)
-                                },
-                            contentAlignment = Alignment.Center
+                                }
+                                .padding(horizontal = 6.dp, vertical = 6.dp)
                         ) {
-                            GlyphView(
-                                strokes = entry.strokes,
-                                color = glyphColor,
-                                modifier = Modifier.fillMaxSize(0.9f)
+                            Box(
+                                modifier = Modifier.size(46.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                GlyphView(
+                                    strokes = entry.strokes,
+                                    color = glyphColor,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = dateLabel,
+                                fontSize = 9.sp,
+                                fontFamily = LocalKannachHandFont.current,
+                                color = palette.inkFaint,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Poetic dots description for remaining days
+                val dotsPoeticText = if (I18n.isRtl(language)) {
+                    "أزهرت ${yearEntries.size} من أصل $totalYearDays يوماً، وما زالت $remainingDays بذرة تنتظر دورها في الإشراق…"
+                } else {
+                    "${yearEntries.size} of $totalYearDays days have bloomed, while $remainingDays seeds wait for their time to shine…"
+                }
+
+                Text(
+                    text = dotsPoeticText,
+                    fontSize = 13.sp,
+                    fontFamily = LocalKannachHandFont.current,
+                    color = palette.inkSoft,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Faint dots for remaining unwritten days
                 FlowRow(
@@ -249,10 +405,10 @@ fun GalleryScreen(
                     repeat(remainingDays.coerceAtMost(366)) {
                         Box(
                             modifier = Modifier
-                                .padding(4.5.dp)
+                                .padding(3.5.dp)
                                 .size(4.dp)
                                 .clip(CircleShape)
-                                .background(palette.inkFaint.copy(alpha = 0.5f))
+                                .background(palette.dot.copy(alpha = 0.55f))
                         )
                     }
                 }
@@ -331,7 +487,7 @@ fun YearWrapScreen(
                     text = I18n.formatYear(currentYear, language),
                     fontSize = 48.sp,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Cursive,
+                    fontFamily = LocalKannachHandFont.current,
                     color = palette.greenDeep
                 )
                 Text(
@@ -487,7 +643,7 @@ private fun StatCard(
                 text = value,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Cursive,
+                fontFamily = LocalKannachHandFont.current,
                 color = palette.greenDeep
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -603,7 +759,7 @@ fun TimeCapsuleScreen(
                             text = strings.capsulePlaceholder,
                             fontSize = 17.sp,
                             lineHeight = 30.sp,
-                            fontFamily = FontFamily.Cursive,
+                            fontFamily = LocalKannachHandFont.current,
                             color = palette.inkFaint
                         )
                     }
@@ -613,7 +769,7 @@ fun TimeCapsuleScreen(
                         textStyle = TextStyle(
                             fontSize = 17.sp,
                             lineHeight = 30.sp,
-                            fontFamily = FontFamily.Cursive,
+                            fontFamily = LocalKannachHandFont.current,
                             color = palette.ink
                         ),
                         cursorBrush = SolidColor(palette.greenDeep),

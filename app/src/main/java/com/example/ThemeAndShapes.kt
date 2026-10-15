@@ -30,6 +30,12 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.Typography
+import androidx.compose.ui.unit.sp
 import java.util.Calendar
 import kotlin.random.Random
 
@@ -308,9 +314,36 @@ fun Modifier.dashedHandDrawnBorder(
     }
 }
 
+// Google Fonts locally installed via font-util
+val PlaypenSansFamily = FontFamily(Font(R.font.playpen_sans, FontWeight.Normal))
+val MarheyFamily = FontFamily(Font(R.font.marhey, FontWeight.Normal))
+val IbmPlexArabicFamily = FontFamily(Font(R.font.ibm_plex_sans_arabic, FontWeight.Normal))
+val SpaceGroteskFamily = FontFamily(Font(R.font.space_grotesk, FontWeight.Normal))
+
+/**
+ * Authentic handwritten font for journal entries, notes, and titles.
+ * Pairs Marhey (for warm Arabic handwriting) and Playpen Sans (for organic Latin handwriting).
+ */
+val KannachHandFont = FontFamily(
+    Font(R.font.marhey, FontWeight.Normal),
+    Font(R.font.playpen_sans, FontWeight.Normal)
+)
+
+/**
+ * Clean UI font for labels, buttons, and app metadata.
+ * Pairs IBM Plex Sans Arabic and Space Grotesk.
+ */
+val KannachUiFont = FontFamily(
+    Font(R.font.ibm_plex_sans_arabic, FontWeight.Normal),
+    Font(R.font.space_grotesk, FontWeight.Normal)
+)
+
+val LocalKannachHandFont = staticCompositionLocalOf { KannachHandFont }
+val LocalKannachUiFont = staticCompositionLocalOf { KannachUiFont }
+
 /**
  * Root theme composable for Kannach.
- * Handles dynamic RTL/LTR directionality and seasonal color palette updates.
+ * Handles dynamic RTL/LTR directionality, typography, and seasonal color palette updates.
  */
 @Composable
 fun KannachTheme(
@@ -321,6 +354,9 @@ fun KannachTheme(
     val palette = getSeasonalPalette(month)
     val isRtl = I18n.isRtl(language)
     val layoutDirection = if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
+
+    val activeHandFont = if (isRtl) KannachHandFont else PlaypenSansFamily
+    val activeUiFont = if (isRtl) IbmPlexArabicFamily else SpaceGroteskFamily
 
     val m3Colors = lightColorScheme(
         primary = palette.green,
@@ -338,13 +374,34 @@ fun KannachTheme(
         error = palette.red
     )
 
+    val typography = Typography(
+        displayLarge = TextStyle(fontFamily = activeHandFont, fontWeight = FontWeight.Bold, fontSize = 34.sp),
+        displayMedium = TextStyle(fontFamily = activeHandFont, fontWeight = FontWeight.Bold, fontSize = 28.sp),
+        displaySmall = TextStyle(fontFamily = activeHandFont, fontWeight = FontWeight.Bold, fontSize = 22.sp),
+        headlineLarge = TextStyle(fontFamily = activeHandFont, fontWeight = FontWeight.SemiBold, fontSize = 20.sp),
+        headlineMedium = TextStyle(fontFamily = activeHandFont, fontWeight = FontWeight.SemiBold, fontSize = 18.sp),
+        headlineSmall = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
+        titleLarge = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
+        titleMedium = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Medium, fontSize = 14.sp),
+        titleSmall = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Medium, fontSize = 13.sp),
+        bodyLarge = TextStyle(fontFamily = activeHandFont, fontWeight = FontWeight.Normal, fontSize = 18.sp, lineHeight = 28.sp),
+        bodyMedium = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Normal, fontSize = 14.sp),
+        bodySmall = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Normal, fontSize = 12.sp),
+        labelLarge = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Medium, fontSize = 14.sp),
+        labelMedium = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Normal, fontSize = 12.sp),
+        labelSmall = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Normal, fontSize = 11.sp)
+    )
+
     CompositionLocalProvider(
         LocalKannachPalette provides palette,
         LocalKannachLanguage provides language,
+        LocalKannachHandFont provides activeHandFont,
+        LocalKannachUiFont provides activeUiFont,
         LocalLayoutDirection provides layoutDirection
     ) {
         MaterialTheme(
             colorScheme = m3Colors,
+            typography = typography,
             content = content
         )
     }
