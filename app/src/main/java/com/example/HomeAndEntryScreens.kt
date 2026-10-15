@@ -333,32 +333,6 @@ fun AppHeader(
                 )
             }
         }
-
-        // Row 3: Year Count Chip
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 6.dp),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            val countStr = strings.galleryCount.replace("{n}", yearCount.toString())
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(palette.greenSoft)
-                    .border(1.5.dp, palette.greenLine, CircleShape)
-                    .clickable { viewModel.openGallery() }
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = countStr,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = palette.greenDeep
-                )
-            }
-        }
     }
 }
 
@@ -472,6 +446,17 @@ fun MonthGrid(
         label = "pulseAlpha"
     )
 
+    val firstDayOfWeekOffset = remember(currentYear, currentMonth) {
+        val cal = Calendar.getInstance()
+        cal.set(currentYear, currentMonth - 1, 1)
+        (cal.get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY + 7) % 7
+    }
+    val nowCalendar = remember { Calendar.getInstance() }
+    val nowYear = nowCalendar.get(Calendar.YEAR)
+    val nowMonth = nowCalendar.get(Calendar.MONTH) + 1
+    val isCurrentMonthView = currentYear == nowYear && currentMonth == nowMonth
+    val hasTodayEntry = entries[todayKey] != null
+
     // Gesture detection for horizontal month swiping
     var totalDragX by remember { mutableStateOf(0f) }
 
@@ -484,217 +469,124 @@ fun MonthGrid(
                     onHorizontalDrag = { _, dragAmount -> totalDragX += dragAmount },
                     onDragEnd = {
                         if (totalDragX > 70f) {
-                            // Drag right -> previous in LTR, next in RTL
                             val delta = if (isRtl) 1 else -1
                             viewModel.shiftMonth(delta)
                         } else if (totalDragX < -70f) {
-                            // Drag left -> next in LTR, prev in RTL
                             val delta = if (isRtl) -1 else 1
                             viewModel.shiftMonth(delta)
                         }
                     }
                 )
             }
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 96.dp)
+            .padding(horizontal = 14.dp)
+            .padding(bottom = 96.dp),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Banner: On This Day
-        onThisDayHit?.let { hit ->
-            val titleStr = strings.onThisDay.replace("{y}", hit.year.toString())
-            DashedBanner(
-                title = titleStr,
-                subtitle = hit.entry.text.takeIf { it.isNotBlank() },
-                onBannerClick = { viewModel.openSheet(hit.key) },
-                onCloseClick = { viewModel.dismissOnThisDay() }
-            )
-        }
-
-        // Banner: Time Capsule Ready
-        readyCapsule?.let { capsule ->
-            DashedBanner(
-                title = strings.capsuleReadyBanner,
-                subtitle = strings.capsuleTitle,
-                onBannerClick = { viewModel.openReadyCapsule(capsule) },
-                onCloseClick = { viewModel.dismissReadyCapsule() }
-            )
-        }
-
-        // Hint Banner if Month is empty
-        val monthEntriesCount = entries.keys.count {
-            val keyPrefix = String.format(java.util.Locale.US, "%04d-%02d", currentYear, currentMonth)
-            it.startsWith(keyPrefix)
-        }
-        val favCount = entries.values.count { it.fav }
-        val hintText = if (filter == "fav" && favCount == 0) {
-            strings.noFavs
-        } else if (monthEntriesCount == 0) {
-            strings.emptyHint
-        } else null
-
-        if (hintText != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 10.dp)
-                    .clip(HandDrawnRadiusShape)
-                    .background(palette.greenSoft)
-                    .dashedHandDrawnBorder(palette.greenLine, HandDrawnRadiusShape)
-                    .padding(12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = hintText,
-                    fontSize = 14.sp,
-                    color = palette.greenDeep,
-                    textAlign = TextAlign.Center
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Banner: On This Day (if present)
+            onThisDayHit?.let { hit ->
+                val titleStr = strings.onThisDay.replace("{y}", hit.year.toString())
+                DashedBanner(
+                    title = titleStr,
+                    subtitle = hit.entry.text.takeIf { it.isNotBlank() },
+                    onBannerClick = { viewModel.openSheet(hit.key) },
+                    onCloseClick = { viewModel.dismissOnThisDay() }
                 )
+                Spacer(modifier = Modifier.height(6.dp))
             }
-        }
 
-        // Notebook Month Card
-        val firstDayOfWeekOffset = remember(currentYear, currentMonth) {
-            val cal = Calendar.getInstance()
-            cal.set(currentYear, currentMonth - 1, 1)
-            (cal.get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY + 7) % 7
-        }
+            // Banner: Time Capsule Ready (if present)
+            readyCapsule?.let { capsule ->
+                DashedBanner(
+                    title = strings.capsuleReadyBanner,
+                    subtitle = strings.capsuleTitle,
+                    onBannerClick = { viewModel.openReadyCapsule(capsule) },
+                    onCloseClick = { viewModel.dismissReadyCapsule() }
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            }
 
-        val nowCalendar = remember { Calendar.getInstance() }
-        val nowYear = nowCalendar.get(Calendar.YEAR)
-        val nowMonth = nowCalendar.get(Calendar.MONTH) + 1
-        val isCurrentMonthView = currentYear == nowYear && currentMonth == nowMonth
-        val hasTodayEntry = entries[todayKey] != null
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 6.dp)
-        ) {
-            // Notebook Month Card Container
-            Box(
+            // Weekdays Row
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(8.dp, HandDrawnRadiusShape)
-                    .clip(HandDrawnRadiusShape)
-                    .background(palette.paperHi)
-                    .border(1.5.dp, palette.line, HandDrawnRadiusShape)
-                    .padding(top = 18.dp, bottom = 14.dp, start = 10.dp, end = 10.dp)
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceAround
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Weekdays Row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceAround
-                    ) {
-                        val weekDays = if (isRtl) {
-                            listOf("أحد", "إثن", "ثلا", "أرب", "خمي", "جمع", "سبت")
-                        } else {
-                            listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-                        }
-                        weekDays.forEach { wDay ->
-                            Text(
-                                text = wDay,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = palette.inkFaint,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    // 7-Column Grid aligned to real calendar days
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(7),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 720.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        userScrollEnabled = false
-                    ) {
-                        // Empty cells for month offset
-                        items(firstDayOfWeekOffset) {
-                            Box(modifier = Modifier.aspectRatio(1f))
-                        }
-
-                        items(daysInMonth) { index ->
-                            val day = index + 1
-                            val dateKey = String.format(java.util.Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
-                            val nextDayKey = String.format(java.util.Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day + 1)
-
-                            val isToday = dateKey == todayKey
-                            val isFuture = dateKey > todayKey
-                            val entry = entries[dateKey]
-                            val nextEntry = entries[nextDayKey]
-
-                            // Same row check accounting for offset
-                            val sameRow = ((firstDayOfWeekOffset + day - 1) % 7 != 6) && (day < daysInMonth)
-                            val chainNext = sameRow && entry != null && nextEntry != null &&
-                                    (filter == "all" || (entry.fav && nextEntry.fav))
-
-                            val rot = when {
-                                day % 3 == 0 -> -4f
-                                day % 4 == 0 -> 3f
-                                day % 5 == 0 -> -2f
-                                day % 7 == 0 -> 2.5f
-                                else -> 0f
-                            }
-
-                            val isDimmed = entry != null && filter == "fav" && !entry.fav
-
-                            DayCell(
-                                day = day,
-                                dateKey = dateKey,
-                                entry = entry,
-                                isToday = isToday,
-                                isFuture = isFuture,
-                                isDimmed = isDimmed,
-                                chainNext = chainNext,
-                                rotation = rot,
-                                pulseScale = pulseScale,
-                                pulseAlpha = pulseAlpha,
-                                onClick = { viewModel.openSheet(dateKey) }
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Garden Pulse Bar
-                    GardenPulseBar(
-                        monthEntriesCount = monthEntriesCount,
-                        daysInMonth = daysInMonth,
-                        isRtl = isRtl
+                val weekDays = if (isRtl) {
+                    listOf("أحد", "إثن", "ثلا", "أرب", "خمي", "جمع", "سبت")
+                } else {
+                    listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+                }
+                weekDays.forEach { wDay ->
+                    Text(
+                        text = wDay,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.inkFaint,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            // Washi Tape at Top Center
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-6).dp)
-                    .size(width = 58.dp, height = 14.dp)
-                    .rotate(-2f)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(palette.greenSoft.copy(alpha = 0.88f))
-                    .border(0.8.dp, palette.greenLine.copy(alpha = 0.65f), RoundedCornerShape(2.dp))
-            )
+            // 7-Column Grid of Month Days with 6.dp spacing and 0.82f aspect ratio
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(7),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                userScrollEnabled = false
+            ) {
+                // Empty offset cells
+                items(firstDayOfWeekOffset) {
+                    Box(modifier = Modifier.aspectRatio(0.82f))
+                }
+
+                items(daysInMonth) { index ->
+                    val day = index + 1
+                    val dateKey = String.format(java.util.Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
+                    val isToday = dateKey == todayKey
+                    val isFuture = dateKey > todayKey
+                    val entry = entries[dateKey]
+
+                    val rot = when {
+                        day % 3 == 0 -> -2.5f
+                        day % 4 == 0 -> 2f
+                        day % 5 == 0 -> -1.5f
+                        day % 7 == 0 -> 2f
+                        else -> 0f
+                    }
+
+                    val isDimmed = entry != null && filter == "fav" && !entry.fav
+
+                    DayCell(
+                        day = day,
+                        dateKey = dateKey,
+                        entry = entry,
+                        isToday = isToday,
+                        isFuture = isFuture,
+                        isDimmed = isDimmed,
+                        rotation = rot,
+                        pulseScale = pulseScale,
+                        pulseAlpha = pulseAlpha,
+                        onClick = { viewModel.openSheet(dateKey) }
+                    )
+                }
+            }
         }
 
-        // "Plant today's doodle" button underneath the card
+        // Quiet paper invitation card above bottom tab bar if today has not been written yet
         if (isCurrentMonthView && !hasTodayEntry) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 6.dp)
-                    .clip(HandDrawnRadiusAltShape)
-                    .background(palette.greenSoft)
-                    .border(1.5.dp, palette.green, HandDrawnRadiusAltShape)
+                    .padding(horizontal = 4.dp, vertical = 6.dp)
+                    .clip(HandDrawnRadiusShape)
+                    .background(palette.paperHi)
+                    .dashedHandDrawnBorder(palette.greenLine, HandDrawnRadiusShape)
                     .clickable { viewModel.openSheet(todayKey) }
-                    .padding(vertical = 12.dp, horizontal = 16.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
@@ -704,96 +596,20 @@ fun MonthGrid(
                     KannachIcon(
                         icon = KannachIconType.BRUSH,
                         tint = palette.greenDeep,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isRtl) "اترك بصمتك الصغيرة لليوم ✨" else "Plant today's little doodle ✨",
-                        fontSize = 15.sp,
+                        text = if (isRtl) "صفحة اليوم بيضاء.. اترك رسمتك الصغيرة" else "Today's page is blank.. leave your little mark",
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = LocalKannachHandFont.current,
                         color = palette.greenDeep
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun GardenPulseBar(
-    monthEntriesCount: Int,
-    daysInMonth: Int,
-    isRtl: Boolean
-) {
-    val palette = LocalKannachPalette.current
-    val progress = (monthEntriesCount.toFloat() / daysInMonth.toFloat()).coerceIn(0f, 1f)
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(palette.paper)
-            .border(1.dp, palette.line.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                KannachIcon(
-                    icon = KannachIconType.SPROUT,
-                    tint = palette.green,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                val statusText = if (monthEntriesCount == 0) {
-                    if (isRtl) "صفحة هذا الشهر تنتظر أول رسمة منك" else "This month's page is waiting for your first doodle"
-                } else {
-                    if (isRtl) "أزهر $monthEntriesCount من أصل $daysInMonth يوماً في هذا الشهر" else "$monthEntriesCount of $daysInMonth days bloomed this month"
-                }
-                Text(
-                    text = statusText,
-                    fontSize = 12.sp,
-                    color = palette.inkSoft,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            if (monthEntriesCount > 0) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "${(progress * 100).toInt()}%",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = palette.greenDeep
-                )
-            }
-        }
-
-        if (monthEntriesCount > 0) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(CircleShape)
-                    .background(palette.greenSoft)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(progress)
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                        .background(palette.green)
-                )
-            }
+        } else {
+            Spacer(modifier = Modifier.height(1.dp))
         }
     }
 }
@@ -806,7 +622,6 @@ private fun DayCell(
     isToday: Boolean,
     isFuture: Boolean,
     isDimmed: Boolean,
-    chainNext: Boolean,
     rotation: Float,
     pulseScale: Float,
     pulseAlpha: Float,
@@ -824,85 +639,78 @@ private fun DayCell(
         label = "bloomScale"
     )
 
+    val cellShape = RoundedCornerShape(12.dp)
+    val cellBg = if (!isFuture) palette.paperHi.copy(alpha = 0.65f) else Color.Transparent
+    val cellBorderColor = when {
+        isToday -> palette.green
+        !isFuture -> palette.line.copy(alpha = 0.6f)
+        else -> Color.Transparent
+    }
+
     Box(
         modifier = Modifier
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(enabled = !isFuture) { onClick() },
-        contentAlignment = Alignment.Center
+            .aspectRatio(0.82f)
+            .clip(cellShape)
+            .background(cellBg)
+            .then(
+                if (!isFuture) Modifier.border(1.dp, cellBorderColor, cellShape) else Modifier
+            )
+            .clickable(enabled = !isFuture) { onClick() }
     ) {
-        // Chain connecting line to next day
-        if (chainNext) {
-            Box(
+        // Day number in top corner
+        if (!isFuture || day <= 31) {
+            Text(
+                text = day.toString(),
+                fontSize = 10.sp,
+                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                color = if (isToday) palette.greenDeep else palette.inkFaint.copy(alpha = 0.65f),
                 modifier = Modifier
-                    .fillMaxWidth(0.5f)
-                    .height(2.dp)
-                    .align(Alignment.CenterEnd)
-                    .offset(x = 4.dp)
-                    .background(palette.greenLine)
+                    .align(Alignment.TopStart)
+                    .padding(5.dp)
             )
         }
 
-        // Today pulsing ring
-        if (isToday) {
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize(0.92f)
-                    .scale(pulseScale)
-                    .alpha(pulseAlpha)
-            ) {
-                drawCircle(
-                    color = palette.green,
-                    radius = size.minDimension / 2f - 2.dp.toPx(),
-                    style = Stroke(
-                        width = 2.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
-                    )
+        // Center content: GlyphView OR Sprout (if today unwritten) OR Dot (if unwritten)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 10.dp, bottom = 4.dp, start = 4.dp, end = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (entry != null && !isFuture) {
+                val glyphColor = try {
+                    Color(android.graphics.Color.parseColor(entry.color))
+                } catch (_: Exception) {
+                    palette.green
+                }
+
+                GlyphView(
+                    strokes = entry.strokes,
+                    color = glyphColor,
+                    modifier = Modifier
+                        .fillMaxSize(0.78f)
+                        .scale(bloomScale)
+                        .rotate(rotation)
+                        .alpha(if (isDimmed) 0.16f else 1.0f)
                 )
-            }
-        }
-
-        if (entry != null && !isFuture) {
-            // Drawn Glyph with spring bloom animation (0.82f size, day number hidden)
-            val glyphColor = try {
-                Color(android.graphics.Color.parseColor(entry.color))
-            } catch (_: Exception) {
-                palette.green
-            }
-
-            GlyphView(
-                strokes = entry.strokes,
-                color = glyphColor,
-                modifier = Modifier
-                    .fillMaxSize(0.82f)
-                    .scale(bloomScale)
-                    .rotate(rotation)
-                    .alpha(if (isDimmed) 0.16f else 1.0f)
-            )
-        } else {
-            // Unwritten Day: Central Dot + Day Number below
-            val dotColor = when {
-                isToday -> palette.green
-                isFuture -> palette.dot.copy(alpha = 0.55f)
-                else -> palette.dot
-            }
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
+            } else if (isToday) {
+                // Pulsing gentle sprout calling the user to plant a memory
+                KannachIcon(
+                    icon = KannachIconType.SPROUT,
+                    tint = palette.green,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .scale(pulseScale)
+                        .alpha(pulseAlpha)
+                )
+            } else {
+                // Subtle dot for empty days
+                val dotColor = if (isFuture) palette.dot.copy(alpha = 0.35f) else palette.dot
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(6.dp)
                         .clip(CircleShape)
                         .background(dotColor)
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = day.toString(),
-                    fontSize = 10.sp,
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isToday) palette.greenDeep else palette.inkFaint.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -911,7 +719,7 @@ private fun DayCell(
 
 /**
  * BottomFilterBar:
- * Floating pill at bottom with Bouquet (all), Heart (favorites), and Brush (Just Draw).
+ * Floating elegant navigation pill with Bouquet (all), Heart (favorites), and Brush (draw).
  */
 @Composable
 fun BottomFilterBar(
@@ -920,65 +728,99 @@ fun BottomFilterBar(
 ) {
     val palette = LocalKannachPalette.current
     val filter by viewModel.gridFilter.collectAsState()
+    val language by viewModel.language.collectAsState()
+    val strings = I18n.forLanguage(language)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(bottom = 16.dp),
+            .padding(bottom = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
             modifier = Modifier
-                .shadow(12.dp, CircleShape)
+                .height(58.dp)
+                .shadow(6.dp, CircleShape)
                 .clip(CircleShape)
                 .background(palette.paperHi)
-                .border(2.dp, palette.ink, CircleShape)
-                .padding(4.dp),
+                .border(1.5.dp, palette.greenLine, CircleShape)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // All entries button
-            IconButton(
-                onClick = { viewModel.setGridFilter("all") },
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(if (filter == "all") palette.green else Color.Transparent)
-            ) {
-                KannachIcon(
-                    icon = KannachIconType.BOUQUET,
-                    tint = if (filter == "all") Color.White else palette.inkSoft,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
+            // 1. All (Bouquet)
+            val isAll = filter == "all"
+            FilterItem(
+                icon = KannachIconType.BOUQUET,
+                label = strings.all,
+                isSelected = isAll,
+                onClick = { viewModel.setGridFilter("all") }
+            )
 
-            // Favorites button
-            IconButton(
-                onClick = { viewModel.setGridFilter("fav") },
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(if (filter == "fav") palette.green else Color.Transparent)
-            ) {
-                KannachIcon(
-                    icon = KannachIconType.HEART,
-                    tint = if (filter == "fav") Color.White else palette.inkSoft,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
+            // 2. Favorites (Heart)
+            val isFav = filter == "fav"
+            FilterItem(
+                icon = KannachIconType.HEART,
+                label = strings.favorites,
+                isSelected = isFav,
+                onClick = { viewModel.setGridFilter("fav") }
+            )
 
-            // Just Draw (Sketchpad) button
-            IconButton(
-                onClick = { viewModel.openSketchPage() },
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-            ) {
-                KannachIcon(
-                    icon = KannachIconType.BRUSH,
-                    tint = palette.inkSoft,
-                    modifier = Modifier.size(22.dp)
+            // 3. Just Draw (Brush)
+            FilterItem(
+                icon = KannachIconType.BRUSH,
+                label = strings.draw,
+                isSelected = false,
+                onClick = { viewModel.openSketchPage() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun FilterItem(
+    icon: KannachIconType,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val palette = LocalKannachPalette.current
+    val shape = CircleShape
+
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .then(
+                if (isSelected) {
+                    Modifier
+                        .background(palette.greenSoft)
+                        .border(1.dp, palette.greenLine, shape)
+                } else {
+                    Modifier.background(Color.Transparent)
+                }
+            )
+            .clickable { onClick() }
+            .padding(horizontal = if (isSelected) 14.dp else 10.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            KannachIcon(
+                icon = icon,
+                tint = if (isSelected) palette.greenDeep else palette.inkSoft,
+                modifier = Modifier.size(20.dp)
+            )
+            if (isSelected) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = LocalKannachUiFont.current,
+                    color = palette.greenDeep
                 )
             }
         }
@@ -1068,19 +910,32 @@ private fun MemoryCardView(
             .widthIn(max = 440.dp)
             .heightIn(max = 680.dp)
             .clickable(enabled = false) {}
-            .shadow(24.dp, RoundedCornerShape(22.dp))
-            .clip(RoundedCornerShape(22.dp))
-            .border(2.dp, palette.ink, RoundedCornerShape(22.dp))
+            .shadow(24.dp, HandDrawnRadiusShape)
+            .clip(HandDrawnRadiusShape)
+            .background(palette.paper)
+            .border(2.dp, palette.ink, HandDrawnRadiusShape)
             .paperBackground(palette.paper)
-            .padding(20.dp)
+            .padding(top = 22.dp, bottom = 18.dp, start = 18.dp, end = 18.dp)
     ) {
+        // Washi Tape at Top Center of Memory Card
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = (-14).dp)
+                .size(width = 54.dp, height = 14.dp)
+                .rotate(1.5f)
+                .clip(RoundedCornerShape(2.dp))
+                .background(palette.greenSoft.copy(alpha = 0.9f))
+                .border(0.8.dp, palette.greenLine.copy(alpha = 0.7f), RoundedCornerShape(2.dp))
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header: Date, Today Chip, Favorite & Edit Button
+            // Header: Date, Today Chip, Favorite, Edit & Close Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1132,6 +987,13 @@ private fun MemoryCardView(
                             icon = KannachIconType.EDIT,
                             tint = palette.greenDeep,
                             modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    IconButton(onClick = { viewModel.requestCloseSheet() }) {
+                        KannachIcon(
+                            icon = KannachIconType.X,
+                            tint = palette.inkSoft,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
@@ -1408,7 +1270,7 @@ private fun EntryEditBottomSheet(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (I18n.isRtl(currentLang)) "✨ سؤال اليوم للتأمل (المس للمزيد)" else "✨ Gentle Reflection Prompt (Tap for more)",
+                                text = if (I18n.isRtl(currentLang)) "سؤال اليوم للتأمل (المس للمزيد)" else "Gentle Reflection Prompt (Tap for more)",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = palette.greenDeep

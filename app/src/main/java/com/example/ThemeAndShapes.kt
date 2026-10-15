@@ -315,18 +315,17 @@ fun Modifier.dashedHandDrawnBorder(
 }
 
 // Google Fonts locally installed via font-util
+val PlaypenSansArabicFamily = FontFamily(Font(R.font.playpen_sans_arabic, FontWeight.Normal))
 val PlaypenSansFamily = FontFamily(Font(R.font.playpen_sans, FontWeight.Normal))
-val MarheyFamily = FontFamily(Font(R.font.marhey, FontWeight.Normal))
 val IbmPlexArabicFamily = FontFamily(Font(R.font.ibm_plex_sans_arabic, FontWeight.Normal))
 val SpaceGroteskFamily = FontFamily(Font(R.font.space_grotesk, FontWeight.Normal))
 
 /**
  * Authentic handwritten font for journal entries, notes, and titles.
- * Pairs Marhey (for warm Arabic handwriting) and Playpen Sans (for organic Latin handwriting).
+ * Contains ONLY Playpen Sans Arabic to ensure Arabic handwriting renders flawlessly without fallback issues.
  */
 val KannachHandFont = FontFamily(
-    Font(R.font.marhey, FontWeight.Normal),
-    Font(R.font.playpen_sans, FontWeight.Normal)
+    Font(R.font.playpen_sans_arabic, FontWeight.Normal)
 )
 
 /**
