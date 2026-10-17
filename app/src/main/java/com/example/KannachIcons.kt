@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -34,11 +36,17 @@ fun KannachIcon(
     tint: Color = Color.Unspecified,
     strokeWidthDp: Dp = 1.8.dp,
     filled: Boolean = false,
-    fillColor: Color = Color.Transparent
+    fillColor: Color = Color.Transparent,
+    contentDescription: String? = null
 ) {
     val effectiveTint = if (tint != Color.Unspecified) tint else LocalKannachPalette.current.ink
+    val semanticModifier = if (contentDescription != null) {
+        modifier.semantics { this.contentDescription = contentDescription }
+    } else {
+        modifier
+    }
 
-    Canvas(modifier = modifier) {
+    Canvas(modifier = semanticModifier) {
         val strokePx = strokeWidthDp.toPx()
         val scaleX = size.width / 24f
         val scaleY = size.height / 24f

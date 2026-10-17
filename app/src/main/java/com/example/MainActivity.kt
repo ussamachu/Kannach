@@ -92,6 +92,18 @@ fun KannachApp(viewModel: MainViewModel) {
                 MonthGrid(viewModel = viewModel, modifier = Modifier.weight(1f))
             }
 
+            // HX2: Bottom dock (Garden · Letters · Today · Draw · Settings)
+            // Always visible on Home; hidden while any overlay/sheet is open.
+            val isOverlayOpen = confirmDialog != null || isWrapOpen || isSketchOpen ||
+                    isCapsuleOpen || isGalleryOpen || isSettingsOpen || activeSheetDate != null ||
+                    isFirstRun || showSplash
+            if (!isOverlayOpen) {
+                KannachDock(
+                    viewModel = viewModel,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
+
             // Overlays & Sub-Screens (D1, G1, S1, H11: floating screens use real current month season)
             val nowMonth = remember { java.util.Calendar.getInstance().get(java.util.Calendar.MONTH) + 1 }
             KannachTheme(language = language, month = nowMonth) {

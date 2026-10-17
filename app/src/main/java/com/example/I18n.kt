@@ -71,6 +71,8 @@ object I18n {
         val today: String,
         val prevYear: String,
         val nextYear: String,
+        val prevMonth: String = "Previous month",
+        val nextMonth: String = "Next month",
         val openSettings: String,
         val notYet: String,
         val writeSomething: String,
@@ -154,7 +156,15 @@ object I18n {
         val onboardingBeat3Sub: String,
         val onboardingNext: String,
         val onboardingSkip: String,
-        val onboardingStart: String
+        val onboardingStart: String,
+        val dockGarden: String,
+        val dockLetters: String,
+        val dockToday: String,
+        val dockDraw: String,
+        val dockSettings: String,
+        val todayCardEmpty: String,
+        val monthRecapPlanted: String,
+        val monthRecapQuiet: String
     )
 
     val EN = Strings(
@@ -175,6 +185,8 @@ object I18n {
         today = "today",
         prevYear = "Previous year",
         nextYear = "Next year",
+        prevMonth = "Previous month",
+        nextMonth = "Next month",
         openSettings = "Settings",
         notYet = "Not yet \u2014 this day hasn\u2019t bloomed",
         writeSomething = "Write a little or draw a little first",
@@ -269,7 +281,15 @@ object I18n {
         onboardingBeat3Sub = "Your garden grows day by day with every memory you keep.",
         onboardingNext = "Next",
         onboardingSkip = "Skip",
-        onboardingStart = "Begin your garden"
+        onboardingStart = "Begin your garden",
+        dockGarden = "Garden",
+        dockLetters = "Letters",
+        dockToday = "Today",
+        dockDraw = "Draw",
+        dockSettings = "Settings",
+        todayCardEmpty = "This page is still blank.",
+        monthRecapPlanted = "{n} days planted in {month}.",
+        monthRecapQuiet = "A quiet month. Any day can still be filled in."
     )
 
     val AR = Strings(
@@ -290,6 +310,8 @@ object I18n {
         today = "اليوم",
         prevYear = "السنة السابقة",
         nextYear = "السنة التالية",
+        prevMonth = "الشهر السابق",
+        nextMonth = "الشهر التالي",
         openSettings = "الإعدادات",
         notYet = "ليس بعد — هذا اليوم لم يُزهر",
         writeSomething = "كتابة بضع كلمات أو رسم أثر صغير أولاً",
@@ -384,7 +406,15 @@ object I18n {
         onboardingBeat3Sub = "تنمو حديقتك يوماً بعد يوم مع كل أثر تدونه.",
         onboardingNext = "متابعة",
         onboardingSkip = "تخطي",
-        onboardingStart = "غرس الأثر الأول"
+        onboardingStart = "غرس الأثر الأول",
+        dockGarden = "الحديقة",
+        dockLetters = "الرسائل",
+        dockToday = "اليوم",
+        dockDraw = "ارسم",
+        dockSettings = "الإعدادات",
+        todayCardEmpty = "هذه الصفحة ما زالت بيضاء.",
+        monthRecapPlanted = "أزهر {n} يوماً في {month}.",
+        monthRecapQuiet = "شهر هادئ. ما زال بإمكانك ملء أي يوم فيه."
     )
 
     fun forLanguage(lang: String): Strings {

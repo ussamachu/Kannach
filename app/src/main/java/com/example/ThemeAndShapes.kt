@@ -161,6 +161,8 @@ fun Modifier.paperTilt(index: Int = 0): Modifier {
     return this.rotate(angle)
 }
 
+fun Modifier.paperTilt(angleDegrees: Float): Modifier = this.rotate(angleDegrees)
+
 /**
  * Organic hand-drawn rounded shape imitating:
  * border-radius: 17px 255px 19px 235px / 235px 19px 255px 17px;
@@ -268,11 +270,12 @@ fun Modifier.linedPaperBackground(
  */
 fun Modifier.wavyHeaderDivider(
     color: Color,
-    waveHeightDp: Dp = 8.dp
+    waveHeightDp: Dp = 8.dp,
+    isOnTop: Boolean = false
 ): Modifier = this.drawBehind {
     val waveH = waveHeightDp.toPx()
     val waveW = waveH * 5f // 40px width for 8px height
-    val startY = size.height - waveH / 2f
+    val startY = if (isOnTop) waveH / 2f else size.height - waveH / 2f
     val path = Path()
 
     var x = 0f
