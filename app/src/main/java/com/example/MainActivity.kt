@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,9 +55,10 @@ fun KannachApp(viewModel: MainViewModel) {
     val isGalleryOpen by viewModel.isGalleryOpen.collectAsState()
     val isSettingsOpen by viewModel.isSettingsOpen.collectAsState()
     val activeSheetDate by viewModel.activeSheetDate.collectAsState()
+    val isFirstRun by viewModel.isFirstRun.collectAsState()
 
     // Hierarchical BackHandler strictly ported from HTML keyboard / ESC handling
-    BackHandler(enabled = confirmDialog != null || isWrapOpen || isSketchOpen || isCapsuleOpen || isGalleryOpen || isSettingsOpen || activeSheetDate != null) {
+    BackHandler(enabled = confirmDialog != null || isWrapOpen || isSketchOpen || isCapsuleOpen || isGalleryOpen || isSettingsOpen || activeSheetDate != null || isFirstRun) {
         when {
             confirmDialog != null -> viewModel.dismissConfirmDialog()
             isWrapOpen -> viewModel.closeWrap()
@@ -64,7 +66,14 @@ fun KannachApp(viewModel: MainViewModel) {
             isCapsuleOpen -> viewModel.closeCapsulePage()
             isGalleryOpen -> viewModel.closeGallery()
             isSettingsOpen -> viewModel.closeSettings()
-            activeSheetDate != null -> viewModel.requestCloseSheet()
+            isFirstRun -> viewModel.completeFirstRun()
+            activeSheetDate != null -> {
+                if (viewModel.sheetMode.value == SheetMode.EDIT && viewModel.writeStep.value == 2) {
+                    viewModel.setWriteStep(1)
+                } else {
+                    viewModel.requestCloseSheet()
+                }
+            }
         }
     }
 
@@ -83,30 +92,72 @@ fun KannachApp(viewModel: MainViewModel) {
                 MonthGrid(viewModel = viewModel, modifier = Modifier.weight(1f))
             }
 
-            // Floating Bottom Filter Bar
-            BottomFilterBar(
-                viewModel = viewModel,
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
+            // Overlays & Sub-Screens (D1, G1, S1, H11: floating screens use real current month season)
+            val nowMonth = remember { java.util.Calendar.getInstance().get(java.util.Calendar.MONTH) + 1 }
+            KannachTheme(language = language, month = nowMonth) {
+                AnimatedVisibility(
+                    visible = isGalleryOpen,
+                    enter = kannachSubScreenEnter(rememberReduceMotion()),
+                    exit = kannachSubScreenExit(rememberReduceMotion())
+                ) {
+                    GalleryScreen(viewModel = viewModel)
+                }
 
-            // Overlays & Sub-Screens
-            GalleryScreen(viewModel = viewModel)
-            YearWrapScreen(viewModel = viewModel)
-            TimeCapsuleScreen(viewModel = viewModel)
-            SketchpadScreen(viewModel = viewModel)
-            SettingsScreen(viewModel = viewModel)
+                AnimatedVisibility(
+                    visible = isWrapOpen,
+                    enter = kannachSubScreenEnter(rememberReduceMotion()),
+                    exit = kannachSubScreenExit(rememberReduceMotion())
+                ) {
+                    YearWrapScreen(viewModel = viewModel)
+                }
 
-            // Entry Read/Write Sheet
-            EntrySheetOverlay(viewModel = viewModel)
+                AnimatedVisibility(
+                    visible = isCapsuleOpen,
+                    enter = kannachSubScreenEnter(rememberReduceMotion()),
+                    exit = kannachSubScreenExit(rememberReduceMotion())
+                ) {
+                    TimeCapsuleScreen(viewModel = viewModel)
+                }
 
-            // Confirm & Toast Modals
-            ConfirmDialogOverlay(viewModel = viewModel)
-            ToastOverlay(
-                viewModel = viewModel,
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
+                AnimatedVisibility(
+                    visible = isSketchOpen,
+                    enter = kannachSubScreenEnter(rememberReduceMotion()),
+                    exit = kannachSubScreenExit(rememberReduceMotion())
+                ) {
+                    SketchpadScreen(viewModel = viewModel)
+                }
 
-            // Animated Splash Screen on App Launch
+                AnimatedVisibility(
+                    visible = isSettingsOpen,
+                    enter = kannachSubScreenEnter(rememberReduceMotion()),
+                    exit = kannachSubScreenExit(rememberReduceMotion())
+                ) {
+                    SettingsScreen(viewModel = viewModel)
+                }
+
+                // Entry Read/Write Sheet
+                EntrySheetOverlay(viewModel = viewModel)
+
+                // Planting Ceremony Overlay (W3)
+                PlantingCeremonyOverlay(viewModel = viewModel)
+
+                // Confirm & Toast Modals
+                ConfirmDialogOverlay(viewModel = viewModel)
+                ToastOverlay(
+                    viewModel = viewModel,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
+
+            // First Run Onboarding (R2)
+            if (!showSplash && isFirstRun) {
+                FirstRunOnboarding(
+                    strings = strings,
+                    onFinish = { viewModel.completeFirstRun() }
+                )
+            }
+
+            // Animated Splash Screen on App Launch (R1)
             if (showSplash) {
                 SplashScreen(
                     appName = strings.appTitle,

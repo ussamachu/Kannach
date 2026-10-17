@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 enum class KannachIconType {
     CHEV_L, CHEV_R, FLOWER, LEAF, X, HEART, CHECK, UNDO, TRASH, EDIT,
     GRID, SLIDERS, SPROUT, WINTER, SPRING, SUMMER, AUTUMN, SEAL,
-    SPARKLE, UPLOAD, BOUQUET, BRUSH
+    SPARKLE, UPLOAD, BOUQUET, BRUSH, RIBBON
 }
 
 /**
@@ -67,6 +67,7 @@ fun KannachIcon(
             KannachIconType.UPLOAD -> drawUpload(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.BOUQUET -> drawBouquet(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.BRUSH -> drawBrush(scaleX, scaleY, effectiveTint, stroke)
+            KannachIconType.RIBBON -> drawRibbon(scaleX, scaleY, effectiveTint, stroke, filled, fillColor)
         }
     }
 }
@@ -254,3 +255,12 @@ private fun DrawScope.drawBrush(sx: Float, sy: Float, color: Color, stroke: Stro
     drawPath(p2, color, style = stroke)
     drawCircle(color, 1.7f * sx, Offset(6.3f * sx, 17.3f * sy), style = stroke)
 }
+
+private fun DrawScope.drawRibbon(sx: Float, sy: Float, color: Color, stroke: Stroke, filled: Boolean, fillColor: Color) {
+    val p = parseSvg("M7 3h10v18l-5-4.2-5 4.2z", sx, sy)
+    if (filled && fillColor != Color.Transparent) {
+        drawPath(p, fillColor)
+    }
+    drawPath(p, color, style = stroke)
+}
+

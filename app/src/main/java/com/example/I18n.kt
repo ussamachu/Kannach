@@ -133,7 +133,28 @@ object I18n {
         val sketchTitle: String,
         val sketchIntro: String,
         val sketchShareBtn: String,
-        val sketchExported: String
+        val sketchExported: String,
+        val plantBtn: String,
+        val draftKept: String,
+        val todayWord: String,
+        val surpriseMe: String,
+        val shareMosaic: String,
+        val openToday: String,
+        val greetMorning: String,
+        val greetDay: String,
+        val greetEvening: String,
+        val greetNight: String,
+        val greetDone: String,
+        val greetBack: String,
+        val onboardingBeat1: String,
+        val onboardingBeat1Sub: String,
+        val onboardingBeat2: String,
+        val onboardingBeat2Sub: String,
+        val onboardingBeat3: String,
+        val onboardingBeat3Sub: String,
+        val onboardingNext: String,
+        val onboardingSkip: String,
+        val onboardingStart: String
     )
 
     val EN = Strings(
@@ -227,7 +248,28 @@ object I18n {
         sketchTitle = "Just Draw",
         sketchIntro = "A free page \u2014 draw anything, then save or share it.",
         sketchShareBtn = "Save or share this drawing",
-        sketchExported = "Ready to save or share"
+        sketchExported = "Ready to save or share",
+        plantBtn = "Plant it",
+        draftKept = "Draft kept for later",
+        todayWord = "Today",
+        surpriseMe = "Surprise with a memory",
+        shareMosaic = "Share year mosaic",
+        openToday = "Record today's mark",
+        greetMorning = "A dewy morning.. how rests your heart with the dawn?",
+        greetDay = "A blessed day.. a quiet moment to plant a gentle mark",
+        greetEvening = "A pleasant evening.. what paused your soul today?",
+        greetNight = "Nighttime stillness.. thoughts settle and marks find peace",
+        greetDone = "Today's mark rests in peace.. be well",
+        greetBack = "Welcome back.. the notebook was waiting for your return",
+        onboardingBeat1 = "Kannach is a quiet paper diary.",
+        onboardingBeat1Sub = "An intimate space for your days and thoughts, without noise.",
+        onboardingBeat2 = "A small mark for every day",
+        onboardingBeat2Sub = "A few brush strokes sprout a small flower telling the story of your day.",
+        onboardingBeat3 = "Touch any day to plant your first small mark.",
+        onboardingBeat3Sub = "Your garden grows day by day with every memory you keep.",
+        onboardingNext = "Next",
+        onboardingSkip = "Skip",
+        onboardingStart = "Begin your garden"
     )
 
     val AR = Strings(
@@ -250,25 +292,25 @@ object I18n {
         nextYear = "السنة التالية",
         openSettings = "الإعدادات",
         notYet = "ليس بعد — هذا اليوم لم يُزهر",
-        writeSomething = "اكتب شيئًا أو ارسم شيئًا أولًا",
-        emptyHint = "المس أي يوم وازرع أول رسمة صغيرة",
-        noFavs = "لا مفضّلات بعد — علّم تدوينة كمفضّلة لتبقى هنا",
-        drawLabel = "اترك بصمتك الصغيرة لهذا اليوم",
-        drawHint = "ارسم شكلًا صغيرًا بإصبعك",
-        colorLabel = "اختر لون اليوم",
+        writeSomething = "كتابة بضع كلمات أو رسم أثر صغير أولاً",
+        emptyHint = "لمس أي يوم لغرس أول أثر صغير",
+        noFavs = "لا مفضّلات بعد — تمييز أي تدوينة بنجمة لتبقى هنا",
+        drawLabel = "ترك بصمة صغيرة لهذا اليوم",
+        drawHint = "رسم أثر صغير باللمس",
+        colorLabel = "اختيار مزاج اليوم",
         favLabel = "مفضلة",
         editLabel = "تعديل",
         entryPlaceholder = "عزيزتي الحديقة، اليوم…",
-        confirmDeleteTitle = "ننتزع هذه الصفحة؟",
-        confirmDeleteMsg = "سيُحذف هذا اليوم نهائيًا.",
+        confirmDeleteTitle = "انتزاع هذه الصفحة؟",
+        confirmDeleteMsg = "سيُمحى أثر هذا اليوم نهائياً.",
         confirmCloseTitle = "المغادرة دون حفظ؟",
-        confirmCloseMsg = "كلماتك ورسمتك لم تُحفَظ بعد.",
-        delYes = "نعم، احذف",
+        confirmCloseMsg = "الكلمات والرسمة لم تُحفظا بعد.",
+        delYes = "تأكيد الانتزاع",
         discard = "تجاهل",
-        keep = "متابعة الكتابة",
-        exportBtn = "احفظ نسخة من يومياتك",
+        keep = "متابعة التدوين",
+        exportBtn = "حفظ نسخة من اليوميات",
         exportedToast = "نسختك جاهزة للحفظ",
-        saveError = "تعذر الحفظ — حاول مرة أخرى",
+        saveError = "تعذر الحفظ — المحاولة مرة أخرى",
         aboutText = "كُنَّاش دفتر ورقي هادئ. تكتب كل يوم كلمات قليلة وترسم شكلًا صغيرًا واحدًا، حتى تتحول أيامك مع نهاية السنة إلى حديقة صغيرة. كل شيء يبقى على جهازك.",
         openGallery = "حديقتك الصغيرة",
         galleryTitle = "حديقتك الصغيرة",
@@ -277,7 +319,7 @@ object I18n {
         onThisDay = "في مثل هذا اليوم، {y}…",
         dismiss = "إغلاق",
         ok = "حسنًا",
-        importBtn = "استرجع نسخة محفوظة",
+        importBtn = "استرجاع نسخة محفوظة",
         importedToast = "تم استرجاع يومياتك",
         importError = "هذا الملف لا يبدو نسخة من كُنَّاش",
         wrapBtn = "موسم السنة",
@@ -289,20 +331,20 @@ object I18n {
         wrapSub = "حديقتك في هذه السنة",
         wrapEmpty = "لا شيء بعد في هذه السنة لتلخيصه.",
         capsuleTitle = "رسالة إلى الغد",
-        capsuleBtn = "اكتب رسالة لنفسك المستقبلية",
-        capsuleIntro = "اكتب كلمات لنفسك القادمة، واختر يومًا تُفتح فيه — لن تراها قبل ذلك اليوم.",
+        capsuleBtn = "كتابة رسالة لنفسك المستقبلية",
+        capsuleIntro = "تدوين كلمات لنفسك القادمة، واختيار يوم تُفتح فيه — لن تراها قبل ذلك اليوم.",
         capsuleWriteLabel = "رسالتك",
         capsulePlaceholder = "رسالة إلى الغد…",
         capsuleDateLabel = "تُفتح في",
-        capsuleSaveBtn = "اختم الرسالة",
+        capsuleSaveBtn = "ختم الرسالة",
         capsuleEmptyList = "لا رسائل مؤجلة بعد.",
         capsuleLocked = "مقفلة حتى {d}",
         capsuleReady = "جاهزة للفتح",
         capsuleSavedToast = "أُغلقت الرسالة حتى ذلك اليوم",
-        capsuleDateError = "اختر يومًا في المستقبل",
+        capsuleDateError = "اختيار يوم في المستقبل",
         capsuleReadyBanner = "رسالة من نفسك القديمة وصلت اليوم",
         reminderTitle = "تذكير يومي",
-        reminderToggle = "ذكّرني بالكتابة",
+        reminderToggle = "التذكير بالتدوين",
         reminderTimeLabel = "في الساعة",
         reminderMsgs = listOf(
             "لكل يوم لون. ما هو لونك اليوم؟",
@@ -317,11 +359,32 @@ object I18n {
             "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
             "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
         ),
-        draw = "ارسم",
-        sketchTitle = "فقط ارسم",
-        sketchIntro = "صفحة حرة — ارسم أي شيء، ثم احفظه أو شاركه.",
-        sketchShareBtn = "احفظ أو شارك هذه الرسمة",
-        sketchExported = "جاهزة للحفظ أو المشاركة"
+        draw = "رسم",
+        sketchTitle = "مساحة الرسم",
+        sketchIntro = "صفحة حرة — رسم ما يخطر في البال، ثم الحفظ أو المشاركة.",
+        sketchShareBtn = "حفظ أو مشاركة هذا الرسم",
+        sketchExported = "جاهزة للحفظ أو المشاركة",
+        plantBtn = "غرس الأثر",
+        draftKept = "حُفظت المسودة لوقت لاحق",
+        todayWord = "اليوم",
+        surpriseMe = "مفاجأة بذكرى",
+        shareMosaic = "مشاركة فسيفساء السنة",
+        openToday = "تدوين أثر اليوم",
+        greetMorning = "صباح نديّ.. كيف حال قلبك مع بزوغ الضوء؟",
+        greetDay = "يوم مبارك.. لحظة هدوء لغرس أثر لطيف",
+        greetEvening = "مساء طيب.. ما الذي استوقف روحك اليوم؟",
+        greetNight = "سكون الليل.. تهادت الخواطر وآن للأثر أن يهدأ",
+        greetDone = "أثر اليوم مغروس بسلام.. دمت بخير",
+        greetBack = "أهلاً بالعودة.. الدفتر كان بانتظار خطوتك",
+        onboardingBeat1 = "كُنَّاش دفتر ورقي هادئ.",
+        onboardingBeat1Sub = "مساحة حميمة تسكن فيها أيامك وخواطرك دون ضجيج.",
+        onboardingBeat2 = "أثر مرسوم لكل يوم",
+        onboardingBeat2Sub = "بضع ضربات قلم تنبت زهرة صغيرة تحكي ما كان.",
+        onboardingBeat3 = "المس أي يوم لتغرس أول رسمة صغيرة.",
+        onboardingBeat3Sub = "تنمو حديقتك يوماً بعد يوم مع كل أثر تدونه.",
+        onboardingNext = "متابعة",
+        onboardingSkip = "تخطي",
+        onboardingStart = "غرس الأثر الأول"
     )
 
     fun forLanguage(lang: String): Strings {
@@ -367,5 +430,61 @@ object I18n {
         val locale = if (isRtl(lang)) Locale("ar") else Locale.US
         val format = SimpleDateFormat("EEEE, d MMMM yyyy", locale)
         return format.format(cal.time)
+    }
+
+    fun getRelativeTimeDistance(dateKey: String, lang: String): String {
+        val parts = dateKey.split("-").mapNotNull { it.toIntOrNull() }
+        if (parts.size != 3) return ""
+        val targetCal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, parts[0])
+            set(Calendar.MONTH, parts[1] - 1)
+            set(Calendar.DAY_OF_MONTH, parts[2])
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val todayCal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val diffDays = ((todayCal.timeInMillis - targetCal.timeInMillis) / (24 * 60 * 60 * 1000L)).toInt()
+        val isAr = isRtl(lang)
+
+        return when {
+            diffDays == 0 -> if (isAr) "اليوم" else "Today"
+            diffDays == 1 -> if (isAr) "أمس" else "Yesterday"
+            diffDays in 2..10 -> if (isAr) "منذ $diffDays أيام" else "$diffDays days ago"
+            diffDays in 11..29 -> if (isAr) "منذ $diffDays يوماً" else "$diffDays days ago"
+            diffDays in 30..364 -> {
+                val months = (diffDays / 30).coerceAtLeast(1)
+                if (isAr) {
+                    when (months) {
+                        1 -> "منذ شهر"
+                        2 -> "منذ شهرين"
+                        in 3..10 -> "منذ $months أشهر"
+                        else -> "منذ $months شهراً"
+                    }
+                } else {
+                    if (months == 1) "1 month ago" else "$months months ago"
+                }
+            }
+            diffDays >= 365 -> {
+                val years = (diffDays / 365).coerceAtLeast(1)
+                if (isAr) {
+                    when (years) {
+                        1 -> "منذ عام"
+                        2 -> "منذ عامين"
+                        in 3..10 -> "منذ $years أعوام"
+                        else -> "منذ $years عاماً"
+                    }
+                } else {
+                    if (years == 1) "1 year ago" else "$years years ago"
+                }
+            }
+            else -> if (isAr) "في المستقبل" else "In the future"
+        }
     }
 }

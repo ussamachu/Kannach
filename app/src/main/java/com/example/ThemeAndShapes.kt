@@ -11,6 +11,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -60,7 +61,15 @@ data class KannachPalette(
     val orange: Color,
     val blue: Color,
     val ltblue: Color,
-    val leaf: Color
+    val leaf: Color,
+    val scrim: Color = Color(0x661A281E),
+    val onGreen: Color = Color(0xFFFDFBF7),
+    val paperDesk: Color = Color(0xFFE8E2CF),
+    val todMorning: Color = Color(0xFFFDE8C8),
+    val todEvening: Color = Color(0xFFE9C5A6),
+    val todNight: Color = Color(0xFF33423A),
+    val dangerBorder: Color = Color(0xFFB44636),
+    val noise: Color = Color(0x083A523D)
 )
 
 // Base Default Palette
@@ -81,7 +90,15 @@ val BasePalette = KannachPalette(
     orange = Color(0xFFE9963E),
     blue = Color(0xFF4D74AA),
     ltblue = Color(0xFF74B8CA),
-    leaf = Color(0xFF5AA25F)
+    leaf = Color(0xFF5AA25F),
+    scrim = Color(0x661A281E),
+    onGreen = Color(0xFFFDFBF7),
+    paperDesk = Color(0xFFE8E2CF),
+    todMorning = Color(0xFFFDE8C8),
+    todEvening = Color(0xFFE9C5A6),
+    todNight = Color(0xFF33423A),
+    dangerBorder = Color(0xFFB44636),
+    noise = Color(0x083A523D)
 )
 
 // Season: Winter (months 12, 1, 2)
@@ -133,6 +150,16 @@ fun getSeasonalPalette(month: Int): KannachPalette {
 
 val LocalKannachPalette = staticCompositionLocalOf { BasePalette }
 val LocalKannachLanguage = compositionLocalOf { "ar" }
+
+/**
+ * Organic paper tilt modifier imitating physical sheets resting naturally on a wooden desk.
+ * Cycles subtly between gentle organic angles: [-0.6°, +0.5°, -0.25°].
+ */
+fun Modifier.paperTilt(index: Int = 0): Modifier {
+    val angles = floatArrayOf(-0.6f, 0.5f, -0.25f)
+    val angle = angles[kotlin.math.abs(index) % angles.size]
+    return this.rotate(angle)
+}
 
 /**
  * Organic hand-drawn rounded shape imitating:

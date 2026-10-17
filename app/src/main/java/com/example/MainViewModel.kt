@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntSize
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -23,6 +25,22 @@ import java.util.Date
 import java.util.Locale
 
 enum class SheetMode { VIEW, EDIT }
+
+data class CellBounds(
+    val offset: Offset,
+    val size: IntSize
+)
+
+data class PlantingAnimation(
+    val dateKey: String,
+    val text: String,
+    val colorHex: String,
+    val fav: Boolean,
+    val strokes: List<List<Point>>,
+    val startOffset: Offset,
+    val targetOffset: Offset,
+    val targetSize: IntSize
+)
 
 data class OnThisDayHit(
     val key: String,
@@ -110,6 +128,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _sheetFav = MutableStateFlow(false)
     val sheetFav: StateFlow<Boolean> = _sheetFav.asStateFlow()
 
+    // Ritual 3-pulse step (W1, W2, W3): 1 = Write/Arrive, 2 = Draw/Mark
+    private val _writeStep = MutableStateFlow(1)
+    val writeStep: StateFlow<Int> = _writeStep.asStateFlow()
+
+    fun setWriteStep(step: Int) {
+        vibrate(6)
+        _writeStep.value = step
+    }
+
+    // Garden cell positions recorded via onGloballyPositioned (W3)
+    private val _cellBoundsMap = mutableMapOf<String, CellBounds>()
+
+    fun registerCellBounds(dateKey: String, offset: Offset, size: IntSize) {
+        _cellBoundsMap[dateKey] = CellBounds(offset, size)
+    }
+
+    fun getCellBounds(dateKey: String): CellBounds? = _cellBoundsMap[dateKey]
+
+    // Ceremony animation state (W3)
+    private val _plantingAnimation = MutableStateFlow<PlantingAnimation?>(null)
+    val plantingAnimation: StateFlow<PlantingAnimation?> = _plantingAnimation.asStateFlow()
+
+    private val _plantedCellPulse = MutableStateFlow<String?>(null)
+    val plantedCellPulse: StateFlow<String?> = _plantedCellPulse.asStateFlow()
+
     private var initialSnapshot: String = ""
 
     // --- Sketchpad State ---
@@ -132,6 +175,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _confirmDialog = MutableStateFlow<ConfirmDialogData?>(null)
     val confirmDialog: StateFlow<ConfirmDialogData?> = _confirmDialog.asStateFlow()
 
+    // --- First Run & Milestone Celebrations (R2, R3) ---
+    private val _isFirstRun = MutableStateFlow(repository.isFirstRun())
+    val isFirstRun: StateFlow<Boolean> = _isFirstRun.asStateFlow()
+
+    fun completeFirstRun() {
+        repository.markFirstRunCompleted()
+        _isFirstRun.value = false
+    }
+
+    private val _firstPlantCelebratedDate = MutableStateFlow<String?>(null)
+    val firstPlantCelebratedDate: StateFlow<String?> = _firstPlantCelebratedDate.asStateFlow()
+
     init {
         checkOnThisDay()
         checkReadyCapsule()
@@ -145,12 +200,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 vibratorManager?.defaultVibrator?.vibrate(
                     VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)
                 )
-            } else {
-                @Suppress("DEPRECATION")
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val vibrator = app.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                 vibrator?.vibrate(
                     VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)
                 )
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = app.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                vibrator?.vibrate(durationMs)
             }
         } catch (_: Exception) {}
     }
@@ -225,6 +283,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         vibrate(8)
         _activeSheetDate.value = dateKey
+        _writeStep.value = 1
 
         val existing = entries.value[dateKey]
         if (existing != null) {
@@ -235,10 +294,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _sheetMode.value = SheetMode.VIEW
             initialSnapshot = computeSnapshot()
         } else {
-            _sheetText.value = ""
-            _sheetStrokes.value = emptyList()
-            _sheetColor.value = DEFAULT_GREEN_HEX
-            _sheetFav.value = false
+            val draft = repository.getDraft(dateKey)
+            if (draft != null) {
+                _sheetText.value = draft.text
+                _sheetStrokes.value = draft.strokes
+                _sheetColor.value = draft.color
+                _sheetFav.value = draft.fav
+            } else {
+                _sheetText.value = ""
+                _sheetStrokes.value = emptyList()
+                _sheetColor.value = DEFAULT_GREEN_HEX
+                _sheetFav.value = false
+            }
             _sheetMode.value = SheetMode.EDIT
             initialSnapshot = computeSnapshot()
         }
@@ -273,6 +340,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun switchToEditMode() {
         vibrate(6)
         _sheetMode.value = SheetMode.EDIT
+        _writeStep.value = 1
     }
 
     fun updateSheetText(text: String) {
@@ -319,33 +387,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val strings = I18n.forLanguage(language.value)
-        if (isSheetDirty()) {
-            _confirmDialog.value = ConfirmDialogData(
-                title = strings.confirmCloseTitle,
-                message = strings.confirmCloseMsg,
-                confirmText = strings.discard,
-                cancelText = strings.keep,
-                onConfirm = {
-                    dismissConfirmDialog()
-                    if (existing != null) {
+        if (existing != null) {
+            // Editing existing entry: warn if dirty
+            if (isSheetDirty()) {
+                _confirmDialog.value = ConfirmDialogData(
+                    title = strings.confirmCloseTitle,
+                    message = strings.confirmCloseMsg,
+                    confirmText = strings.discard,
+                    cancelText = strings.keep,
+                    onConfirm = {
+                        dismissConfirmDialog()
                         _sheetText.value = existing.text
                         _sheetStrokes.value = existing.strokes
                         _sheetColor.value = existing.color
                         _sheetFav.value = existing.fav
                         _sheetMode.value = SheetMode.VIEW
+                        _writeStep.value = 1
                         initialSnapshot = computeSnapshot()
-                    } else {
-                        closeSheetNow()
-                    }
-                },
-                onCancel = { dismissConfirmDialog() }
-            )
-        } else {
-            if (existing != null) {
-                _sheetMode.value = SheetMode.VIEW
+                    },
+                    onCancel = { dismissConfirmDialog() }
+                )
             } else {
-                closeSheetNow()
+                _sheetMode.value = SheetMode.VIEW
+                _writeStep.value = 1
             }
+        } else {
+            // New entry (W4): auto-save draft if has content, show draftKept, no discard dialog
+            val text = _sheetText.value.trim()
+            val strokes = _sheetStrokes.value
+            if (text.isNotEmpty() || strokes.isNotEmpty()) {
+                repository.saveDraft(
+                    key,
+                    EntryDraft(
+                        text = _sheetText.value,
+                        color = _sheetColor.value,
+                        fav = _sheetFav.value,
+                        strokes = strokes
+                    )
+                )
+                showToast(strings.draftKept)
+            } else {
+                repository.clearDraft(key)
+            }
+            closeSheetNow()
         }
     }
 
@@ -353,6 +437,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _activeSheetDate.value = null
         _sheetText.value = ""
         _sheetStrokes.value = emptyList()
+        _writeStep.value = 1
         initialSnapshot = ""
     }
 
@@ -379,10 +464,83 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             updatedAt = System.currentTimeMillis()
         )
 
+        val wasFirstEver = !repository.isFirstPlantCelebrated() && entries.value.isEmpty()
+
         repository.saveEntry(key, newEntry)
-        vibrate(14)
+        repository.clearDraft(key)
+        if (wasFirstEver) {
+            repository.markFirstPlantCelebrated()
+            _firstPlantCelebratedDate.value = key
+            vibrate(24)
+        } else {
+            vibrate(14)
+        }
+        _plantedCellPulse.value = key
         initialSnapshot = computeSnapshot()
         closeSheetNow()
+    }
+
+    fun startPlantingCeremony(startOffset: Offset, reduceMotion: Boolean = false) {
+        val key = _activeSheetDate.value ?: return
+        val text = _sheetText.value.trim()
+        val strokes = _sheetStrokes.value
+        val strings = I18n.forLanguage(language.value)
+
+        if (text.isEmpty() && strokes.isEmpty()) {
+            showToast(strings.writeSomething)
+            return
+        }
+
+        val cell = getCellBounds(key)
+        if (reduceMotion || cell == null) {
+            saveCurrentEntry()
+            return
+        }
+
+        _plantingAnimation.value = PlantingAnimation(
+            dateKey = key,
+            text = text,
+            colorHex = _sheetColor.value,
+            fav = _sheetFav.value,
+            strokes = strokes,
+            startOffset = startOffset,
+            targetOffset = cell.offset,
+            targetSize = cell.size
+        )
+        closeSheetNow()
+    }
+
+    fun completePlantingCeremony() {
+        val anim = _plantingAnimation.value ?: return
+        val existing = entries.value[anim.dateKey]
+        val normalized = StrokeMath.normalizeStrokes(anim.strokes)
+
+        val newEntry = DayEntry(
+            text = anim.text,
+            color = anim.colorHex,
+            fav = anim.fav,
+            strokes = normalized,
+            createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+
+        val wasFirstEver = !repository.isFirstPlantCelebrated() && entries.value.isEmpty()
+
+        repository.saveEntry(anim.dateKey, newEntry)
+        repository.clearDraft(anim.dateKey)
+        if (wasFirstEver) {
+            repository.markFirstPlantCelebrated()
+            _firstPlantCelebratedDate.value = anim.dateKey
+            vibrate(24)
+        } else {
+            vibrate(14)
+        }
+        _plantedCellPulse.value = anim.dateKey
+        _plantingAnimation.value = null
+    }
+
+    fun clearPlantedCellPulse() {
+        _plantedCellPulse.value = null
     }
 
     fun deleteCurrentEntry() {
@@ -396,6 +554,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             cancelText = strings.keep,
             onConfirm = {
                 repository.deleteEntry(key)
+                repository.clearDraft(key)
                 dismissConfirmDialog()
                 vibrate(10)
                 closeSheetNow()

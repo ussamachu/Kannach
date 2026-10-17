@@ -16,6 +16,19 @@ class ExampleRobolectricTest {
   fun `read string from context`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
-    assertEquals("My Application", appName)
+    assertEquals("كُنَّاش", appName)
+  }
+
+  @Test
+  fun `test draft storage and retrieval`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = KannachRepository(context)
+    val testKey = "2026-10-16"
+    val testDraft = EntryDraft(text = "مسودة اختبار لطيفة", color = "#5aa25f")
+    repo.saveDraft(testKey, testDraft)
+    val retrieved = repo.getDraft(testKey)
+    assertEquals("مسودة اختبار لطيفة", retrieved?.text)
+    repo.clearDraft(testKey)
+    assertEquals(null, repo.getDraft(testKey))
   }
 }

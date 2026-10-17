@@ -26,6 +26,9 @@ private const val KEY_CAPSULES = "kannach.capsules.v1"
 private const val KEY_REMINDER = "kannach.reminder"
 private const val KEY_LANG = "kannach.lang"
 private const val KEY_SCHEMA = "kannach.schema"
+private const val KEY_DRAFTS = "kannach.drafts.v1"
+private const val KEY_FIRST_RUN_COMPLETED = "kannach.first_run_completed"
+private const val KEY_FIRST_PLANT_CELEBRATED = "kannach.first_plant_celebrated"
 
 val DEFAULT_GREEN_HEX: String = "#5aa25f"
 
@@ -33,6 +36,15 @@ val DEFAULT_GREEN_HEX: String = "#5aa25f"
 data class Point(
     val x: Float,
     val y: Float
+)
+
+@Serializable
+data class EntryDraft(
+    val text: String = "",
+    val color: String = DEFAULT_GREEN_HEX,
+    val fav: Boolean = false,
+    val strokes: List<List<Point>> = emptyList(),
+    val savedAt: Long = System.currentTimeMillis()
 )
 
 @Serializable
@@ -95,6 +107,9 @@ class KannachRepository(private val context: Context) {
     private val _reminderFlow = MutableStateFlow(ReminderConfig())
     val reminderFlow: StateFlow<ReminderConfig> = _reminderFlow.asStateFlow()
 
+    private val _draftsFlow = MutableStateFlow<Map<String, EntryDraft>>(emptyMap())
+    val draftsFlow: StateFlow<Map<String, EntryDraft>> = _draftsFlow.asStateFlow()
+
     private val _languageFlow = MutableStateFlow(detectInitialLanguage())
     val languageFlow: StateFlow<String> = _languageFlow.asStateFlow()
 
@@ -107,6 +122,7 @@ class KannachRepository(private val context: Context) {
         _entriesFlow.value = migratedEntries
         persistEntries(migratedEntries)
 
+        _draftsFlow.value = loadRawDrafts()
         _capsulesFlow.value = loadRawCapsules()
         _reminderFlow.value = loadRawReminder()
     }
@@ -198,6 +214,43 @@ class KannachRepository(private val context: Context) {
         }
     }
 
+    // --- Drafts CRUD (W4) ---
+
+    private fun loadRawDrafts(): Map<String, EntryDraft> {
+        val rawJson = prefs.getString(KEY_DRAFTS, null) ?: return emptyMap()
+        return try {
+            json.decodeFromString<Map<String, EntryDraft>>(rawJson)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    private fun persistDrafts(map: Map<String, EntryDraft>) {
+        try {
+            val rawJson = json.encodeToString(map)
+            prefs.edit().putString(KEY_DRAFTS, rawJson).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun getDraft(dateKey: String): EntryDraft? = _draftsFlow.value[dateKey]
+
+    fun saveDraft(dateKey: String, draft: EntryDraft) {
+        val current = _draftsFlow.value.toMutableMap()
+        current[dateKey] = draft
+        _draftsFlow.value = current
+        persistDrafts(current)
+    }
+
+    fun clearDraft(dateKey: String) {
+        val current = _draftsFlow.value.toMutableMap()
+        if (current.remove(dateKey) != null) {
+            _draftsFlow.value = current
+            persistDrafts(current)
+        }
+    }
+
+    fun hasDraft(dateKey: String): Boolean = _draftsFlow.value.containsKey(dateKey)
+
     // --- Time Capsules CRUD ---
 
     private fun loadRawCapsules(): List<TimeCapsule> {
@@ -269,6 +322,24 @@ class KannachRepository(private val context: Context) {
     fun updateReminderLastIdx(idx: Int) {
         val updated = _reminderFlow.value.copy(lastIdx = idx)
         saveReminder(updated)
+    }
+
+    // --- First Run & Milestone Celebrations (R2, R3) ---
+
+    fun isFirstRun(): Boolean {
+        return !prefs.getBoolean(KEY_FIRST_RUN_COMPLETED, false) && _entriesFlow.value.isEmpty()
+    }
+
+    fun markFirstRunCompleted() {
+        prefs.edit().putBoolean(KEY_FIRST_RUN_COMPLETED, true).apply()
+    }
+
+    fun isFirstPlantCelebrated(): Boolean {
+        return prefs.getBoolean(KEY_FIRST_PLANT_CELEBRATED, false)
+    }
+
+    fun markFirstPlantCelebrated() {
+        prefs.edit().putBoolean(KEY_FIRST_PLANT_CELEBRATED, true).apply()
     }
 
     // --- Export & Import Backup (Matching original Kannach schema v2) ---
