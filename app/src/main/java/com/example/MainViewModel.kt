@@ -26,6 +26,8 @@ import java.util.Locale
 
 enum class SheetMode { VIEW, EDIT }
 
+enum class Tab { PAGE, GARDEN, LETTERS, DRAW }
+
 data class CellBounds(
     val offset: Offset,
     val size: IntSize
@@ -48,13 +50,18 @@ data class OnThisDayHit(
     val entry: DayEntry
 )
 
+enum class CapsulePreset {
+    WEEK_1, MONTH_1, MONTH_3, MONTH_6, YEAR_1, CUSTOM
+}
+
 data class ConfirmDialogData(
     val title: String,
     val message: String,
     val confirmText: String,
     val cancelText: String,
     val onConfirm: () -> Unit,
-    val onCancel: () -> Unit
+    val onCancel: () -> Unit,
+    val isDestructive: Boolean = true
 )
 
 data class YearWrapData(
@@ -92,25 +99,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val capsules: StateFlow<List<TimeCapsule>> = repository.capsulesFlow
     val reminder: StateFlow<ReminderConfig> = repository.reminderFlow
     val language: StateFlow<String> = repository.languageFlow
+    val languageChoice: StateFlow<String> = repository.languageChoiceFlow
+    val userSettings: StateFlow<UserSettings> = repository.userSettingsFlow
 
-    // --- Navigation & Overlays ---
+    // --- Navigation & Overlays (NV1, NV2) ---
+    private val _currentTab = MutableStateFlow(Tab.PAGE)
+    val currentTab: StateFlow<Tab> = _currentTab.asStateFlow()
+
     private val _activeSheetDate = MutableStateFlow<String?>(null)
     val activeSheetDate: StateFlow<String?> = _activeSheetDate.asStateFlow()
 
     private val _sheetMode = MutableStateFlow(SheetMode.VIEW)
     val sheetMode: StateFlow<SheetMode> = _sheetMode.asStateFlow()
 
-    private val _isGalleryOpen = MutableStateFlow(false)
-    val isGalleryOpen: StateFlow<Boolean> = _isGalleryOpen.asStateFlow()
-
     private val _isWrapOpen = MutableStateFlow(false)
     val isWrapOpen: StateFlow<Boolean> = _isWrapOpen.asStateFlow()
-
-    private val _isCapsulePageOpen = MutableStateFlow(false)
-    val isCapsulePageOpen: StateFlow<Boolean> = _isCapsulePageOpen.asStateFlow()
-
-    private val _isSketchPageOpen = MutableStateFlow(false)
-    val isSketchPageOpen: StateFlow<Boolean> = _isSketchPageOpen.asStateFlow()
 
     private val _isSettingsOpen = MutableStateFlow(false)
     val isSettingsOpen: StateFlow<Boolean> = _isSettingsOpen.asStateFlow()
@@ -155,12 +158,66 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var initialSnapshot: String = ""
 
-    // --- Sketchpad State ---
-    private val _sketchStrokes = MutableStateFlow<List<List<Point>>>(emptyList())
-    val sketchStrokes: StateFlow<List<List<Point>>> = _sketchStrokes.asStateFlow()
+    // --- Sketchpad State (SK1–SK8) ---
+    private val _sketchStrokes = MutableStateFlow<List<SketchStroke>>(emptyList())
+    val sketchStrokes: StateFlow<List<SketchStroke>> = _sketchStrokes.asStateFlow()
+
+    private val _sketchUndoStack = mutableListOf<List<SketchStroke>>()
 
     private val _sketchColor = MutableStateFlow(DEFAULT_GREEN_HEX)
     val sketchColor: StateFlow<String> = _sketchColor.asStateFlow()
+
+    private val _sketchBrushWidth = MutableStateFlow(8f)
+    val sketchBrushWidth: StateFlow<Float> = _sketchBrushWidth.asStateFlow()
+
+    private val _sketchEraserMode = MutableStateFlow(false)
+    val sketchEraserMode: StateFlow<Boolean> = _sketchEraserMode.asStateFlow()
+
+    private val _sketchPaperType = MutableStateFlow(SketchPaperType.PLAIN)
+    val sketchPaperType: StateFlow<SketchPaperType> = _sketchPaperType.asStateFlow()
+
+    private val _sketchIntroDismissed = MutableStateFlow(false)
+    val sketchIntroDismissed: StateFlow<Boolean> = _sketchIntroDismissed.asStateFlow()
+
+    private val _isExportSheetOpen = MutableStateFlow(false)
+    val isExportSheetOpen: StateFlow<Boolean> = _isExportSheetOpen.asStateFlow()
+
+    private val _exportFormat = MutableStateFlow(ExportFormat.STORY)
+    val exportFormat: StateFlow<ExportFormat> = _exportFormat.asStateFlow()
+
+    private val _exportSignature = MutableStateFlow(repository.getUserSettings().exportSignature)
+    val exportSignature: StateFlow<Boolean> = _exportSignature.asStateFlow()
+
+    // --- Letters / Time Capsule State (CP1–CP10) ---
+    private val _isCapsuleComposeOpen = MutableStateFlow(false)
+    val isCapsuleComposeOpen: StateFlow<Boolean> = _isCapsuleComposeOpen.asStateFlow()
+
+    private val _capsuleDraftText = MutableStateFlow("")
+    val capsuleDraftText: StateFlow<String> = _capsuleDraftText.asStateFlow()
+
+    private val _capsuleDoodleVisible = MutableStateFlow(false)
+    val capsuleDoodleVisible: StateFlow<Boolean> = _capsuleDoodleVisible.asStateFlow()
+
+    private val _capsuleDoodleStrokes = MutableStateFlow<List<List<Point>>>(emptyList())
+    val capsuleDoodleStrokes: StateFlow<List<List<Point>>> = _capsuleDoodleStrokes.asStateFlow()
+
+    private val _capsuleDoodleColor = MutableStateFlow(DEFAULT_GREEN_HEX)
+    val capsuleDoodleColor: StateFlow<String> = _capsuleDoodleColor.asStateFlow()
+
+    private val _capsulePreset = MutableStateFlow(CapsulePreset.MONTH_1)
+    val capsulePreset: StateFlow<CapsulePreset> = _capsulePreset.asStateFlow()
+
+    private val _capsuleUnlockDate = MutableStateFlow(computePresetDateKey(CapsulePreset.MONTH_1))
+    val capsuleUnlockDate: StateFlow<String> = _capsuleUnlockDate.asStateFlow()
+
+    private val _isSealingCeremonyActive = MutableStateFlow(false)
+    val isSealingCeremonyActive: StateFlow<Boolean> = _isSealingCeremonyActive.asStateFlow()
+
+    private val _highlightedCapsuleId = MutableStateFlow<String?>(null)
+    val highlightedCapsuleId: StateFlow<String?> = _highlightedCapsuleId.asStateFlow()
+
+    private val _openedCapsuleView = MutableStateFlow<TimeCapsule?>(null)
+    val openedCapsuleView: StateFlow<TimeCapsule?> = _openedCapsuleView.asStateFlow()
 
     // --- Banners & Feedback ---
     private val _onThisDayHit = MutableStateFlow<OnThisDayHit?>(null)
@@ -190,9 +247,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         checkOnThisDay()
         checkReadyCapsule()
+        if (reminder.value.enabled) {
+            NotificationHelper.scheduleDailyReminder(getApplication(), reminder.value.time)
+        }
+        if (userSettings.value.copyReminder == "monthly") {
+            NotificationHelper.scheduleMonthlyCopyReminder(getApplication())
+        }
     }
 
     fun vibrate(durationMs: Long = 8) {
+        if (!userSettings.value.hapticsEnabled) return
         val app = getApplication<Application>()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -582,45 +646,67 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _onThisDayHit.value = null
     }
 
-    private fun checkReadyCapsule() {
+    fun checkReadyCapsule() {
         val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val ready = capsules.value.firstOrNull { !it.opened && it.unlockDate <= todayIso }
         _readyCapsule.value = ready
     }
 
     fun openReadyCapsule(capsule: TimeCapsule) {
-        _readyCapsule.value = null
-        repository.markCapsuleOpened(capsule.id)
-        val strings = I18n.forLanguage(language.value)
+        val opened = repository.markCapsuleOpened(capsule.id)
+            ?: capsule.copy(opened = true, openedAt = System.currentTimeMillis())
+        NotificationHelper.cancelCapsuleNotification(getApplication(), capsule.id)
+        checkReadyCapsule()
+        vibrate(10)
+        _openedCapsuleView.value = opened
+    }
 
-        _confirmDialog.value = ConfirmDialogData(
-            title = strings.capsuleTitle,
-            message = capsule.text,
-            confirmText = strings.ok,
-            cancelText = strings.dismiss,
-            onConfirm = { dismissConfirmDialog() },
-            onCancel = { dismissConfirmDialog() }
-        )
+    fun openArchivedCapsule(capsule: TimeCapsule) {
+        vibrate(8)
+        _openedCapsuleView.value = capsule
+    }
+
+    fun closeOpenedCapsuleView() {
+        _openedCapsuleView.value = null
+    }
+
+    fun writeBackFromOpenedCapsule() {
+        _openedCapsuleView.value = null
+        selectTab(Tab.LETTERS)
+        openCapsuleCompose()
     }
 
     fun dismissReadyCapsule() {
         _readyCapsule.value = null
     }
 
-    // --- Gallery & Wrap ---
+    // --- Tabs, Gallery & Wrap (NV1, NV2) ---
+
+    fun selectTab(tab: Tab) {
+        if (_currentTab.value != tab) {
+            vibrate(6)
+            _currentTab.value = tab
+        } else if (tab == Tab.PAGE && (_currentYear.value != nowYear || _currentMonth.value != nowMonth)) {
+            vibrate(6)
+            _currentYear.value = nowYear
+            _currentMonth.value = nowMonth
+        }
+        _isWrapOpen.value = false
+        _isSettingsOpen.value = false
+        _isExportSheetOpen.value = false
+        _isCapsuleComposeOpen.value = false
+    }
 
     fun openGallery() {
-        vibrate(6)
-        _isGalleryOpen.value = true
+        selectTab(Tab.GARDEN)
     }
 
     fun closeGallery() {
-        _isGalleryOpen.value = false
+        selectTab(Tab.PAGE)
     }
 
     fun openWrap() {
         vibrate(6)
-        _isGalleryOpen.value = false
         _isWrapOpen.value = true
     }
 
@@ -668,20 +754,144 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    // --- Time Capsule Page ---
+    // --- Time Capsule / Letters Page (CP1–CP10) ---
+
+    fun computePresetDateKey(preset: CapsulePreset): String {
+        val cal = Calendar.getInstance()
+        when (preset) {
+            CapsulePreset.WEEK_1 -> cal.add(Calendar.DAY_OF_YEAR, 7)
+            CapsulePreset.MONTH_1 -> cal.add(Calendar.MONTH, 1)
+            CapsulePreset.MONTH_3 -> cal.add(Calendar.MONTH, 3)
+            CapsulePreset.MONTH_6 -> cal.add(Calendar.MONTH, 6)
+            CapsulePreset.YEAR_1 -> cal.add(Calendar.YEAR, 1)
+            CapsulePreset.CUSTOM -> cal.add(Calendar.MONTH, 1)
+        }
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+    }
 
     fun openCapsulePage() {
-        vibrate(6)
-        _isCapsulePageOpen.value = true
+        selectTab(Tab.LETTERS)
     }
 
     fun closeCapsulePage() {
-        _isCapsulePageOpen.value = false
+        selectTab(Tab.PAGE)
     }
 
-    fun saveCapsule(text: String, unlockDate: String) {
+    fun openCapsuleCompose() {
+        vibrate(6)
+        _openedCapsuleView.value = null
+        val strings = I18n.forLanguage(language.value)
+        _capsuleDraftText.value = "${strings.capsulePrefill}\n"
+        _capsuleDoodleVisible.value = false
+        _capsuleDoodleStrokes.value = emptyList()
+        _capsuleDoodleColor.value = DEFAULT_GREEN_HEX
+        _capsulePreset.value = CapsulePreset.MONTH_1
+        _capsuleUnlockDate.value = computePresetDateKey(CapsulePreset.MONTH_1)
+        _isCapsuleComposeOpen.value = true
+    }
+
+    fun closeCapsuleCompose() {
+        _isCapsuleComposeOpen.value = false
+    }
+
+    fun updateCapsuleDraftText(text: String) {
+        _capsuleDraftText.value = text
+    }
+
+    fun toggleCapsuleDoodle() {
+        vibrate(5)
+        _capsuleDoodleVisible.value = !_capsuleDoodleVisible.value
+    }
+
+    fun addCapsuleDoodleStroke(stroke: List<Point>) {
+        if (stroke.isNotEmpty()) {
+            _capsuleDoodleStrokes.value = _capsuleDoodleStrokes.value + listOf(stroke)
+        }
+    }
+
+    fun undoCapsuleDoodleStroke() {
+        if (_capsuleDoodleStrokes.value.isNotEmpty()) {
+            vibrate(6)
+            _capsuleDoodleStrokes.value = _capsuleDoodleStrokes.value.dropLast(1)
+        }
+    }
+
+    fun clearCapsuleDoodleStrokes() {
+        if (_capsuleDoodleStrokes.value.isNotEmpty()) {
+            vibrate(6)
+            _capsuleDoodleStrokes.value = emptyList()
+        }
+    }
+
+    fun selectCapsuleDoodleColor(hex: String) {
+        vibrate(5)
+        _capsuleDoodleColor.value = hex
+    }
+
+    fun selectCapsulePreset(preset: CapsulePreset) {
+        vibrate(5)
+        _capsulePreset.value = preset
+        if (preset != CapsulePreset.CUSTOM) {
+            _capsuleUnlockDate.value = computePresetDateKey(preset)
+        }
+    }
+
+    fun setCustomCapsuleDate(dateKey: String) {
+        val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        if (dateKey <= todayIso) {
+            showToast(I18n.forLanguage(language.value).capsuleDateError)
+            return
+        }
+        vibrate(5)
+        _capsulePreset.value = CapsulePreset.CUSTOM
+        _capsuleUnlockDate.value = dateKey
+    }
+
+    fun onLockedCapsuleTap(capsule: TimeCapsule) {
+        val daysLeft = I18n.daysUntilDateKey(capsule.unlockDate, getTodayKey())
+        val strings = I18n.forLanguage(language.value)
+        vibrate(6)
+        showToast(strings.capsuleNotYetToast.format(language.value, daysLeft))
+    }
+
+    fun requestDeleteCapsule(capsuleId: String) {
+        val strings = I18n.forLanguage(language.value)
+        _confirmDialog.value = ConfirmDialogData(
+            title = strings.capsuleDeleteTitle,
+            message = strings.capsuleDeleteMsg,
+            confirmText = strings.delYes,
+            cancelText = strings.keep,
+            isDestructive = true,
+            onConfirm = {
+                deleteCapsuleNow(capsuleId)
+                dismissConfirmDialog()
+            },
+            onCancel = { dismissConfirmDialog() }
+        )
+    }
+
+    fun deleteCapsuleNow(capsuleId: String) {
+        repository.deleteCapsule(capsuleId)
+        NotificationHelper.cancelCapsuleNotification(getApplication(), capsuleId)
+        if (_openedCapsuleView.value?.id == capsuleId) {
+            _openedCapsuleView.value = null
+        }
+        if (_highlightedCapsuleId.value == capsuleId) {
+            _highlightedCapsuleId.value = null
+        }
+        checkReadyCapsule()
+        vibrate(10)
+    }
+
+    /**
+     * CP7: Validates the draft letter and opens the confirmation dialog:
+     * "Once sealed, you won't see it until {date}." (cancel = "Keep writing").
+     */
+    fun requestSealCapsule(onConfirmedPermissionCheck: () -> Unit = {}) {
         val strings = I18n.forLanguage(language.value)
         val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val text = _capsuleDraftText.value.trim()
+        val unlockDate = _capsuleUnlockDate.value
 
         if (text.isBlank()) {
             showToast(strings.writeSomething)
@@ -692,30 +902,128 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        repository.addCapsule(text.trim(), unlockDate)
-        vibrate(14)
-        showToast(strings.capsuleSavedToast)
+        val longDate = I18n.formatLongDate(unlockDate, language.value)
+        _confirmDialog.value = ConfirmDialogData(
+            title = strings.capsuleSaveBtn,
+            message = strings.capsuleSealConfirmMsg.replace("{d}", longDate),
+            confirmText = strings.capsuleSaveBtn,
+            cancelText = strings.capsuleKeepWriting,
+            isDestructive = false,
+            onConfirm = {
+                dismissConfirmDialog()
+                onConfirmedPermissionCheck()
+                sealDraftCapsuleWithCeremony()
+            },
+            onCancel = { dismissConfirmDialog() }
+        )
     }
 
-    // --- Sketchpad Page ---
+    fun sealDraftCapsuleWithCeremony() {
+        val text = _capsuleDraftText.value.trim()
+        val unlockDate = _capsuleUnlockDate.value
+        val strokes = _capsuleDoodleStrokes.value
+        val color = _capsuleDoodleColor.value
+
+        val capsule = saveCapsule(text, unlockDate, strokes, color) ?: return
+        _isSealingCeremonyActive.value = true
+        _highlightedCapsuleId.value = capsule.id
+    }
+
+    fun completeSealingCeremony() {
+        _isSealingCeremonyActive.value = false
+        _isCapsuleComposeOpen.value = false
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(1000L)
+            _highlightedCapsuleId.value = null
+        }
+    }
+
+    fun saveCapsule(
+        text: String,
+        unlockDate: String,
+        strokes: List<List<Point>> = emptyList(),
+        color: String = DEFAULT_GREEN_HEX
+    ): TimeCapsule? {
+        val strings = I18n.forLanguage(language.value)
+        val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+        if (text.isBlank()) {
+            showToast(strings.writeSomething)
+            return null
+        }
+        if (unlockDate.isBlank() || unlockDate <= todayIso) {
+            showToast(strings.capsuleDateError)
+            return null
+        }
+
+        val normalizedStrokes = if (strokes.isNotEmpty()) {
+            StrokeMath.normalizeStrokes(strokes)
+        } else {
+            emptyList()
+        }
+        val capsule = repository.addCapsule(text.trim(), unlockDate, normalizedStrokes, color)
+        NotificationHelper.scheduleCapsuleNotification(getApplication(), capsule)
+        checkReadyCapsule()
+        vibrate(14)
+        showToast(strings.capsuleSavedToast)
+        return capsule
+    }
+
+    // --- Sketchpad Page (SK1–SK11) ---
 
     fun openSketchPage() {
-        vibrate(6)
-        _isSketchPageOpen.value = true
+        selectTab(Tab.DRAW)
     }
 
     fun closeSketchPage() {
-        _isSketchPageOpen.value = false
+        selectTab(Tab.PAGE)
     }
 
-    fun addSketchStroke(stroke: List<Point>) {
-        if (stroke.isNotEmpty()) {
+    fun addSketchStroke(stroke: SketchStroke) {
+        if (stroke.points.isNotEmpty()) {
+            _sketchUndoStack.add(_sketchStrokes.value)
             _sketchStrokes.value = _sketchStrokes.value + listOf(stroke)
+            _sketchIntroDismissed.value = true
+        }
+    }
+
+    fun addSketchStroke(points: List<Point>) {
+        if (points.isNotEmpty()) {
+            addSketchStroke(
+                SketchStroke(
+                    points = points,
+                    colorHex = _sketchColor.value,
+                    width = _sketchBrushWidth.value
+                )
+            )
+        }
+    }
+
+    /**
+     * SK3: Eraser mode removes a stroke when a touch point comes within 14 canvas units
+     * of any of its points. One undo step restores it.
+     */
+    fun eraseSketchAt(pt: Point) {
+        val current = _sketchStrokes.value
+        if (current.isEmpty()) return
+
+        val remaining = current.filterNot { stroke ->
+            stroke.points.any { p ->
+                Math.hypot((p.x - pt.x).toDouble(), (p.y - pt.y).toDouble()) <= 14.0
+            }
+        }
+        if (remaining.size != current.size) {
+            vibrate(5)
+            _sketchUndoStack.add(current)
+            _sketchStrokes.value = remaining
         }
     }
 
     fun undoSketchStroke() {
-        if (_sketchStrokes.value.isNotEmpty()) {
+        if (_sketchUndoStack.isNotEmpty()) {
+            vibrate(6)
+            _sketchStrokes.value = _sketchUndoStack.removeAt(_sketchUndoStack.lastIndex)
+        } else if (_sketchStrokes.value.isNotEmpty()) {
             vibrate(6)
             _sketchStrokes.value = _sketchStrokes.value.dropLast(1)
         }
@@ -724,16 +1032,113 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearSketchStrokes() {
         if (_sketchStrokes.value.isNotEmpty()) {
             vibrate(6)
+            _sketchUndoStack.add(_sketchStrokes.value)
             _sketchStrokes.value = emptyList()
         }
+    }
+
+    fun requestClearSketchStrokes() {
+        if (_sketchStrokes.value.isEmpty()) return
+        val strings = I18n.forLanguage(language.value)
+        _confirmDialog.value = ConfirmDialogData(
+            title = strings.clear,
+            message = strings.confirmDeleteMsg,
+            confirmText = strings.clear,
+            cancelText = strings.keep,
+            onConfirm = {
+                dismissConfirmDialog()
+                clearSketchStrokes()
+            },
+            onCancel = { dismissConfirmDialog() }
+        )
     }
 
     fun setSketchColor(hex: String) {
         vibrate(5)
         _sketchColor.value = hex
+        _sketchEraserMode.value = false
     }
 
-    fun shareSketch(context: Context) {
+    fun setSketchBrushWidth(width: Float) {
+        vibrate(5)
+        _sketchBrushWidth.value = width
+        _sketchEraserMode.value = false
+    }
+
+    fun toggleSketchEraser() {
+        vibrate(5)
+        _sketchEraserMode.value = !_sketchEraserMode.value
+    }
+
+    fun setSketchEraserMode(enabled: Boolean) {
+        vibrate(5)
+        _sketchEraserMode.value = enabled
+    }
+
+    fun setSketchPaperType(paperType: SketchPaperType) {
+        vibrate(5)
+        _sketchPaperType.value = paperType
+    }
+
+    fun openExportSheet() {
+        val strings = I18n.forLanguage(language.value)
+        if (_sketchStrokes.value.isEmpty()) {
+            showToast(strings.writeSomething)
+            return
+        }
+        vibrate(6)
+        _isExportSheetOpen.value = true
+    }
+
+    fun closeExportSheet() {
+        _isExportSheetOpen.value = false
+    }
+
+    fun setExportFormat(format: ExportFormat) {
+        vibrate(5)
+        _exportFormat.value = format
+    }
+
+    fun setExportSignature(enabled: Boolean) {
+        vibrate(5)
+        _exportSignature.value = enabled
+        repository.updateUserSettings { it.copy(exportSignature = enabled) }
+    }
+
+    fun saveSketchToPhotos(context: Context, palette: KannachPalette = BasePalette): android.net.Uri? {
+        val strings = I18n.forLanguage(language.value)
+        if (_sketchStrokes.value.isEmpty()) {
+            showToast(strings.writeSomething)
+            return null
+        }
+
+        return try {
+            val bitmap = StrokeMath.composeExportBitmap(
+                context = context,
+                strokes = _sketchStrokes.value,
+                format = _exportFormat.value,
+                paperType = _sketchPaperType.value,
+                includeSignature = _exportSignature.value,
+                language = language.value,
+                palette = palette
+            )
+            val uri = StrokeMath.saveExportToMediaStore(context, bitmap)
+            bitmap.recycle()
+            if (uri != null) {
+                vibrate(12)
+                _isExportSheetOpen.value = false
+                showToast(strings.exportSaved)
+            } else {
+                showToast(strings.saveError)
+            }
+            uri
+        } catch (e: Exception) {
+            showToast(strings.saveError)
+            null
+        }
+    }
+
+    fun shareSketch(context: Context, palette: KannachPalette = BasePalette) {
         val strings = I18n.forLanguage(language.value)
         if (_sketchStrokes.value.isEmpty()) {
             showToast(strings.writeSomething)
@@ -741,11 +1146,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         try {
-            val file = StrokeMath.saveStrokesAsPngFile(
+            val bitmap = StrokeMath.composeExportBitmap(
                 context = context,
                 strokes = _sketchStrokes.value,
-                colorHex = _sketchColor.value
+                format = _exportFormat.value,
+                paperType = _sketchPaperType.value,
+                includeSignature = _exportSignature.value,
+                language = language.value,
+                palette = palette
             )
+            val file = StrokeMath.saveExportBitmapAsPngFile(context, bitmap)
+            bitmap.recycle()
             val uri = StrokeMath.getShareableUri(context, file)
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -753,9 +1164,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val chooser = Intent.createChooser(shareIntent, strings.sketchTitle).apply {
+            val chooser = Intent.createChooser(shareIntent, strings.exportTitle).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            _isExportSheetOpen.value = false
             context.startActivity(chooser)
             showToast(strings.sketchExported)
         } catch (e: Exception) {
@@ -763,7 +1175,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- Settings, Backup & Language ---
+    // --- Settings, Backup & Language (Phase 6 Settings v2) ---
 
     fun openSettings() {
         vibrate(6)
@@ -782,18 +1194,106 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleReminder(enabled: Boolean) {
         vibrate(6)
         val current = reminder.value
-        repository.saveReminder(current.copy(enabled = enabled))
+        val updated = current.copy(enabled = enabled)
+        repository.saveReminder(updated)
+        if (enabled) {
+            NotificationHelper.scheduleDailyReminder(getApplication(), updated.time)
+        } else {
+            NotificationHelper.cancelDailyReminder(getApplication())
+        }
     }
 
     fun setReminderTime(timeStr: String) {
         val current = reminder.value
-        repository.saveReminder(current.copy(time = timeStr))
+        val updated = current.copy(time = timeStr)
+        repository.saveReminder(updated)
+        if (updated.enabled) {
+            NotificationHelper.scheduleDailyReminder(getApplication(), timeStr)
+        }
+    }
+
+    fun toggleReminderDay(dayOfWeek: Int) {
+        if (dayOfWeek !in 1..7) return
+        vibrate(5)
+        val currentDays = userSettings.value.reminderDays
+        val updatedDays = if (currentDays.contains(dayOfWeek)) {
+            if (currentDays.size > 1) currentDays - dayOfWeek else currentDays
+        } else {
+            currentDays + dayOfWeek
+        }
+        repository.updateUserSettings { it.copy(reminderDays = updatedDays) }
+        if (reminder.value.enabled) {
+            NotificationHelper.scheduleDailyReminder(getApplication(), reminder.value.time)
+        }
+    }
+
+    fun sendTestNudge(context: Context): String {
+        vibrate(8)
+        val message = NotificationHelper.sendTestNudge(context)
+        showToast(message)
+        return message
+    }
+
+    fun setWeekStartsOn(dayOfWeek: Int?) {
+        vibrate(5)
+        repository.updateUserSettings { it.copy(weekStartsOn = dayOfWeek) }
+    }
+
+    fun setUseArabicIndicNumerals(enabled: Boolean) {
+        vibrate(5)
+        repository.updateUserSettings { it.copy(useArabicIndicNumerals = enabled) }
+    }
+
+    fun setHandwritingSize(size: String) {
+        if (size !in listOf("small", "normal", "large")) return
+        vibrate(5)
+        repository.updateUserSettings { it.copy(handwritingSize = size) }
+    }
+
+    fun setSeasonOverride(season: String) {
+        if (season !in listOf("auto", "winter", "spring", "summer", "autumn")) return
+        vibrate(5)
+        repository.updateUserSettings { it.copy(seasonOverride = season) }
+    }
+
+    fun setReduceMotion(mode: String) {
+        if (mode !in listOf("system", "on")) return
+        vibrate(5)
+        repository.updateUserSettings { it.copy(reduceMotion = mode) }
+    }
+
+    fun setHapticsEnabled(enabled: Boolean) {
+        repository.updateUserSettings { it.copy(hapticsEnabled = enabled) }
+        if (enabled) {
+            vibrate(6)
+        }
+    }
+
+    fun setHideInRecents(enabled: Boolean) {
+        vibrate(5)
+        repository.updateUserSettings { it.copy(hideInRecents = enabled) }
+    }
+
+    fun setCopyReminder(mode: String) {
+        if (mode !in listOf("off", "monthly")) return
+        vibrate(5)
+        repository.updateUserSettings { it.copy(copyReminder = mode) }
+        if (mode == "monthly") {
+            NotificationHelper.scheduleMonthlyCopyReminder(getApplication())
+        } else {
+            NotificationHelper.cancelMonthlyCopyReminder(getApplication())
+        }
+    }
+
+    fun recordBackupSaved(timestamp: Long = System.currentTimeMillis()) {
+        repository.updateUserSettings { it.copy(lastBackupTimestamp = timestamp) }
     }
 
     fun exportBackup(context: Context) {
         val strings = I18n.forLanguage(language.value)
         try {
             val file = repository.exportBackupToFile()
+            recordBackupSaved(System.currentTimeMillis())
             val uri = StrokeMath.getShareableUri(context, file)
 
             val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -815,11 +1315,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val strings = I18n.forLanguage(language.value)
         val result = repository.restoreFromBackupJson(jsonString)
         if (result.isSuccess) {
+            checkOnThisDay()
+            checkReadyCapsule()
             vibrate(14)
             showToast(strings.importedToast)
         } else {
             showToast(strings.importError)
         }
+    }
+
+    fun replayWelcome() {
+        vibrate(6)
+        _isSettingsOpen.value = false
+        _isFirstRun.value = true
+    }
+
+    fun shareAppWithFriend(context: Context) {
+        vibrate(6)
+        val strings = I18n.forLanguage(language.value)
+        try {
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, strings.settingsTellFriendMsg)
+            }
+            val chooser = Intent.createChooser(shareIntent, strings.settingsTellFriend).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        } catch (_: Exception) {}
     }
 
     private fun formatDateKey(year: Int, month: Int, day: Int): String {

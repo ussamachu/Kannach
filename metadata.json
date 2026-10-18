@@ -1,6 +1,6 @@
 {
-  "name": "كُنَّاش",
-  "description": "تطبيق يوميات وبصمات يومية ورسومات لحديقة الأيام - Kannach Daily Garden",
+  "name": "Kannach",
+  "description": "Kannach — a hand-drawn daily diary",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

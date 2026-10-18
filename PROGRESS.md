@@ -319,5 +319,259 @@
 3. الرسمة لا تتداخل أبداً مع رقم اليوم؛ ولا يوجد أي خط يقطع رقم اليوم.
 4. عند ضبط حجم خط النظام على أكبر إعداد (Largest font): نصوص الهيدر وتسميات الـ Dock لا تُقتطع.
 
+---
 
+## مواصفات الصقل v4 (`kannach-v4-polish-spec.md`) — المرحلة 1: الهوية ونظام اللغات (Brand + Language System)
+**الحالة: مكتملة ومحققة بنجاح 100% ✅**
 
+### 1. الهوية الواحدة للعلامة (§1 BR1–BR6 & §8 RB3):
+- **BR1 (`appTitle`):** توحيد اسم العلامة إلى `"Kannach"` في الإنجليزية والفرنسية والإسبانية (`EN / FR / ES`) و`"كُنَّاش"` في العربية (`AR`) دون ترجمة للاسم.
+- **BR2 (`appSub`):** توحيد الشعار الوصفي (Tagline) حسب اللغة:
+  - `EN`: `"a notebook that grows"`
+  - `FR`: `"un carnet qui fleurit"`
+  - `ES`: `"un cuaderno que florece"`
+  - `AR`: `"دفترٌ يُزهر"`
+  - يظهر فقط في شاشة البداية (`SplashScreen`) تحت الاسم وفي قسم "حول" (`About`) داخل الإعدادات.
+- **BR3 (إزالة التسميات المزدوجة القديمة):** إزالة كل ظهور مرئي لعبارتَي `"Daily Garden"` و`"حديقة الأيام"` من التطبيق بالكامل، وتحديث وصف `metadata.json` إلى `"Kannach — a hand-drawn daily diary"`.
+- **BR4 (تسمية المعرض):** الحفاظ على اسم تبويب المعرض باسم الحديقة (`Garden` / `Jardin` / `Jardín` / `الحديقة`) وعنوان الصفحة `"Your little garden"` / `"حديقتك الصغيرة"`.
+- **BR5 & RB3 (سطر الإصدار):** قراءة رقم الإصدار ديناميكياً من `BuildConfig.VERSION_NAME` بصيغة `Kannach · {version}` في `SubScreens.kt`.
+- **BR6 (اسم مشغّل التطبيق حسب لغة النظام):**
+  - `app/src/main/res/values/strings.xml`: `app_name = "Kannach"`
+  - `app/src/main/res/values-ar/strings.xml`: `app_name = "كُنَّاش"`
+
+### 2. معمارية اللغات ونظام الجمع (§7 LG1–LG5, LG7–LG8):
+- **LG1 (تقسيم ملفات اللغات مع الأمان وقت الترجمة):**
+  - تقسيم القواميس إلى `I18nEn.kt` (`val EN: Strings`)، `I18nAr.kt` (`val AR: Strings`)، `I18nFr.kt` (`val FR: Strings`)، و`I18nEs.kt` (`val ES: Strings`) مع إبقاء `data class Strings` في `I18n.kt` بحيث يصبح أي مفتاح مفقود خطأ ترجمة فوري (Compile-time error).
+- **LG2 (القاموس الشامل والرجوع الآمن):**
+  - إضافة `I18n.all: Map<String, Strings>` للغات الأربع (`ar`, `en`, `fr`, `es`).
+  - دالة `forLanguage(code)` تستخرج رمز اللغة الأساسي قبل `-` أو `_` وتعود افتراضياً إلى `EN` (وليس `AR`).
+  - دالة `isRtl(code)` تعيد `true` للغة العربية `ar` فقط.
+- **LG3 (نظام صيغ الجمع `Plurals.kt`):**
+  - إنشاء `Plurals.kt` مع `enum class PluralForm { ZERO, ONE, TWO, FEW, MANY, OTHER }` ودالة `plural(lang: String, n: Int): PluralForm` و`PluralString`:
+    - العربية (`ar`): `0 -> ZERO`, `1 -> ONE`, `2 -> TWO`, `3..10 -> FEW`, `11..99 -> MANY`, وباقي الأعداد `OTHER`.
+    - الفرنسية (`fr`): `0, 1 -> ONE`، وباقي الأعداد `OTHER`.
+    - الإنجليزية والإسبانية (`en`, `es`): `1 -> ONE`، وباقي الأعداد `OTHER`.
+  - تحويل جميع السلاسل النصية المرتبطة بعدد (`galleryCount`, `monthRecapPlanted`, `distAgo`, `distWeeks`, `distMonths`, `capsuleCountdown`, `wrapDays`) إلى `PluralString`.
+- **LG4 & LG5 (إزالة النصوص الشرطية المدمجة ودعم الـ Locale):**
+  - نقل كافة النصوص التي كانت مكتوبة شرطياً عبر `if (isRtl)` في `HomeAndEntryScreens.kt` و`SubScreens.kt` و`I18n.kt` إلى مفاتيح رسمية في `Strings` (`weekdays`, `moodGreen..moodCustom`, `distYesterday`, `distFuture`, `recordedAt`, `prevEntry`, `nextEntry`, `leaveMark`, `noMemoriesYet`, `searchHint`, `searchNoMatch`, `galleryEmptyTitle`, `galleryEmptySub`, `plantTodayBtn`).
+  - تحديث `KannachRepository` (`detectInitialLanguage` و`setLanguage`) لاكتشاف وحفظ جميع لغات الموجة الأولى (`ar`, `en`, `fr`, `es`).
+- **LG7 (منتقي اللغات في الإعدادات):**
+  - تحديث قسم اللغة في `SettingsScreen` ليعرض اللغات الأربع بأسمائها الأصلية (`العربية`, `English`, `Français`, `Español`) في شبكة متوازنة 2×2 بمساحات لمس `>= 48.dp`.
+- **LG8 (اختبارات التحقق الآلي):**
+  - تحديث `HomeScreenVerificationTest` للتحقق من تطابق المفاتيح بنسبة 100% (`missing: 0`) عبر اللغات الأربع (`AR / EN / FR / ES`)، وصحة قواعد الجمع `Plurals`، وسلامة تخطيط الهيدر في اللغات الأربع.
+
+### 3. أدلة التحقق (Phase 1 Gate Evidence):
+- **فحص خلو الكود من `"Daily Garden"` و`"حديقة الأيام"` (BR3):**
+  `grep -rn "Daily Garden\|حديقة الأيام" . --exclude-dir=.gradle --exclude-dir=build --exclude-dir=.build-outputs --exclude="PROGRESS.md"` => `0 نتائج`.
+- **فحص البناء (`compile_applet`):** `Build succeeded - the applet is compiled`.
+- **فحص تطابق مفاتيح اللغات الأربع (`AR / EN / FR / ES`) واختبارات Robolectric (`HomeScreenVerificationTest`):** `missing: 0` وجميع الاختبارات ناجحة.
+
+---
+
+## مواصفات الصقل v4 (`kannach-v4-polish-spec.md`) — المرحلة 2: شريط الورق العائم والتبويبات وإعدادات الهيدر (Paper Dock + Tabs + Header Settings)
+**الحالة: مكتملة ومحققة بنجاح 100% ✅**
+
+### 1. هيكل التنقل والتبويبات (§2 NV1–NV4 & §8 RB4):
+- **NV1 (الوجهات كتبويبات رئيسية):** تحويل الوجهات الأربع إلى تبويبات عليا: **Page** (`الصفحة` / `Page` / `Página`)، **Garden** (`الحديقة`)، **Letters** (`الرسائل`)، و**Draw** (`ارسم`)، بالإضافة إلى زر الغرس الدائري المنفصل **Plant** (`اليوم`)، ونقل الإعدادات من الـ Dock إلى الهيدر (NV7).
+- **NV2 & RB4 (حالة التنقل الموحدة وترتيب الرجوع `BackHandler`):**
+  - إضافة `enum class Tab { PAGE, GARDEN, LETTERS, DRAW }` و`currentTab: StateFlow<Tab>` إلى `MainViewModel` واستبدال المتغيرات المنفصلة (`isGalleryOpen`, `isCapsulePageOpen`, `isSketchPageOpen`) بـ `currentTab` مع إبقاء `isSettingsOpen` و`isWrapOpen` وحالة ورقة التدوين/البطاقة كطبقات علوية (Overlays).
+  - إصلاح تسلسل `BackHandler` بحيث تُغلق الطبقات العلوية أولاً (`confirmDialog` -> `activeSheetDate` -> `isWrapOpen` -> `isSettingsOpen` -> `isFirstRun`)، ومن أي تبويب غير `PAGE` يعود زر الرجوع إلى `Tab.PAGE`، وعدم إغلاق تبويب الحديقة عند فتح بطاقة ذكرى أو ملخص السنة.
+- **NV3 (ثبات الـ Dock فوق التبويبات الأربع):**
+  - إبقاء `KannachDock` مثبتاً فوق التبويبات الأربع جميعاً، مع إخفائه بانسيابية (انزلاق للأسفل + تلاشي `SOFT`) عند ظهور ورقة التدوين/بطاقة الذكرى، الإعدادات، ملخص السنة، شاشة الترحيب، شاشة البداية، أو لوحة المفاتيح (`WindowInsets.ime`).
+  - إضافة هامش سفلي آمن (`padding(bottom = 92.dp)` مع `navigationBarsPadding()`) لمحتوى التمرير في التبويبات الأربع (`MonthGrid`, `GalleryScreen`, `TimeCapsuleScreen`, `SketchpadScreen`) لضمان عدم اختفاء أي عنصر خلف الـ Dock.
+- **NV4 (انتقال التبويبات):** انتقال متقاطع (Crossfade) مع إزاحة أفقية `8.dp` باتجاه ترتيب التبويبات (معكوس تلقائياً في RTL) بمدة `SOFT`، وتلاشي فقط عند تفعيل تقليل الحركة (`reduceMotion`).
+
+### 2. الهوية البصرية لشريط الورق العائم والهيدر (§2 NV5–NV9 & §3 HM6):
+- **NV5 (كبسولة الورق المخيط - Stitched Paper Pill):**
+  - شريط عائم بهوامش جانبية `16.dp`، وارتفاع `64.dp`، ومسافة سفلية `12.dp` فوق شريط تنقل النظام.
+  - شكل غير متماثل مرسوم يدوياً `HandDrawnDockShape` (`32/28/30/26 dp`)، بلون `palette.paperHi`، وحد خارجي `1.5.dp` بلون `palette.greenLine`، وحافة داخلية مخيطة متقطعة (`dashedHandDrawnBorder`, `1.2.dp`, `dash 8/6`, `inset = 4.dp`, `palette.greenLine` بشفافية `0.7`)، وظل ورقي ناعم من الـ Tokens (`paperShadow`) دون أي `Material elevation`، مع ميلان ورقي `paperTilt(-0.4f)`.
+- **NV6 (خانات التبويبات الأربع وأيقونة `NOTEBOOK`):**
+  - إضافة أيقونة الدفتر المفتوح `KannachIconType.NOTEBOOK` (منحنيَا صفحتين + كعب الدفتر الأوسط بسماكة `2.dp` وحواف دائرية) لتبويب `Page`.
+  - إظهار التسمية النصية فقط للتبويب النشط بخط اليد (`12.sp`, `greenDeep`) مع `animateContentSize` وخلفية تظليل مرسومة تدريجياً (`greenSoft` + رسم المسار عبر `PathMeasure` بمدة `SOFT`)، بينما تبقى الخانات غير النشطة بالأيقونة فقط (`inkSoft`) مع `contentDescription` مترجم، ونقطة حمراء `7.dp` على `Letters` عند جاهزية كبسولة زمنية.
+- **NV6b (زر الغرس الدائري المنفصل - Plant Button):**
+  - دائرة منفصلة (`64.dp`) في طرف الشريط (معكوسة تلقائياً في RTL) بفاصل `10.dp`، بلون `palette.green` وحد `1.5.dp` بلون `greenDeep` وحلقة خياطة داخلية متقطعة على بُعد `5.dp`، تتوسطها أيقونة `SPROUT` بحجم `28.dp` بلون `palette.onGreen`.
+  - عند الضغط تنبض الأيقونة بمقياس `1 -> 0.9 -> 1.08 -> 1` (`SOFT`) وتفتح صفحة كتابة اليوم إذا كان فارغاً أو بطاقة ذكرى اليوم إذا كان مكتوباً.
+- **NV7 & HM6 (نقل الإعدادات إلى الهيدر وتنسيق الصفحة الرئيسية):**
+  - وضع زر الإعدادات (`KannachIconType.SLIDERS`, مساحة لمس `48.dp`, `header_settings_button`) في الخانة الأمامية من `AppHeader` (ورؤوس التبويبات) ليوازن زر المفضلة في الخانة الخلفية ويحفظ توسط كتلة الشهر والسنة تماماً.
+
+### 3. أدلة التحقق (Phase 2 Gate Evidence):
+- **فحص البناء (`compile_applet`):** `Build succeeded - the applet is compiled`.
+- **فحص تطابق مفاتيح اللغات الأربع (`AR / EN / FR / ES`) بما فيها `dockPage`:** `missing: 0`.
+- **اختبارات Robolectric (`HomeScreenVerificationTest`):** التحقق الآلي من وجود الخانات الأربع وزر الغرس المنفصل وزر الإعدادات في الهيدر وانتقال حالات `Tab` بنجاح.
+
+---
+
+## سجل الإنجاز — المرحلة 3: صفحة اليوم المنتزعة في الصفحة الرئيسية (kannach-v4-polish-spec.md — Phase 3: Home Tear-Off Page)
+
+### 1. هيكلة `MonthGrid` وتملّك المساحة المتبقية (§3 HM1 & HM5):
+- **HM1:** تحويل `MonthGrid` إلى `Column` غير قابل للتمرير يحتوي على: صف أيام الأسبوع، وشبكة أيام الشهر بارتفاعها الطبيعي، تليها بطاقة الصفحة المنتزعة (`TodayPageCard` أو `MonthPageCard`) بـ `Modifier.weight(1f)` و`heightIn(min = 160.dp)` و`fillMaxSize()` بحيث تتملّك البطاقة كامل الارتفاع المتبقي حتى الهامش السفلي (`dockHeight + 16.dp = 92.dp`).
+- **HM5:** إزالة `FlexibleHomeCard` القديمة بالكامل مع الإبقاء على `FoldedPaperCorner` (E1–E3) كما هي.
+
+### 2. بطاقة صفحة اليوم المنتزعة `TodayPageCard` للشهر الحالي (§3 HM2):
+- **الشكل والملمس (`TearOffPageShape` & `TearOffPageSurface`):**
+  - حافة علوية مسننة كالورق المنتزع (`zig-zag path`) مرسومة بلون `palette.line`، مع ثقبين دائريين صغيرين في الأعلى بلون `palette.paperLo`.
+  - ميلان ورقي `paperTilt(-0.5f)` وظل ورقي ناعم `paperShadow`.
+- **النصف العلوي (رأس التقويم المكتبي):**
+  - اسم يوم الأسبوع بخط الواجهة (`13.sp`) مع تباعد أحرف للغات اللاتينية فقط (`0.sp` للعربية لمنع تقطع الحروف).
+  - رقم اليوم بحجم ضخم (`72.sp`) بخط اليد ولون `palette.greenDeep`، يليه اسم الشهر والسنة (`14.sp`).
+  - سطر التحية (`greet*`) موضوع داخل البطاقة أسفل التاريخ مباشرةً، مع إزالة سطر التحية المتلاشي و`AnimatedVisibility` من `AppHeader` ليصبح ارتفاع الهيدر ثابتاً تماماً.
+- **النصف السفلي (ورق مسطّر `linedPaperBackground`):**
+  - **اليوم فارغ:** أيقونة البرعم (`SPROUT`) + جملة `todayCardEmpty` + سطر إرشادي خافت.
+  - **اليوم مكتوب:** رسمة اليوم بحجم كبير (`112.dp` مع ميلان `paperTilt`) بجانب أول 3 أسطر من تدوينة اليوم بخط اليد (`maxLines = 3`, `TextOverflow.Ellipsis`).
+  - **التفاعل:** اللمس في أي مكان على البطاقة يفتح ورقة الكتابة (إذا كان اليوم فارغاً) أو بطاقة الذكرى (إذا كان اليوم مكتوباً) دون أزرار إضافية.
+
+### 3. بطاقة الشهر الماضي `MonthPageCard` والشاشات القصيرة `CompactPageStrip` (§3 HM3 & HM4):
+- **HM3 (`MonthPageCard`):** نفس شكل الورقة المنتزعة مع اسم الشهر بحجم كبير (`36.sp`)، وجملة الحصاد الهادئة (`monthRecapPlanted` / `monthRecapQuiet`)، وشريط يضم حتى 5 رسمات (المفضلة أولاً ثم الأحدث) بحجم `56.dp` لكل رسمة مع زوايا ميلان طفيفة، أو دائرة منقطة خافتة (`56.dp`) عند خلو الشهر من التدوينات.
+- **HM4 (`CompactPageStrip` للشاشات القصيرة):** عند نقصان المساحة المتبقية عن `160.dp` (مثل شاشة `360×640`) تتقلص البطاقة تلقائياً إلى شريط ورقي بارتفاع `64.dp` من سطر واحد (التاريخ + التحية) دون أي تمرير عمودي للصفحة.
+
+### 4. أدلة التحقق (Phase 3 Gate A Evidence):
+- **فحص البناء (`compile_applet`):** `Build succeeded - the applet is compiled`.
+- **اختبار Robolectric/Compose (`HomeScreenVerificationTest`):**
+  - `Phase 3 Gate A (360x800): vertical gap between card bottom and dock top = 14.540283 dp` (`<= 24 dp`).
+  - `Phase 3 Gate A (412x915): vertical gap between card bottom and dock top = 14.314819 dp` (`<= 24 dp`).
+  - `Phase 3 Gate A (360x640): compact strip shown, height = 64.0 dp`.
+
+---
+
+## سجل الإنجاز — المرحلة 4: مساحة الرسم والتصدير مع التوقيع (kannach-v4-polish-spec.md — Phase 4: Just Draw + Export)
+
+### 1. الرسم المتقدم لكل ضربة والممحاة وأنواع الورق (§4.1 SK1–SK6):
+- **SK1 (`SketchStroke` & `DrawingCanvas` Overload):** إضافة نموذج `data class SketchStroke(val points: List<Point>, val colorHex: String, val width: Float)` المخصص حصرياً لتبويب الرسم الحر (`Just Draw`) دون المساس بنموذج اليوميات (`DayEntry`)، مع دالة `DrawingCanvas` مُحمّلة (`overload`) ترسم كل ضربة بلونها وسماكتها الخاصة مع الحفاظ التام على تنعيم المنحنيات (`composePathFrom`) وتصفية النقاط (`> 2.0`).
+- **SK2 (درج الأدوات الورقي المرسوم يدوياً):** أسفل لوحة الرسم بظل ورقي وحافة داخلية مخيطة (`dashedHandDrawnBorder`):
+  - **6 ألوان:** الألوان الخمسة الأساسية + لون الحبر (`palette.ink`).
+  - **3 أحجام فرشاة:** وحدات لوحة `4 / 8 / 14` ممثلة بثلاث نقاط متدرجة الحجم.
+  - **أدوات التحكم:** زر تبديل الممحاة (`ERASER`)، زر التراجع (`UNDO`)، وزر المسح (`TRASH` عبر نافذة التأكيد `ConfirmDialogOverlay`).
+  - **تمييز الأداة النشطة:** نفس التمييز اليدوي المستخدم في الرصيف الورقي (`palette.greenSoft` + إطار `1.4.dp` بلون `palette.greenLine`).
+- **SK3 (الممحاة الذكية):** عند تفعيل وضع الممحاة، يؤدي لمس أو تمرير الإصبع ضمن مسافة `<= 14` وحدة لوحة من أي نقطة في ضربة مرسومة إلى إزالتها فوراً، وتستعيدها خطوة تراجع واحدة (`undoSketchStroke`).
+- **SK4 (أنواع الورق الأربعة):** صف مصغر من 4 عينات ورقية مرسومة برمجياً بالكامل دون أي صور خارجية: عادي (`PLAIN`)، مسطّر (`RULED`)، منقّط (`DOTTED`)، وكرافت (`KRAFT` مع إضافة رمز `palette.paperKraft`)، مع تطبيق الورق المختار على اللوحة وعلى الصورة المصدّرة.
+- **SK5 & SK6 (واجهة التبويب وحفظ الحالة):** إزالة زر الإغلاق `X` لكون الصفحة تبويباً رئيسياً، عنوان `"Just Draw"` / `"فقط ارسم"` بخط اليد، وإخفاء الجملة الترحيبية تلقائياً بعد أول ضربة فرشاة (`sketchIntroDismissed`)، مع بقاء الرسمة محفوظة في `MainViewModel` عند التنقل بين التبويبات.
+
+### 2. التصدير مع التوقيع والمنطقة الآمنة وحفظ الصور (§4.2 SK7–SK12 & §8 RB2):
+- **SK7 (ورقة التصدير السفلية):** النقر على أيقونة المشاركة في أعلى التبويب يفتح ورقة سفلية تتضمن:
+  - شرائح الأبعاد الثلاثة: **Story 9:16** (`1080×1920`)، **Square 1:1** (`1080×1080`)، و**Page 3:4** (`1080×1440`).
+  - مفتاح تبديل **Signature / التوقيع** (مفعّل افتراضياً `true`).
+  - زرا **Save to Photos / حفظ في الصور** و**Share / مشاركة**.
+  - إضافة المفاتيح الـ 8 (`exportTitle`, `exportStory`, `exportSquare`, `exportPage`, `exportSignature`, `exportSave`, `exportShare`, `exportSaved`) في اللغات الأربع (`AR`, `EN`, `FR`, `ES`).
+- **SK8, SK9, SK10 (تركيب الصورة وإصلاح RB2):**
+  - بناء الصورة النهائية عبر `android.graphics.Canvas` بخلفية مكتب ورقية (`palette.paperDesk`) وبطاقة ورقية وسطية بظل ناعم وحواف دائرية (`28px`) وإطار `2px` بلون `palette.line` ونوع الورق المختار، مع تحجيم الضربات داخل البطاقة بهامش `48px`.
+  - **SK9 (التوقيع):** داخل الزاوية السفلية للبطاقة على بُعد `36px`: مسار أيقونة البرعم (`drawAndroidSprout`) + اسم العلامة `"Kannach"` أو `"كُنَّاش"` (`28px`، خط اليد من `res/font` عبر `ResourcesCompat.getFont`، بلون `palette.greenDeep` وشفافية `0.72`) + تاريخ اليوم المحلي أسفله (`20px`، خط الواجهة من `res/font`، بلون `palette.inkSoft` وشفافية `0.65`).
+  - **SK10 (المنطقة الآمنة لـ Story 9:16):** هامش علوي `280px` (`>= 260px`) وهامش سفلي `360px` (`>= 340px`) بحيث يبقى التوقيع داخل البطاقة بعيداً عن واجهة تطبيقات القصص.
+- **SK11 & SK12 (الحفظ والمشاركة بدون أذونات تخزين):**
+  - الحفظ المباشر في `MediaStore.Images.Media` (`Pictures/Kannach`) مع `IS_PENDING` على API 29+ وإظهار رسالة `exportSaved`.
+  - المشاركة عبر `FileProvider` و`Intent.ACTION_SEND` دون إضافة أي أذونات تخزين في `AndroidManifest.xml`.
+
+### 3. أدلة التحقق (Phase 4 Gate A Evidence):
+- **فحص البناء (`compile_applet`):** `Build succeeded - the applet is compiled`.
+- **فحص تطابق مفاتيح اللغات الأربع (`AR / EN / FR / ES`):** `All 4 languages (AR/EN/FR/ES) key parity: missing: 0`.
+- **اختبار Robolectric (`HomeScreenVerificationTest` مع `@GraphicsMode(GraphicsMode.Mode.NATIVE)`):**
+  - التحقق من أبعاد اللقطات المصدّرة (`1080×1920`, `1080×1080`, `1080×1440`) والمنطقة الآمنة السفلية (`360px >= 340px`).
+  - التحقق من رسم بكسلات التوقيع في الزاوية السفلية للبطاقة عند تفعيل `Signature` مقارنةً بإيقافه:
+    - `Phase 4 Gate A (STORY, lang=en): differing signature pixels = 509`
+    - `Phase 4 Gate A (STORY, lang=ar): differing signature pixels = 313`
+    - `Phase 4 Gate A (SQUARE, lang=en): differing signature pixels = 509`
+    - `Phase 4 Gate A (SQUARE, lang=ar): differing signature pixels = 313`
+    - `Phase 4 Gate A (PAGE, lang=en): differing signature pixels = 509`
+    - `Phase 4 Gate A (PAGE, lang=ar): differing signature pixels = 313`
+  - التحقق من الممحاة (`<= 14` وحدة لوحة) واسترجاع الضربة الممسوحة بخطوة تراجع واحدة، وخلو `AndroidManifest.xml` من أي أذونات تخزين.
+
+---
+
+## سجل الإنجاز — المرحلة 5: الرسائل وكبسولات الزمن (kannach-v4-polish-spec.md — Phase 5: Letters)
+**الحالة: مكتملة ومحققة بنجاح 100% ✅**
+
+### 1. رف الرسائل وبطاقات الأظرف والعد التنازلي (§5.1 CP1–CP3 & §8 RB5):
+- **CP1 (رف الرسائل `CapsuleShelfScreen` في `LettersScreen.kt`):**
+  - في الأعلى: بطاقة ورقية مرسومة يدوياً (`capsuleComposeCard`: `"Write a letter to future you"` / `"اكتب رسالة لنفسك في المستقبل"`) تفتح صفحة كتابة الرسالة الكاملة عند النقر.
+  - أسفلها ثلاثة أقسام منظمة: **Waiting / قيد الانتظار** (الرسائل المقفلة)، **Ready / جاهزة للفتح** (الرسائل التي حان موعدها مع وهج ختم متصدع دافئ)، و**Opened / مفتوحة** (الأرشيف).
+  - كل رسالة تُعرض كبطاقة ظرف مرسومة يدوياً (`EnvelopeCard`) مع طية ظرف وأيقونة ختم الشمع (`KannachIconType.SEAL`). وعند خلو الرف تماماً، تظهر بطاقة هادئة بأيقونة الختم وجملة مكتوبة بخط اليد (`capsuleEmpty`).
+- **CP2 & RB5 (العد التنازلي والتواريخ الطويلة المترجمة بدلاً من صيغة ISO):**
+  - إضافة دوال `I18n.formatLongDate` و`I18n.formatLongDateFromMillis` و`I18n.daysUntilDateKey` لمنع عرض أي تاريخ خام بصيغة `YYYY-MM-DD`.
+  - **الرسائل المقفلة:** تعرض `Opens {long date}` + العد التنازلي بصيغة الجمع الصحيحة `in {n} days` (`capsuleCountdown` عبر `Plurals.kt` للغات الأربع).
+  - **الرسائل الجاهزة:** تعرض `"Ready to open"` / `"جاهزة للفتح — المس لفضّ الختم"`.
+  - **الرسائل المفتوحة:** تحفظ طابع وقت الفتح (`openedAt: Long?` في `TimeCapsule`) وتعرض `"Written {date} · opened {date}"` (`capsuleOpenedMeta`).
+- **CP3 (التفاعل مع الرسائل المقفلة والحذف الآمن):**
+  - النقر على أي رسالة مقفلة يُظهر تنبيهاً فورياً (`capsuleNotYetToast`: `"Not yet — {n} days to go"` / `"ليس بعد — بقي {n} يوم"`) بدلاً من النقر الصامت.
+  - الضغط المطوّل (`combinedClickable`) أو النقر على أيقونة الحذف يفتح نافذة التأكيد `ConfirmDialogOverlay` بعنوان `"Tear this letter up?"` / `"أتمزّق هذه الرسالة؟"` (`capsuleDeleteTitle`).
+
+### 2. صفحة كتابة الرسالة الكاملة ومراسم الختم وعرض الرسالة المفتوحة (§5.2 CP4–CP10 & §8 RB1):
+- **CP4 (ورق الرسالة `CapsuleComposeScreen`):**
+  - صفحة كاملة مخصصة للكتابة على ورق مسطّر (`linedPaperBackground`) بخط اليد، مع تعبئة السطر الأول افتراضياً بعبارة `"Dear future me,"` / `"إلى نفسي في المستقبل،"` (`capsulePrefill` قابلة للتعديل)، وختم صغير في الزاوية العلوية `"Written {date}"` (`capsuleWrittenStamp`).
+- **CP5 (رسمة اختيارية مرفقة بالرسالة):**
+  - صف `"Add a little doodle"` / `"أضف رسمة صغيرة"` يفتح منطقة رسم بنسبة `3:4` باستخدام نفس `DrawingCanvas` مع الألوان الخمسة وأزرار التراجع والمسح، وتُحفظ الضربات (`strokes`) واللون (`color`) داخل نموذج `TimeCapsule`.
+- **CP6 (شرائح اختيار تاريخ الفتح):**
+  - شرائح جاهزة: **1 week · 1 month · 3 months · 6 months · 1 year** (الشريحة الافتراضية: **1 month**)، بالإضافة إلى شريحة **Pick a date** التي تفتح منتقي التاريخ الأصلي (`DatePickerDialog` بحد أدنى = غداً).
+  - يعرض الملخص دائماً الصيغة المترجمة: `Opens {long date} · in {n} days`.
+- **CP7 (تأكيد الختم ومراسم ختم الشمع وإضاءة الظرف):**
+  - زر `"Seal the letter"` يفتح `ConfirmDialogOverlay` غير التدميري: `"Once sealed, you won't see it until {date}."` (وزر الإلغاء `"Keep writing"`).
+  - عند التأكيد: تُشغَّل مراسم الختم (`SealingCeremonyOverlay` — انطواء الظرف وهبوط ختم الشمع مع احترام `reduceMotion`)، ثم تعود الواجهة إلى رف الرسائل مع تمييز الظرف الجديد بهالة دافئة لمدة ثانية واحدة (`highlightedCapsuleId`).
+- **CP8 (عرض الرسالة المفتوحة `OpenedCapsuleOverlay`):**
+  - تصميم بطاقة ذكرى يعرض نص الرسالة على أسطر ورقية، والرسمة المرفقة (إن وُجدت)، وسطر المسافة الزمنية `"You wrote this {n} {unit} ago"` (`I18n.getRelativeTimeDistanceFromMillis`)، وإجراءين نصيين هادئين: **Write back / اكتب ردّاً** (يفتح صفحة كتابة رسالة جديدة) و**Delete / حذف** (عبر نافذة التأكيد).
+- **CP9 & RB1 (جدولة الإشعارات وإصلاح `NotificationHelper`):**
+  - طلب إذن `POST_NOTIFICATIONS` على Android 13+ مرة واحدة عند أول ختم رسالة أو عند تفعيل التذكير اليومي، مع عدم الإلحاح في حال الرفض (`hasRequestedNotifPermission`).
+  - إضافة `NotificationHelper.scheduleCapsuleNotification` (الساعة 09:00 صباحاً يوم `unlockDate`) و`cancelCapsuleNotification` عند فتح الرسالة أو حذفها.
+  - إصلاح **RB1** عبر ربط `MainViewModel.toggleReminder` و`setReminderTime` باستدعاء `NotificationHelper.scheduleDailyReminder` و`cancelDailyReminder` فعلياً، وإعادة مزامنة المواعيد عند تشغيل التطبيق (`syncNotificationsOnLaunch`).
+- **CP10 (شارة الرصيف وشريط الصفحة الرئيسية):**
+  - عند حلول موعد فتح رسالة (`unlockDate <= todayKey && !opened`)، تظهر النقطة الحمراء على أيقونة `Letters` في `KannachDock` وشريط الإشعار في الصفحة الرئيسية، وتختفي الشارة والشريط فور فتح الرسالة.
+
+### 3. أدلة التحقق (Phase 5 Gate Evidence):
+- **فحص البناء (`compile_applet`):** `Build succeeded - the applet is compiled`.
+- **فحص القواعد الثابتة (Standing Rules):**
+  - `grep -rnI "Color(0x\|androidx.compose.material.icons" app/src/main/java/com/example/LettersScreen.kt app/src/main/java/com/example/SubScreens.kt app/src/main/java/com/example/HomeAndEntryScreens.kt` => `0 نتائج`.
+  - تطابق مفاتيح اللغات الأربع (`AR / EN / FR / ES`) لجميع مفاتيح المرحلة 5 (`capsuleSectionWaiting..capsuleWriteBack`): `missing: 0`.
+- **اختبارات Robolectric (`gradle :app:testDebugUnitTest` — `HomeScreenVerificationTest`):**
+  - اجتياز جميع الاختبارات الـ 11 بنجاح (`BUILD SUCCESSFUL`), بما فيها اختبار `phase 5 letters shelf compose countdown opened view delete and notifications` الذي يتحقق من:
+    1. فتح صفحة الكتابة مع `"Dear future me,"` والشريحة الافتراضية `MONTH_1` وشرائح `WEEK_1` و`YEAR_1`.
+    2. إضافة رسمة اختيارية (`CP5`) وحفظها مع الرسالة المختومة.
+    3. نافذة تأكيد الختم (`CP7`) وخلوها من صيغة التاريخ الخام `YYYY-MM-DD` (`RB5`).
+    4. جدولة إشعار فتح الرسالة (`CP9` — `NotificationHelper.isCapsuleNotificationScheduled == true`) وإلغاؤه عند الفتح أو الحذف.
+    5. إظهار تنبيه العد التنازلي `"Not yet — 7 days to go"` عند النقر على رسالة مقفلة (`CP3`).
+    6. ظهور شارة الرسالة الجاهزة (`CP10`) واختفاؤها فور فتح الرسالة، وعرض `OpenedCapsuleOverlay` (`CP8`) مع زر `"Write back"`.
+    7. حذف الرسالة عبر نافذة التأكيد `"Tear this letter up?"` (`CP3`).
+    8. جدولة وإلغاء التذكير اليومي فعلياً عند تبديل `toggleReminder` وتغيير الوقت `setReminderTime` (`RB1`).
+
+---
+
+## سجل الإنجاز — المرحلة 6: الإعدادات الإصدار الثاني (kannach-v4-polish-spec.md — Phase 6: Settings v2)
+**الحالة: مكتملة ومحققة بنجاح 100% ✅**
+
+### 1. نموذج `UserSettings` والتخزين المستقل (`kannach.settings.v1`):
+- إضافة `UserSettings` (`@Serializable`) في `ModelsAndStorage.kt` وتخزينها في `SharedPreferences` تحت المفتاح `kannach.settings.v1` بمعزل تام عن النسخة الاحتياطية لليوميات (`BackupPayload`).
+- دعم `"system"` كقيمة افتراضية لمفتاح اللغة للتثبيتات الجديدة (`LG6`: اتباع لغة النظام مع التراجع الآمن إلى `"en"` عند عدم دعم لغة الجهاز).
+
+### 2. الفصول الورقية الستة في `SettingsScreen` (`SubScreens.kt` — §6 الفصول 1–6):
+1. **الفصل 1 — اللغة (`Language` مع `LG6`):**
+   - قائمة عمودية من البطاقات الورقية تضم صف **"Follow system language / اتباع لغة النظام"** متبوعاً باللغات الأربع بأسمائها الأصلية (`العربية`, `English`, `Français`, `Español`) وبخطها الأصلي مع علامة راديو مرسومة وتبديل فوري متلاشٍ (`AnimatedContent`).
+2. **الفصل 2 — التذكيرات (`Reminders`):**
+   - مفتاح التفعيل الرئيسي + منتقي الوقت (`TimePickerDialog`).
+   - شرائح أيام الأسبوع السبعة (`reminderDays`، افتراضياً الكل مع منع إلغاء تحديد آخر يوم) ومراعاتها في `NotificationHelper.scheduleDailyReminder` و`KannachAlarmReceiver`.
+   - صف حالة الإذن (`"Notifications are on / off"`) مع زر `"Allow"` أو `"Open settings"` عند الإيقاف.
+   - زر **"Send a test nudge / إرسال تذكير تجريبي"** (`sendTestNudge`) الذي يعرض فوراً إحدى رسائل التذكير السبع.
+3. **الفصل 3 — الكتابة (`Writing`):**
+   - **بداية الأسبوع (`Week starts on`):** السبت (`7`) / الأحد (`1`) / الاثنين (`2`) مع افتراضي يتبع اللغة، ويعيد ترتيب عناوين أيام الأسبوع وإزاحة خلايا `MonthGrid` فوراً.
+   - **الأرقام (`Numerals` — يظهر للعربية فقط):** الغربية `0–9` (افتراضياً) / العربية المشرقية `٠–٩` (`I18n.applyNumerals` و`I18n.formatNumber` و`Plurals.kt` لأرقام الأيام والعدادات والتواريخ).
+   - **حجم خط اليد (`Handwriting size`):** صغير (`18.sp`) / عادي (`20.sp`) / كبير (`24.sp`) عبر `LocalHandwritingSp` لنصوص اليوميات وورق الرسائل.
+4. **الفصل 4 — المظهر والإحساس (`Appearance & feel`):**
+   - **ألوان الفصول (`Season colors`):** تلقائي (`auto`) / شتاء / ربيع / صيف / خريف (`getSeasonalPalette(month, seasonOverride)`).
+   - **تقليل الحركة (`Reduce motion`):** اتباع النظام (`system`) / مفعّل (`on` عبر `LocalReduceMotionOverride`).
+   - **الاهتزاز اللمسي (`Haptics`):** مفعّل (افتراضياً) / متوقف (`LocalHapticsEnabled` و`MainViewModel.vibrate`).
+5. **الفصل 5 — الخصوصية والنسخ الاحتياطي (`Privacy & backup`):**
+   - مفتاح **"Hide in recent apps / الإخفاء في التطبيقات الأخيرة"** الذي يضبط أو يزيل `WindowManager.LayoutParams.FLAG_SECURE` على نافذة `Activity` فوراً.
+   - زرا حفظ نسخة واستعادة نسخة مع سطر **"Last copy saved: {date} / never"** الذي يحفظ طابع الوقت عند نجاح التصدير.
+   - **تذكير النسخ الاحتياطي (`Copy reminder`):** متوقف / شهري (`NotificationHelper.scheduleMonthlyCopyReminder`).
+   - جملة صريحة وهادئة: `"Everything stays on this device."` / `"كل شيء يبقى على هذا الجهاز."`.
+6. **الفصل 6 — عن كُنَّاش (`About`):**
+   - مفتاح **"Signature on exported drawings"** متزامن مباشرةً مع مفتاح التوقيع في ورقة التصدير (`SK7`).
+   - زر **"Show the welcome again"** الذي يعيد تشغيل `FirstRunOnboarding`.
+   - زر **"Tell a friend"** الذي يفتح `Intent.ACTION_SEND` مع جملة تعريفية دافئة.
+   - سطر الإصدار الموحّد (`BR5`: `Kannach · {version}` من `BuildConfig.VERSION_NAME`).
+
+### 3. أدلة التحقق (Phase 6 Gate A Evidence):
+- **فحص البناء (`compile_applet`):** `Build succeeded - the applet is compiled`.
+- **فحص القواعد الثابتة (Standing Rules):**
+  - `grep -rnI "Color(0x\|androidx.compose.material.icons"` على ملفات الشاشات => `0 نتائج`.
+  - تطابق مفاتيح اللغات الأربع (`AR / EN / FR / ES`) لجميع مفاتيح المرحلة 6: `missing: 0`.
+- **اختبارات Robolectric (`gradle :app:testDebugUnitTest` — `HomeScreenVerificationTest`):**
+  - اجتياز جميع الاختبارات الـ 14 بنجاح (`BUILD SUCCESSFUL`):
+    - `phase6_gateA_userSettingsRoundTripAndExcludedFromBackup`: التحقق من الحفظ والاسترجاع الكامل لـ `UserSettings` في `kannach.settings.v1` واستبعاده من JSON النسخة الاحتياطية.
+    - `phase6_gateA_weekStartsOn_reordersHeadersAndShiftsDay1`: التحقق من إعادة ترتيب صف أيام الأسبوع وإزاحة خلية اليوم الأول عند التبديل بين الأحد والاثنين والسبت.
+    - `phase6_gateA_arabicNumerals_and_flagSecure_and_settingsChapters`: التحقق من تحويل الأرقام العربية (`0–9` مقابل `٠–٩`) في الأيام والعدادات والتواريخ، وتطبيق وإزالة `WindowManager.LayoutParams.FLAG_SECURE` على نافذة `Activity`، وعمل التذكير التجريبي ومزامنة التوقيع وإعادة عرض الترحيب.

@@ -16,6 +16,14 @@ class ExampleRobolectricTest {
   fun `read string from context`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
+    assertEquals("Kannach", appName)
+  }
+
+  @Test
+  @Config(qualifiers = "ar")
+  fun `read arabic launcher string from context`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val appName = context.getString(R.string.app_name)
     assertEquals("كُنَّاش", appName)
   }
 

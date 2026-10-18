@@ -2,14 +2,10 @@ package com.example
 
 import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 
-/**
- * Complete, uncompressed I18N translation dictionary for Kannach (كُنَّاش).
- * Preserves 100% of the Arabic and English text, reminder messages,
- * month names, and RTL/LTR directionality from the source HTML.
- */
+typealias Strings = I18n.Strings
+
 object I18n {
 
     data class ColorOption(val key: String, val hex: String)
@@ -21,18 +17,6 @@ object I18n {
         ColorOption("lightblue", "#74b8ca"),
         ColorOption("red", "#d95f4c")
     )
-
-    fun getMoodName(hex: String, language: String): String {
-        val rtl = isRtl(language)
-        return when (hex.lowercase()) {
-            "#5aa25f" -> if (rtl) "سكينة خضراء" else "Calm Green"
-            "#e9963e" -> if (rtl) "دفء الشمس" else "Warm Sun"
-            "#4d74aa" -> if (rtl) "هدوء المساء" else "Evening Blue"
-            "#74b8ca" -> if (rtl) "غيمة صافية" else "Clear Sky"
-            "#d95f4c" -> if (rtl) "نبض وشغف" else "Lively Spark"
-            else -> if (rtl) "لون فريد" else "Unique Mood"
-        }
-    }
 
     val GENTLE_PROMPTS_AR = listOf(
         "ما هي اللحظة الصغيرة التي تود لو تحتفظ بها من اليوم؟",
@@ -71,8 +55,8 @@ object I18n {
         val today: String,
         val prevYear: String,
         val nextYear: String,
-        val prevMonth: String = "Previous month",
-        val nextMonth: String = "Next month",
+        val prevMonth: String,
+        val nextMonth: String,
         val openSettings: String,
         val notYet: String,
         val writeSomething: String,
@@ -97,8 +81,14 @@ object I18n {
         val aboutText: String,
         val openGallery: String,
         val galleryTitle: String,
-        val galleryCount: String,
+        val galleryCount: PluralString,
         val galleryEmpty: String,
+        val galleryEmptyTitle: String,
+        val galleryEmptySub: String,
+        val plantTodayBtn: String,
+        val searchHint: String,
+        val searchNoMatch: String,
+        val noMemoriesYet: String,
         val onThisDay: String,
         val dismiss: String,
         val ok: String,
@@ -107,7 +97,7 @@ object I18n {
         val importError: String,
         val wrapBtn: String,
         val wrapTitle: String,
-        val wrapDays: String,
+        val wrapDays: PluralString,
         val wrapStreak: String,
         val wrapColor: String,
         val wrapFavs: String,
@@ -122,6 +112,7 @@ object I18n {
         val capsuleSaveBtn: String,
         val capsuleEmptyList: String,
         val capsuleLocked: String,
+        val capsuleCountdown: PluralString,
         val capsuleReady: String,
         val capsuleSavedToast: String,
         val capsuleDateError: String,
@@ -131,12 +122,14 @@ object I18n {
         val reminderTimeLabel: String,
         val reminderMsgs: List<String>,
         val months: List<String>,
+        val weekdays: List<String>,
         val draw: String,
         val sketchTitle: String,
         val sketchIntro: String,
         val sketchShareBtn: String,
         val sketchExported: String,
         val plantBtn: String,
+        val leaveMark: String,
         val draftKept: String,
         val todayWord: String,
         val surpriseMe: String,
@@ -157,272 +150,211 @@ object I18n {
         val onboardingNext: String,
         val onboardingSkip: String,
         val onboardingStart: String,
+        val dockPage: String,
         val dockGarden: String,
         val dockLetters: String,
         val dockToday: String,
         val dockDraw: String,
         val dockSettings: String,
         val todayCardEmpty: String,
-        val monthRecapPlanted: String,
-        val monthRecapQuiet: String
+        val monthRecapPlanted: PluralString,
+        val monthRecapQuiet: String,
+        val moodGreen: String,
+        val moodOrange: String,
+        val moodBlue: String,
+        val moodLightblue: String,
+        val moodRed: String,
+        val moodCustom: String,
+        val distYesterday: String,
+        val distAgo: PluralString,
+        val distWeeks: PluralString,
+        val distMonths: PluralString,
+        val distFuture: String,
+        val recordedAt: String,
+        val prevEntry: String,
+        val nextEntry: String,
+        val exportTitle: String,
+        val exportStory: String,
+        val exportSquare: String,
+        val exportPage: String,
+        val exportSignature: String,
+        val exportSave: String,
+        val exportShare: String,
+        val exportSaved: String,
+        val capsuleSectionWaiting: String,
+        val capsuleSectionReady: String,
+        val capsuleSectionOpened: String,
+        val capsuleOpenedMeta: String,
+        val capsuleNotYetToast: PluralString,
+        val capsuleDeleteTitle: String,
+        val capsuleDeleteMsg: String,
+        val capsulePrefill: String,
+        val capsuleWrittenStamp: String,
+        val capsuleAddDoodle: String,
+        val capsulePreset1w: String,
+        val capsulePreset1m: String,
+        val capsulePreset3m: String,
+        val capsulePreset6m: String,
+        val capsulePreset1y: String,
+        val capsulePickDate: String,
+        val capsuleSealConfirmMsg: String,
+        val capsuleKeepWriting: String,
+        val capsuleWriteBack: String,
+        val capsuleNotifPermNote: String,
+        val langFollowSystem: String,
+        val reminderDaysLabel: String,
+        val reminderPermOn: String,
+        val reminderPermOff: String,
+        val reminderPermAllow: String,
+        val reminderPermSettings: String,
+        val reminderTestBtn: String,
+        val settingsWritingTitle: String,
+        val settingsWeekStartLabel: String,
+        val weekStartSat: String,
+        val weekStartSun: String,
+        val weekStartMon: String,
+        val settingsNumeralsLabel: String,
+        val numeralsWestern: String,
+        val numeralsArabicIndic: String,
+        val settingsHandSizeLabel: String,
+        val handSizeSmall: String,
+        val handSizeNormal: String,
+        val handSizeLarge: String,
+        val settingsAppearanceTitle: String,
+        val settingsSeasonLabel: String,
+        val seasonAuto: String,
+        val seasonWinter: String,
+        val seasonSpring: String,
+        val seasonSummer: String,
+        val seasonAutumn: String,
+        val settingsReduceMotionLabel: String,
+        val reduceMotionSystem: String,
+        val reduceMotionOn: String,
+        val settingsHapticsLabel: String,
+        val toggleOn: String,
+        val toggleOff: String,
+        val settingsPrivacyTitle: String,
+        val settingsHideRecents: String,
+        val settingsLastBackup: String,
+        val settingsBackupNever: String,
+        val settingsCopyReminderLabel: String,
+        val copyReminderMonthly: String,
+        val copyReminderNotifMsg: String,
+        val privacyDeviceNote: String,
+        val settingsSignatureExport: String,
+        val settingsReplayWelcome: String,
+        val settingsTellFriend: String,
+        val settingsTellFriendMsg: String
     )
 
-    val EN = Strings(
-        dir = "ltr",
-        appTitle = "Daily Garden",
-        appSub = "a kannach of days",
-        save = "Save",
-        cancel = "Cancel",
-        delete = "Delete",
-        undo = "Undo",
-        clear = "Clear",
-        settings = "Settings",
-        language = "Language",
-        data = "Save & restore",
-        about = "About",
-        all = "All",
-        favorites = "Favorites",
-        today = "today",
-        prevYear = "Previous year",
-        nextYear = "Next year",
-        prevMonth = "Previous month",
-        nextMonth = "Next month",
-        openSettings = "Settings",
-        notYet = "Not yet \u2014 this day hasn\u2019t bloomed",
-        writeSomething = "Write a little or draw a little first",
-        emptyHint = "Tap any day and plant your first little doodle",
-        noFavs = "No favorites yet \u2014 mark an entry as favorite to keep it here",
-        drawLabel = "leave your little mark for today",
-        drawHint = "draw a tiny shape with your finger",
-        colorLabel = "pick today\u2019s color",
-        favLabel = "Favorite",
-        editLabel = "Edit",
-        entryPlaceholder = "Dear garden, today\u2026",
-        confirmDeleteTitle = "Tear this page out?",
-        confirmDeleteMsg = "This entry will be gone for good.",
-        confirmCloseTitle = "Leave without saving?",
-        confirmCloseMsg = "Your words and doodle aren\u2019t saved yet.",
-        delYes = "Yes, remove",
-        discard = "Discard",
-        keep = "Keep writing",
-        exportBtn = "Save a copy of your diary",
-        exportedToast = "Your copy is ready to save",
-        saveError = "Could not save \u2014 try again",
-        aboutText = "Kannach is a quiet paper diary. Each day you write a few words and draw one tiny shape \u2014 by the end of the year your days have grown into a little garden. Everything stays on your device.",
-        openGallery = "Your little garden",
-        galleryTitle = "Your little garden",
-        galleryCount = "{n} days written so far",
-        galleryEmpty = "Nothing planted yet \u2014 your gallery will grow here.",
-        onThisDay = "On this day, {y}\u2026",
-        dismiss = "Dismiss",
-        ok = "OK",
-        importBtn = "Restore a saved copy",
-        importedToast = "Your diary was restored",
-        importError = "That file doesn\u2019t look like a Kannach copy",
-        wrapBtn = "Year Wrap",
-        wrapTitle = "Year Wrap",
-        wrapDays = "days written",
-        wrapStreak = "longest streak",
-        wrapColor = "most-used color",
-        wrapFavs = "favorites",
-        wrapSub = "your garden this year",
-        wrapEmpty = "Nothing planted yet this year to sum up.",
-        capsuleTitle = "A Letter to Later",
-        capsuleBtn = "Write a letter to future you",
-        capsuleIntro = "Write a few words to your future self, and pick a day for it to open — you won\u2019t see it before then.",
-        capsuleWriteLabel = "Your letter",
-        capsulePlaceholder = "Dear future me\u2026",
-        capsuleDateLabel = "Opens on",
-        capsuleSaveBtn = "Seal the letter",
-        capsuleEmptyList = "No letters waiting yet.",
-        capsuleLocked = "Locked until {d}",
-        capsuleReady = "Ready to open",
-        capsuleSavedToast = "Sealed until that day",
-        capsuleDateError = "Pick a day in the future",
-        capsuleReadyBanner = "A letter from your past self arrived today",
-        reminderTitle = "Daily reminder",
-        reminderToggle = "Remind me to write",
-        reminderTimeLabel = "At",
-        reminderMsgs = listOf(
-            "Today has a color. What\u2019s yours?",
-            "Your garden is one dot lighter today \u2014 want to fix that?",
-            "A tiny doodle takes ten seconds. Today\u2019s is waiting.",
-            "Somewhere in today, there\u2019s a sentence worth keeping.",
-            "The page is still blank. That\u2019s kind of exciting.",
-            "Future you will want to know what today felt like.",
-            "No pressure \u2014 even one word grows the garden."
-        ),
-        months = listOf(
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ),
-        draw = "Draw",
-        sketchTitle = "Just Draw",
-        sketchIntro = "A free page \u2014 draw anything, then save or share it.",
-        sketchShareBtn = "Save or share this drawing",
-        sketchExported = "Ready to save or share",
-        plantBtn = "Plant it",
-        draftKept = "Draft kept for later",
-        todayWord = "Today",
-        surpriseMe = "Surprise with a memory",
-        shareMosaic = "Share year mosaic",
-        openToday = "Record today's mark",
-        greetMorning = "A dewy morning.. how rests your heart with the dawn?",
-        greetDay = "A blessed day.. a quiet moment to plant a gentle mark",
-        greetEvening = "A pleasant evening.. what paused your soul today?",
-        greetNight = "Nighttime stillness.. thoughts settle and marks find peace",
-        greetDone = "Today's mark rests in peace.. be well",
-        greetBack = "Welcome back.. the notebook was waiting for your return",
-        onboardingBeat1 = "Kannach is a quiet paper diary.",
-        onboardingBeat1Sub = "An intimate space for your days and thoughts, without noise.",
-        onboardingBeat2 = "A small mark for every day",
-        onboardingBeat2Sub = "A few brush strokes sprout a small flower telling the story of your day.",
-        onboardingBeat3 = "Touch any day to plant your first small mark.",
-        onboardingBeat3Sub = "Your garden grows day by day with every memory you keep.",
-        onboardingNext = "Next",
-        onboardingSkip = "Skip",
-        onboardingStart = "Begin your garden",
-        dockGarden = "Garden",
-        dockLetters = "Letters",
-        dockToday = "Today",
-        dockDraw = "Draw",
-        dockSettings = "Settings",
-        todayCardEmpty = "This page is still blank.",
-        monthRecapPlanted = "{n} days planted in {month}.",
-        monthRecapQuiet = "A quiet month. Any day can still be filled in."
-    )
+    val EN: Strings get() = com.example.EN
+    val AR: Strings get() = com.example.AR
+    val FR: Strings get() = com.example.FR
+    val ES: Strings get() = com.example.ES
 
-    val AR = Strings(
-        dir = "rtl",
-        appTitle = "حديقة الأيام",
-        appSub = "كُنَّاش يومي",
-        save = "حفظ",
-        cancel = "إلغاء",
-        delete = "حذف",
-        undo = "تراجع",
-        clear = "مسح",
-        settings = "الإعدادات",
-        language = "اللغة",
-        data = "الحفظ والاسترجاع",
-        about = "حول",
-        all = "الكل",
-        favorites = "المفضلة",
-        today = "اليوم",
-        prevYear = "السنة السابقة",
-        nextYear = "السنة التالية",
-        prevMonth = "الشهر السابق",
-        nextMonth = "الشهر التالي",
-        openSettings = "الإعدادات",
-        notYet = "ليس بعد — هذا اليوم لم يُزهر",
-        writeSomething = "كتابة بضع كلمات أو رسم أثر صغير أولاً",
-        emptyHint = "لمس أي يوم لغرس أول أثر صغير",
-        noFavs = "لا مفضّلات بعد — تمييز أي تدوينة بنجمة لتبقى هنا",
-        drawLabel = "ترك بصمة صغيرة لهذا اليوم",
-        drawHint = "رسم أثر صغير باللمس",
-        colorLabel = "اختيار مزاج اليوم",
-        favLabel = "مفضلة",
-        editLabel = "تعديل",
-        entryPlaceholder = "عزيزتي الحديقة، اليوم…",
-        confirmDeleteTitle = "انتزاع هذه الصفحة؟",
-        confirmDeleteMsg = "سيُمحى أثر هذا اليوم نهائياً.",
-        confirmCloseTitle = "المغادرة دون حفظ؟",
-        confirmCloseMsg = "الكلمات والرسمة لم تُحفظا بعد.",
-        delYes = "تأكيد الانتزاع",
-        discard = "تجاهل",
-        keep = "متابعة التدوين",
-        exportBtn = "حفظ نسخة من اليوميات",
-        exportedToast = "نسختك جاهزة للحفظ",
-        saveError = "تعذر الحفظ — المحاولة مرة أخرى",
-        aboutText = "كُنَّاش دفتر ورقي هادئ. تكتب كل يوم كلمات قليلة وترسم شكلًا صغيرًا واحدًا، حتى تتحول أيامك مع نهاية السنة إلى حديقة صغيرة. كل شيء يبقى على جهازك.",
-        openGallery = "حديقتك الصغيرة",
-        galleryTitle = "حديقتك الصغيرة",
-        galleryCount = "{n} يومًا كُتب حتى الآن",
-        galleryEmpty = "لم يُزرع شيء بعد — ستنمو حديقتك هنا.",
-        onThisDay = "في مثل هذا اليوم، {y}…",
-        dismiss = "إغلاق",
-        ok = "حسنًا",
-        importBtn = "استرجاع نسخة محفوظة",
-        importedToast = "تم استرجاع يومياتك",
-        importError = "هذا الملف لا يبدو نسخة من كُنَّاش",
-        wrapBtn = "موسم السنة",
-        wrapTitle = "موسم السنة",
-        wrapDays = "يومًا مكتوبًا",
-        wrapStreak = "أطول سلسلة أيام",
-        wrapColor = "اللون الأكثر استخدامًا",
-        wrapFavs = "مفضّلة",
-        wrapSub = "حديقتك في هذه السنة",
-        wrapEmpty = "لا شيء بعد في هذه السنة لتلخيصه.",
-        capsuleTitle = "رسالة إلى الغد",
-        capsuleBtn = "كتابة رسالة لنفسك المستقبلية",
-        capsuleIntro = "تدوين كلمات لنفسك القادمة، واختيار يوم تُفتح فيه — لن تراها قبل ذلك اليوم.",
-        capsuleWriteLabel = "رسالتك",
-        capsulePlaceholder = "رسالة إلى الغد…",
-        capsuleDateLabel = "تُفتح في",
-        capsuleSaveBtn = "ختم الرسالة",
-        capsuleEmptyList = "لا رسائل مؤجلة بعد.",
-        capsuleLocked = "مقفلة حتى {d}",
-        capsuleReady = "جاهزة للفتح",
-        capsuleSavedToast = "أُغلقت الرسالة حتى ذلك اليوم",
-        capsuleDateError = "اختيار يوم في المستقبل",
-        capsuleReadyBanner = "رسالة من نفسك القديمة وصلت اليوم",
-        reminderTitle = "تذكير يومي",
-        reminderToggle = "التذكير بالتدوين",
-        reminderTimeLabel = "في الساعة",
-        reminderMsgs = listOf(
-            "لكل يوم لون. ما هو لونك اليوم؟",
-            "حديقتك اليوم فيها نقطة فارغة — تملأها؟",
-            "رسمة صغيرة تأخذ عشر ثوانٍ، رسمة اليوم بانتظارك",
-            "في مكان ما من يومك جملة تستحق أن تُكتب",
-            "الصفحة ما زالت بيضاء، وهذا مثير بعض الشيء",
-            "نفسك القادمة تريد أن تعرف كيف كان إحساسك اليوم",
-            "بلا أي ضغط — حتى كلمة واحدة تكبّر الحديقة"
-        ),
-        months = listOf(
-            "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
-            "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
-        ),
-        draw = "رسم",
-        sketchTitle = "مساحة الرسم",
-        sketchIntro = "صفحة حرة — رسم ما يخطر في البال، ثم الحفظ أو المشاركة.",
-        sketchShareBtn = "حفظ أو مشاركة هذا الرسم",
-        sketchExported = "جاهزة للحفظ أو المشاركة",
-        plantBtn = "غرس الأثر",
-        draftKept = "حُفظت المسودة لوقت لاحق",
-        todayWord = "اليوم",
-        surpriseMe = "مفاجأة بذكرى",
-        shareMosaic = "مشاركة فسيفساء السنة",
-        openToday = "تدوين أثر اليوم",
-        greetMorning = "صباح نديّ.. كيف حال قلبك مع بزوغ الضوء؟",
-        greetDay = "يوم مبارك.. لحظة هدوء لغرس أثر لطيف",
-        greetEvening = "مساء طيب.. ما الذي استوقف روحك اليوم؟",
-        greetNight = "سكون الليل.. تهادت الخواطر وآن للأثر أن يهدأ",
-        greetDone = "أثر اليوم مغروس بسلام.. دمت بخير",
-        greetBack = "أهلاً بالعودة.. الدفتر كان بانتظار خطوتك",
-        onboardingBeat1 = "كُنَّاش دفتر ورقي هادئ.",
-        onboardingBeat1Sub = "مساحة حميمة تسكن فيها أيامك وخواطرك دون ضجيج.",
-        onboardingBeat2 = "أثر مرسوم لكل يوم",
-        onboardingBeat2Sub = "بضع ضربات قلم تنبت زهرة صغيرة تحكي ما كان.",
-        onboardingBeat3 = "المس أي يوم لتغرس أول رسمة صغيرة.",
-        onboardingBeat3Sub = "تنمو حديقتك يوماً بعد يوم مع كل أثر تدونه.",
-        onboardingNext = "متابعة",
-        onboardingSkip = "تخطي",
-        onboardingStart = "غرس الأثر الأول",
-        dockGarden = "الحديقة",
-        dockLetters = "الرسائل",
-        dockToday = "اليوم",
-        dockDraw = "ارسم",
-        dockSettings = "الإعدادات",
-        todayCardEmpty = "هذه الصفحة ما زالت بيضاء.",
-        monthRecapPlanted = "أزهر {n} يوماً في {month}.",
-        monthRecapQuiet = "شهر هادئ. ما زال بإمكانك ملء أي يوم فيه."
-    )
-
-    fun forLanguage(lang: String): Strings {
-        return if (lang.lowercase(Locale.ROOT).startsWith("ar")) AR else EN
+    val all: Map<String, Strings> by lazy {
+        linkedMapOf(
+            "ar" to AR,
+            "en" to EN,
+            "fr" to FR,
+            "es" to ES
+        )
     }
 
-    fun isRtl(lang: String): Boolean {
-        return lang.lowercase(Locale.ROOT).startsWith("ar")
+    val LANGUAGE_LABELS: Map<String, String> = linkedMapOf(
+        "ar" to "العربية",
+        "en" to "English",
+        "fr" to "Français",
+        "es" to "Español"
+    )
+
+    @Volatile
+    var useArabicIndicNumerals: Boolean = false
+
+    fun toArabicIndicDigits(input: String): String {
+        val sb = StringBuilder(input.length)
+        for (ch in input) {
+            if (ch in '0'..'9') {
+                sb.append(('\u0660'.code + (ch.code - '0'.code)).toChar())
+            } else {
+                sb.append(ch)
+            }
+        }
+        return sb.toString()
+    }
+
+    fun applyNumerals(
+        input: String,
+        lang: String,
+        useArabicIndic: Boolean = useArabicIndicNumerals
+    ): String {
+        val isAr = isRtl(lang)
+        val sb = StringBuilder(input.length)
+        for (ch in input) {
+            if (isAr && useArabicIndic) {
+                if (ch in '0'..'9') {
+                    sb.append(('\u0660'.code + (ch.code - '0'.code)).toChar())
+                } else {
+                    sb.append(ch)
+                }
+            } else {
+                if (ch in '\u0660'..'\u0669') {
+                    sb.append(('0'.code + (ch.code - '\u0660'.code)).toChar())
+                } else {
+                    sb.append(ch)
+                }
+            }
+        }
+        return sb.toString()
+    }
+
+    fun formatNumber(
+        n: Int,
+        lang: String,
+        useArabicIndic: Boolean = useArabicIndicNumerals
+    ): String {
+        return applyNumerals(n.toString(), lang, useArabicIndic)
+    }
+
+    fun normalizeCode(code: String): String {
+        return code.trim().lowercase(Locale.ROOT).substringBefore('-').substringBefore('_')
+    }
+
+    fun resolveSystemLanguage(): String {
+        val sysLang = normalizeCode(Locale.getDefault().language)
+        return if (all.containsKey(sysLang)) sysLang else "en"
+    }
+
+    fun forLanguage(code: String): Strings {
+        val normalized = if (code == "system") resolveSystemLanguage() else normalizeCode(code)
+        return all[normalized] ?: EN
+    }
+
+    fun isRtl(code: String): Boolean {
+        val normalized = if (code == "system") resolveSystemLanguage() else normalizeCode(code)
+        return normalized == "ar"
+    }
+
+    fun localeFor(code: String): Locale {
+        val normalized = if (code == "system") resolveSystemLanguage() else normalizeCode(code)
+        return when (normalized) {
+            "ar" -> Locale("ar")
+            "fr" -> Locale.FRENCH
+            "es" -> Locale("es")
+            else -> Locale.US
+        }
+    }
+
+    fun getMoodName(hex: String, language: String): String {
+        val s = forLanguage(language)
+        return when (hex.lowercase(Locale.ROOT)) {
+            "#5aa25f" -> s.moodGreen
+            "#e9963e" -> s.moodOrange
+            "#4d74aa" -> s.moodBlue
+            "#74b8ca" -> s.moodLightblue
+            "#d95f4c" -> s.moodRed
+            else -> s.moodCustom
+        }
     }
 
     fun seasonOf(month: Int): String {
@@ -434,20 +366,30 @@ object I18n {
         }
     }
 
-    fun formatYear(year: Int, lang: String): String {
-        val locale = if (isRtl(lang)) Locale("ar") else Locale.US
-        return String.format(locale, "%d", year)
+    fun formatYear(year: Int, lang: String, useArabicIndic: Boolean = useArabicIndicNumerals): String {
+        return applyNumerals(String.format(localeFor(lang), "%d", year), lang, useArabicIndic)
     }
 
-    fun formatMonthLabel(year: Int, month: Int, lang: String): String {
+    fun formatWeekdayName(year: Int, month: Int, day: Int, lang: String): String {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, month - 1)
+            set(Calendar.DAY_OF_MONTH, day)
+        }
+        val locale = localeFor(lang)
+        val raw = SimpleDateFormat("EEEE", locale).format(cal.time)
+        return if (isRtl(lang)) raw else raw.uppercase(locale)
+    }
+
+    fun formatMonthLabel(year: Int, month: Int, lang: String, useArabicIndic: Boolean = useArabicIndicNumerals): String {
         val strings = forLanguage(lang)
         val monthName = strings.months.getOrElse(month - 1) { "" }
-        return "$monthName ${formatYear(year, lang)}"
+        return "$monthName ${formatYear(year, lang, useArabicIndic)}"
     }
 
     fun formatDateTitle(dateKey: String, lang: String): String {
         val parts = dateKey.split("-").mapNotNull { it.toIntOrNull() }
-        if (parts.size != 3) return dateKey
+        if (parts.size != 3) return applyNumerals(dateKey, lang)
         val year = parts[0]
         val month = parts[1]
         val day = parts[2]
@@ -457,9 +399,19 @@ object I18n {
             set(Calendar.MONTH, month - 1)
             set(Calendar.DAY_OF_MONTH, day)
         }
-        val locale = if (isRtl(lang)) Locale("ar") else Locale.US
-        val format = SimpleDateFormat("EEEE, d MMMM yyyy", locale)
-        return format.format(cal.time)
+        val format = SimpleDateFormat("EEEE, d MMMM yyyy", localeFor(lang))
+        return applyNumerals(format.format(cal.time), lang)
+    }
+
+    fun formatRecordedTime(timestampMs: Long, lang: String): String {
+        if (timestampMs <= 0L) return ""
+        return try {
+            val cal = Calendar.getInstance().apply { timeInMillis = timestampMs }
+            val timeStr = SimpleDateFormat("h:mm a", localeFor(lang)).format(cal.time)
+            applyNumerals(forLanguage(lang).recordedAt.replace("{t}", timeStr), lang)
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     fun getRelativeTimeDistance(dateKey: String, lang: String): String {
@@ -481,40 +433,80 @@ object I18n {
             set(Calendar.MILLISECOND, 0)
         }
         val diffDays = ((todayCal.timeInMillis - targetCal.timeInMillis) / (24 * 60 * 60 * 1000L)).toInt()
-        val isAr = isRtl(lang)
+        val s = forLanguage(lang)
 
         return when {
-            diffDays == 0 -> if (isAr) "اليوم" else "Today"
-            diffDays == 1 -> if (isAr) "أمس" else "Yesterday"
-            diffDays in 2..10 -> if (isAr) "منذ $diffDays أيام" else "$diffDays days ago"
-            diffDays in 11..29 -> if (isAr) "منذ $diffDays يوماً" else "$diffDays days ago"
-            diffDays in 30..364 -> {
+            diffDays < 0 -> s.distFuture
+            diffDays == 0 -> s.todayWord
+            diffDays == 1 -> s.distYesterday
+            diffDays in 2..6 -> s.distAgo.format(lang, diffDays)
+            diffDays in 7..29 -> {
+                val weeks = (diffDays / 7).coerceAtLeast(1)
+                s.distWeeks.format(lang, weeks)
+            }
+            else -> {
                 val months = (diffDays / 30).coerceAtLeast(1)
-                if (isAr) {
-                    when (months) {
-                        1 -> "منذ شهر"
-                        2 -> "منذ شهرين"
-                        in 3..10 -> "منذ $months أشهر"
-                        else -> "منذ $months شهراً"
-                    }
-                } else {
-                    if (months == 1) "1 month ago" else "$months months ago"
-                }
+                s.distMonths.format(lang, months)
             }
-            diffDays >= 365 -> {
-                val years = (diffDays / 365).coerceAtLeast(1)
-                if (isAr) {
-                    when (years) {
-                        1 -> "منذ عام"
-                        2 -> "منذ عامين"
-                        in 3..10 -> "منذ $years أعوام"
-                        else -> "منذ $years عاماً"
-                    }
-                } else {
-                    if (years == 1) "1 year ago" else "$years years ago"
-                }
-            }
-            else -> if (isAr) "في المستقبل" else "In the future"
         }
+    }
+
+    /**
+     * CP2 & CP6: Formats a YYYY-MM-DD dateKey as a localized long date (e.g. "17 November 2026"),
+     * never returning a raw ISO date.
+     */
+    fun formatLongDate(dateKey: String, lang: String): String {
+        val parts = dateKey.split("-").mapNotNull { it.toIntOrNull() }
+        if (parts.size != 3) return applyNumerals(dateKey, lang)
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, parts[0])
+            set(Calendar.MONTH, parts[1] - 1)
+            set(Calendar.DAY_OF_MONTH, parts[2])
+        }
+        return applyNumerals(SimpleDateFormat("d MMMM yyyy", localeFor(lang)).format(cal.time), lang)
+    }
+
+    /**
+     * CP2, CP4, CP8: Formats a millisecond timestamp as a localized long date.
+     */
+    fun formatLongDateFromMillis(timestampMs: Long, lang: String): String {
+        if (timestampMs <= 0L) return ""
+        val cal = Calendar.getInstance().apply { timeInMillis = timestampMs }
+        return applyNumerals(SimpleDateFormat("d MMMM yyyy", localeFor(lang)).format(cal.time), lang)
+    }
+
+    fun formatEpochLongDate(
+        timestampMs: Long,
+        lang: String,
+        useArabicIndic: Boolean = useArabicIndicNumerals
+    ): String {
+        if (timestampMs <= 0L) return ""
+        val cal = Calendar.getInstance().apply { timeInMillis = timestampMs }
+        return applyNumerals(SimpleDateFormat("d MMMM yyyy", localeFor(lang)).format(cal.time), lang, useArabicIndic)
+    }
+
+    /**
+     * CP2, CP3, CP6: Computes the number of days from today (or a reference dateKey) until [unlockDateKey].
+     */
+    fun daysUntilDateKey(unlockDateKey: String, todayKey: String? = null): Int {
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val baseKey = todayKey ?: sdf.format(java.util.Date())
+            val dUnlock = sdf.parse(unlockDateKey)?.time ?: return 1
+            val dToday = sdf.parse(baseKey)?.time ?: return 1
+            val diff = kotlin.math.round((dUnlock - dToday).toDouble() / (24.0 * 60.0 * 60.0 * 1000.0)).toInt()
+            diff.coerceAtLeast(1)
+        } catch (_: Exception) {
+            1
+        }
+    }
+
+    /**
+     * CP8: Computes relative time distance copy from a creation timestamp in milliseconds.
+     */
+    fun getRelativeTimeDistanceFromMillis(timestampMs: Long, lang: String): String {
+        if (timestampMs <= 0L) return ""
+        val dateKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date(timestampMs))
+        return getRelativeTimeDistance(dateKey, lang)
     }
 }

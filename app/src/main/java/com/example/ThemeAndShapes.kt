@@ -69,7 +69,9 @@ data class KannachPalette(
     val todEvening: Color = Color(0xFFE9C5A6),
     val todNight: Color = Color(0xFF33423A),
     val dangerBorder: Color = Color(0xFFB44636),
-    val noise: Color = Color(0x083A523D)
+    val noise: Color = Color(0x083A523D),
+    val paperShadow: Color = Color(0x1E3A523D),
+    val paperKraft: Color = Color(0xFFE5D7BA)
 )
 
 // Base Default Palette
@@ -98,7 +100,9 @@ val BasePalette = KannachPalette(
     todEvening = Color(0xFFE9C5A6),
     todNight = Color(0xFF33423A),
     dangerBorder = Color(0xFFB44636),
-    noise = Color(0x083A523D)
+    noise = Color(0x083A523D),
+    paperShadow = Color(0x1E3A523D),
+    paperKraft = Color(0xFFE5D7BA)
 )
 
 // Season: Winter (months 12, 1, 2)
@@ -139,12 +143,18 @@ val AutumnPalette = BasePalette.copy(
     paperHi = Color(0xFFFFFCF2)
 )
 
-fun getSeasonalPalette(month: Int): KannachPalette {
-    return when (month) {
-        12, 1, 2 -> WinterPalette
-        3, 4, 5 -> SpringPalette
-        6, 7, 8 -> SummerPalette
-        else -> AutumnPalette
+fun getSeasonalPalette(month: Int, seasonOverride: String = "auto"): KannachPalette {
+    return when (seasonOverride.lowercase()) {
+        "winter" -> WinterPalette
+        "spring" -> SpringPalette
+        "summer" -> SummerPalette
+        "autumn" -> AutumnPalette
+        else -> when (month) {
+            12, 1, 2 -> WinterPalette
+            3, 4, 5 -> SpringPalette
+            6, 7, 8 -> SummerPalette
+            else -> AutumnPalette
+        }
     }
 }
 
@@ -206,6 +216,97 @@ class HandDrawnShape(
 
 val HandDrawnRadiusShape = HandDrawnShape(17f, 26f, 19f, 24f, altWobble = false)
 val HandDrawnRadiusAltShape = HandDrawnShape(26f, 17f, 24f, 19f, altWobble = true)
+val HandDrawnDockShape = HandDrawnShape(32f, 28f, 30f, 26f, altWobble = false)
+
+/**
+ * HM2 & HM3: Tear-off desk-calendar page shape with a torn zig-zag top edge
+ * and organic hand-drawn rounded bottom corners.
+ */
+object TearOffPageShape : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val w = size.width
+        val h = size.height
+        val path = Path()
+        if (w <= 0f || h <= 0f) return Outline.Generic(path)
+
+        with(density) {
+            val zigStep = 8.dp.toPx().coerceAtLeast(4f)
+            val zigDepth = 4.dp.toPx().coerceAtMost(h * 0.1f)
+            val rBR = 19.dp.toPx().coerceAtMost(minOf(w, h) * 0.3f)
+            val rBL = 22.dp.toPx().coerceAtMost(minOf(w, h) * 0.3f)
+
+            val teethCount = (w / zigStep).toInt().coerceAtLeast(2)
+            val actualStep = w / teethCount
+
+            path.moveTo(0f, zigDepth)
+            for (i in 0 until teethCount) {
+                val midX = (i + 0.5f) * actualStep
+                val endX = (i + 1) * actualStep
+                path.lineTo(midX, 0f)
+                path.lineTo(endX, zigDepth)
+            }
+
+            // Right edge down to bottom-right corner
+            path.lineTo(w, h - rBR)
+            path.quadraticBezierTo(w, h, w - rBR, h)
+
+            // Bottom edge to bottom-left corner
+            path.lineTo(rBL, h)
+            path.quadraticBezierTo(0f, h, 0f, h - rBL)
+
+            // Left edge back to top-left
+            path.close()
+        }
+        return Outline.Generic(path)
+    }
+}
+
+/**
+ * NV5: Soft paper shadow drawn from tokens (paperShadow) without Material elevation.
+ */
+fun Modifier.paperShadow(
+    shadowColor: Color,
+    shape: Shape = HandDrawnRadiusShape,
+    offsetY: Dp = 4.dp
+): Modifier = this.drawBehind {
+    val dy = offsetY.toPx()
+    val layers = listOf(
+        Pair(dy * 1.35f, 0.35f),
+        Pair(dy * 0.9f, 0.55f),
+        Pair(dy * 0.45f, 0.75f)
+    )
+    val outline = shape.createOutline(size, layoutDirection, this)
+    layers.forEach { (shiftY, alphaFactor) ->
+        val c = shadowColor.copy(alpha = (shadowColor.alpha * alphaFactor).coerceIn(0f, 1f))
+        when (outline) {
+            is Outline.Generic -> {
+                val p = Path().apply {
+                    addPath(outline.path, Offset(0f, shiftY))
+                }
+                drawPath(p, c)
+            }
+            is Outline.Rounded -> {
+                drawRoundRect(
+                    color = c,
+                    topLeft = Offset(outline.roundRect.left, outline.roundRect.top + shiftY),
+                    size = Size(outline.roundRect.width, outline.roundRect.height),
+                    cornerRadius = outline.roundRect.topLeftCornerRadius
+                )
+            }
+            is Outline.Rectangle -> {
+                drawRect(
+                    color = c,
+                    topLeft = Offset(0f, shiftY),
+                    size = size
+                )
+            }
+        }
+    }
+}
 
 /**
  * Custom Modifier providing warm craft paper background with subtle noise grain.
@@ -265,6 +366,33 @@ fun Modifier.linedPaperBackground(
 }
 
 /**
+ * SK4: Draws a subtle dotted notebook grid behind canvas/paper using palette.line.
+ */
+fun Modifier.dottedPaperBackground(
+    dotColor: Color,
+    spacingDp: Dp = 20.dp,
+    dotRadiusDp: Dp = 1.4.dp
+): Modifier = this.drawBehind {
+    val step = spacingDp.toPx()
+    if (step <= 0f) return@drawBehind
+    val radius = dotRadiusDp.toPx()
+
+    var x = step * 0.75f
+    while (x < size.width) {
+        var y = step * 0.75f
+        while (y < size.height) {
+            drawCircle(
+                color = dotColor,
+                radius = radius,
+                center = Offset(x, y)
+            )
+            y += step
+        }
+        x += step
+    }
+}
+
+/**
  * Draws a hand-drawn wavy border divider below headers, matching:
  * M0 4 C5 0, 10 8, 15 4 S25 0, 30 4 S38 8, 40 4
  */
@@ -317,14 +445,22 @@ fun Modifier.wavyHeaderDivider(
 
 /**
  * Draws an authentic dashed hand-drawn border matching CSS `border: 2px dashed var(--green-line)`.
+ * Supports optional inset (e.g., 4.dp or 5.dp for NV5/NV6b stitched inner edge).
  */
 fun Modifier.dashedHandDrawnBorder(
     color: Color,
     shape: Shape = HandDrawnRadiusShape,
     strokeWidth: Dp = 2.dp,
-    dashIntervals: FloatArray = floatArrayOf(14f, 10f)
+    dashIntervals: FloatArray = floatArrayOf(14f, 10f),
+    inset: Dp = 0.dp
 ): Modifier = this.drawBehind {
-    val outline = shape.createOutline(size, layoutDirection, this)
+    val insetPx = inset.toPx()
+    val targetSize = Size(
+        (size.width - insetPx * 2f).coerceAtLeast(0f),
+        (size.height - insetPx * 2f).coerceAtLeast(0f)
+    )
+    if (targetSize.width <= 0f || targetSize.height <= 0f) return@drawBehind
+    val outline = shape.createOutline(targetSize, layoutDirection, this)
     val strokeStyle = Stroke(
         width = strokeWidth.toPx(),
         pathEffect = PathEffect.dashPathEffect(dashIntervals, 0f),
@@ -332,15 +468,25 @@ fun Modifier.dashedHandDrawnBorder(
         join = StrokeJoin.Round
     )
     when (outline) {
-        is Outline.Generic -> drawPath(outline.path, color, style = strokeStyle)
+        is Outline.Generic -> {
+            val shifted = Path().apply {
+                addPath(outline.path, Offset(insetPx, insetPx))
+            }
+            drawPath(shifted, color, style = strokeStyle)
+        }
         is Outline.Rounded -> drawRoundRect(
             color = color,
-            topLeft = Offset(outline.roundRect.left, outline.roundRect.top),
+            topLeft = Offset(outline.roundRect.left + insetPx, outline.roundRect.top + insetPx),
             size = Size(outline.roundRect.width, outline.roundRect.height),
             cornerRadius = outline.roundRect.topLeftCornerRadius,
             style = strokeStyle
         )
-        is Outline.Rectangle -> drawRect(color, style = strokeStyle)
+        is Outline.Rectangle -> drawRect(
+            color = color,
+            topLeft = Offset(insetPx, insetPx),
+            size = targetSize,
+            style = strokeStyle
+        )
     }
 }
 
@@ -378,9 +524,13 @@ val LocalKannachUiFont = staticCompositionLocalOf { KannachUiFont }
 fun KannachTheme(
     language: String = "ar",
     month: Int = Calendar.getInstance().get(Calendar.MONTH) + 1,
+    seasonOverride: String = "auto",
+    reduceMotionOverride: Boolean = false,
+    hapticsEnabled: Boolean = true,
+    handwritingSp: Int = 20,
     content: @Composable () -> Unit
 ) {
-    val palette = getSeasonalPalette(month)
+    val palette = getSeasonalPalette(month, seasonOverride)
     val isRtl = I18n.isRtl(language)
     val layoutDirection = if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
 
@@ -413,7 +563,7 @@ fun KannachTheme(
         titleLarge = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
         titleMedium = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Medium, fontSize = 14.sp),
         titleSmall = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Medium, fontSize = 13.sp),
-        bodyLarge = TextStyle(fontFamily = activeHandFont, fontWeight = FontWeight.Normal, fontSize = 18.sp, lineHeight = 28.sp),
+        bodyLarge = TextStyle(fontFamily = activeHandFont, fontWeight = FontWeight.Normal, fontSize = handwritingSp.sp, lineHeight = (handwritingSp + 10).sp),
         bodyMedium = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Normal, fontSize = 14.sp),
         bodySmall = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Normal, fontSize = 12.sp),
         labelLarge = TextStyle(fontFamily = activeUiFont, fontWeight = FontWeight.Medium, fontSize = 14.sp),
@@ -426,6 +576,9 @@ fun KannachTheme(
         LocalKannachLanguage provides language,
         LocalKannachHandFont provides activeHandFont,
         LocalKannachUiFont provides activeUiFont,
+        LocalReduceMotionOverride provides reduceMotionOverride,
+        LocalHapticsEnabled provides hapticsEnabled,
+        LocalHandwritingSp provides handwritingSp,
         LocalLayoutDirection provides layoutDirection
     ) {
         MaterialTheme(

@@ -35,12 +35,18 @@ object KannachMotion {
     val Breathe: Easing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
 }
 
+val LocalReduceMotionOverride = androidx.compose.runtime.compositionLocalOf { false }
+val LocalHapticsEnabled = androidx.compose.runtime.compositionLocalOf { true }
+val LocalHandwritingSp = androidx.compose.runtime.compositionLocalOf { 20 }
+
 /**
- * Inspects system accessibility settings for reduced motion / animator duration scale.
+ * Inspects system accessibility settings for reduced motion / animator duration scale,
+ * or UserSettings.reduceMotion == "on" override via [LocalReduceMotionOverride].
  * When true, callers should collapse animation durations to 0 or INSTANT.
  */
 @Composable
 fun rememberReduceMotion(): Boolean {
+    if (LocalReduceMotionOverride.current) return true
     val context = LocalContext.current
     return remember(context) {
         try {

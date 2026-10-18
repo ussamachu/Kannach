@@ -19,7 +19,7 @@ import java.util.Locale
  * for 100% export/import backward & forward compatibility.
  */
 
-const val SCHEMA_VERSION: Int = 2
+const val SCHEMA_VERSION: Int = 3
 private const val PREFS_NAME = "kannach_prefs"
 private const val KEY_ENTRIES = "kannach.entries.v1"
 private const val KEY_CAPSULES = "kannach.capsules.v1"
@@ -29,6 +29,8 @@ private const val KEY_SCHEMA = "kannach.schema"
 private const val KEY_DRAFTS = "kannach.drafts.v1"
 private const val KEY_FIRST_RUN_COMPLETED = "kannach.first_run_completed"
 private const val KEY_FIRST_PLANT_CELEBRATED = "kannach.first_plant_celebrated"
+private const val KEY_NOTIF_PERMISSION_ASKED = "kannach.notif_perm_asked"
+const val KEY_USER_SETTINGS = "kannach.settings.v1"
 
 val DEFAULT_GREEN_HEX: String = "#5aa25f"
 
@@ -37,6 +39,33 @@ data class Point(
     val x: Float,
     val y: Float
 )
+
+/**
+ * SK1: Per-stroke style used ONLY by Just Draw (Draw tab).
+ * Diary entries continue using List<List<Point>>.
+ */
+@Serializable
+data class SketchStroke(
+    val points: List<Point>,
+    val colorHex: String,
+    val width: Float
+)
+
+/**
+ * SK4: Procedural paper types for Just Draw and exported drawings.
+ */
+enum class SketchPaperType {
+    PLAIN, RULED, DOTTED, KRAFT
+}
+
+/**
+ * SK7 & SK8: Export aspect ratio / pixel formats.
+ */
+enum class ExportFormat(val widthPx: Int, val heightPx: Int) {
+    STORY(1080, 1920),
+    SQUARE(1080, 1080),
+    PAGE(1080, 1440)
+}
 
 @Serializable
 data class EntryDraft(
@@ -63,7 +92,10 @@ data class TimeCapsule(
     val text: String,
     val unlockDate: String, // Format: YYYY-MM-DD
     val createdAt: Long = System.currentTimeMillis(),
-    val opened: Boolean = false
+    val opened: Boolean = false,
+    val openedAt: Long? = null,
+    val strokes: List<List<Point>> = emptyList(),
+    val color: String = DEFAULT_GREEN_HEX
 )
 
 @Serializable
@@ -72,6 +104,56 @@ data class ReminderConfig(
     val time: String = "20:00",
     val lastIdx: Int = -1
 )
+
+/**
+ * Phase 6 (§6): UserSettings persisted under SharedPreferences key `kannach.settings.v1`.
+ * Explicitly excluded from diary backup payload.
+ */
+@Serializable
+data class UserSettings(
+    val reminderDays: Set<Int> = setOf(1, 2, 3, 4, 5, 6, 7), // Calendar.SUNDAY(1)..SATURDAY(7)
+    val weekStartsOn: Int? = null, // null = locale default; 7 = Saturday, 1 = Sunday, 2 = Monday
+    val useArabicIndicNumerals: Boolean = false, // false = Western 0–9, true = Arabic-Indic ٠–٩
+    val handwritingSize: String = "normal", // "small" (18sp), "normal" (20sp), "large" (24sp)
+    val seasonOverride: String = "auto", // "auto", "winter", "spring", "summer", "autumn"
+    val reduceMotion: String = "system", // "system", "on"
+    val hapticsEnabled: Boolean = true,
+    val hideInRecents: Boolean = false,
+    val lastBackupTimestamp: Long? = null,
+    val copyReminder: String = "off", // "off", "monthly"
+    val exportSignature: Boolean = true
+) {
+    val handwritingSp: Int
+        get() = when (handwritingSize) {
+            "small" -> 18
+            "large" -> 24
+            else -> 20
+        }
+
+    fun effectiveWeekStart(lang: String): Int {
+        return weekStartsOn ?: defaultWeekStartForLocale(lang)
+    }
+
+    fun resolvedSeasonIndex(autoIndex: Int): Int {
+        return when (seasonOverride) {
+            "spring" -> 0
+            "summer" -> 1
+            "autumn" -> 2
+            "winter" -> 3
+            else -> autoIndex
+        }
+    }
+
+    companion object {
+        fun defaultWeekStartForLocale(lang: String): Int {
+            return when (I18n.normalizeCode(lang)) {
+                "ar" -> 7 // Saturday
+                "fr", "es" -> 2 // Monday
+                else -> 1 // Sunday
+            }
+        }
+    }
+}
 
 @Serializable
 data class BackupPayload(
@@ -84,7 +166,7 @@ data class BackupPayload(
 
 /**
  * Local offline repository managing entries, time capsules, reminder settings,
- * and data migrations matching Kannach's localStorage behavior.
+ * user settings, and data migrations matching Kannach's storage behavior.
  */
 class KannachRepository(private val context: Context) {
 
@@ -110,12 +192,24 @@ class KannachRepository(private val context: Context) {
     private val _draftsFlow = MutableStateFlow<Map<String, EntryDraft>>(emptyMap())
     val draftsFlow: StateFlow<Map<String, EntryDraft>> = _draftsFlow.asStateFlow()
 
+    private val _userSettingsFlow = MutableStateFlow(UserSettings())
+    val userSettingsFlow: StateFlow<UserSettings> = _userSettingsFlow.asStateFlow()
+
+    private val _languageChoiceFlow = MutableStateFlow(loadLanguageChoice())
+    val languageChoiceFlow: StateFlow<String> = _languageChoiceFlow.asStateFlow()
+
     private val _languageFlow = MutableStateFlow(detectInitialLanguage())
     val languageFlow: StateFlow<String> = _languageFlow.asStateFlow()
 
     init {
+        val choice = loadLanguageChoice()
+        _languageChoiceFlow.value = choice
         val initialLanguage = loadLanguage()
         _languageFlow.value = initialLanguage
+
+        val loadedSettings = loadRawUserSettings()
+        _userSettingsFlow.value = loadedSettings
+        I18n.useArabicIndicNumerals = loadedSettings.useArabicIndicNumerals
 
         val rawEntries = loadRawEntries()
         val migratedEntries = migrate(rawEntries)
@@ -127,27 +221,85 @@ class KannachRepository(private val context: Context) {
         _reminderFlow.value = loadRawReminder()
     }
 
+    private fun resolveSystemLanguage(): String {
+        val sysLang = I18n.normalizeCode(Locale.getDefault().language)
+        return if (I18n.all.containsKey(sysLang)) sysLang else "en"
+    }
+
+    private fun loadLanguageChoice(): String {
+        val saved = prefs.getString(KEY_LANG, null)
+        if (saved.isNullOrBlank() || saved.equals("system", ignoreCase = true)) {
+            return "system"
+        }
+        val normSaved = I18n.normalizeCode(saved)
+        return if (I18n.all.containsKey(normSaved)) normSaved else "system"
+    }
+
     /**
      * Determines initial language from saved preference or system locale.
      */
     private fun detectInitialLanguage(): String {
         val saved = prefs.getString(KEY_LANG, null)
-        if (!saved.isNullOrBlank()) return saved
-        val sysLang = Locale.getDefault().language.lowercase(Locale.ROOT)
-        return if (sysLang.startsWith("ar")) "ar" else "en"
+        if (!saved.isNullOrBlank() && !saved.equals("system", ignoreCase = true)) {
+            val normSaved = I18n.normalizeCode(saved)
+            if (I18n.all.containsKey(normSaved)) return normSaved
+        }
+        return resolveSystemLanguage()
     }
 
     private fun loadLanguage(): String {
-        return prefs.getString(KEY_LANG, null) ?: detectInitialLanguage()
+        return detectInitialLanguage()
     }
 
     fun setLanguage(lang: String) {
-        val normalized = if (lang.lowercase(Locale.ROOT).startsWith("ar")) "ar" else "en"
-        prefs.edit().putString(KEY_LANG, normalized).apply()
-        _languageFlow.value = normalized
+        if (lang.equals("system", ignoreCase = true)) {
+            prefs.edit().putString(KEY_LANG, "system").apply()
+            _languageChoiceFlow.value = "system"
+            _languageFlow.value = resolveSystemLanguage()
+        } else {
+            val norm = I18n.normalizeCode(lang)
+            val normalized = if (I18n.all.containsKey(norm)) norm else "en"
+            prefs.edit().putString(KEY_LANG, normalized).apply()
+            _languageChoiceFlow.value = normalized
+            _languageFlow.value = normalized
+        }
     }
 
+    fun getLanguageChoice(): String = _languageChoiceFlow.value
+
     fun getLanguage(): String = _languageFlow.value
+
+    // --- User Settings (kannach.settings.v1) ---
+
+    private fun loadRawUserSettings(): UserSettings {
+        val rawJson = prefs.getString(KEY_USER_SETTINGS, null) ?: return UserSettings()
+        return try {
+            val decoded = json.decodeFromString<UserSettings>(rawJson)
+            val validDays = decoded.reminderDays.filter { it in 1..7 }.toSet()
+            decoded.copy(
+                reminderDays = if (validDays.isEmpty()) setOf(1, 2, 3, 4, 5, 6, 7) else validDays
+            )
+        } catch (_: Exception) {
+            UserSettings()
+        }
+    }
+
+    fun getUserSettings(): UserSettings = _userSettingsFlow.value
+
+    fun saveUserSettings(settings: UserSettings) {
+        _userSettingsFlow.value = settings
+        I18n.useArabicIndicNumerals = settings.useArabicIndicNumerals
+        try {
+            val rawJson = json.encodeToString(settings)
+            prefs.edit().putString(KEY_USER_SETTINGS, rawJson).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun updateUserSettings(transform: (UserSettings) -> UserSettings): UserSettings {
+        val updated = transform(_userSettingsFlow.value)
+        saveUserSettings(updated)
+        return updated
+    }
 
     // --- Schema Migration ---
 
@@ -273,13 +425,21 @@ class KannachRepository(private val context: Context) {
 
     fun getCapsules(): List<TimeCapsule> = _capsulesFlow.value
 
-    fun addCapsule(text: String, unlockDate: String): TimeCapsule {
+    fun addCapsule(
+        text: String,
+        unlockDate: String,
+        strokes: List<List<Point>> = emptyList(),
+        color: String = DEFAULT_GREEN_HEX
+    ): TimeCapsule {
         val capsule = TimeCapsule(
             id = "c" + System.currentTimeMillis(),
             text = text,
             unlockDate = unlockDate,
             createdAt = System.currentTimeMillis(),
-            opened = false
+            opened = false,
+            openedAt = null,
+            strokes = strokes,
+            color = color
         )
         val current = _capsulesFlow.value.toMutableList()
         current.add(capsule)
@@ -288,12 +448,39 @@ class KannachRepository(private val context: Context) {
         return capsule
     }
 
-    fun markCapsuleOpened(capsuleId: String) {
+    fun markCapsuleOpened(capsuleId: String, openedAt: Long = System.currentTimeMillis()): TimeCapsule? {
+        var openedCapsule: TimeCapsule? = null
         val current = _capsulesFlow.value.map {
-            if (it.id == capsuleId) it.copy(opened = true) else it
+            if (it.id == capsuleId) {
+                val updated = it.copy(
+                    opened = true,
+                    openedAt = it.openedAt ?: openedAt
+                )
+                openedCapsule = updated
+                updated
+            } else {
+                it
+            }
         }
         _capsulesFlow.value = current
         persistCapsules(current)
+        return openedCapsule
+    }
+
+    fun deleteCapsule(capsuleId: String) {
+        val current = _capsulesFlow.value.filterNot { it.id == capsuleId }
+        if (current.size != _capsulesFlow.value.size) {
+            _capsulesFlow.value = current
+            persistCapsules(current)
+        }
+    }
+
+    fun isNotifPermissionAsked(): Boolean {
+        return prefs.getBoolean(KEY_NOTIF_PERMISSION_ASKED, false)
+    }
+
+    fun markNotifPermissionAsked() {
+        prefs.edit().putBoolean(KEY_NOTIF_PERMISSION_ASKED, true).apply()
     }
 
     // --- Daily Reminder Config ---

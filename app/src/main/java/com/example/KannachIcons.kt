@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 enum class KannachIconType {
     CHEV_L, CHEV_R, FLOWER, LEAF, X, HEART, CHECK, UNDO, TRASH, EDIT,
     GRID, SLIDERS, SPROUT, WINTER, SPRING, SUMMER, AUTUMN, SEAL,
-    SPARKLE, UPLOAD, BOUQUET, BRUSH, RIBBON
+    SPARKLE, UPLOAD, BOUQUET, BRUSH, RIBBON, NOTEBOOK, ERASER
 }
 
 /**
@@ -76,6 +76,8 @@ fun KannachIcon(
             KannachIconType.BOUQUET -> drawBouquet(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.BRUSH -> drawBrush(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.RIBBON -> drawRibbon(scaleX, scaleY, effectiveTint, stroke, filled, fillColor)
+            KannachIconType.NOTEBOOK -> drawNotebook(scaleX, scaleY, effectiveTint, stroke)
+            KannachIconType.ERASER -> drawEraser(scaleX, scaleY, effectiveTint, stroke)
         }
     }
 }
@@ -271,4 +273,30 @@ private fun DrawScope.drawRibbon(sx: Float, sy: Float, color: Color, stroke: Str
     }
     drawPath(p, color, style = stroke)
 }
+
+/**
+ * NV6: Hand-drawn open notebook icon — two page curves + center spine, 2dp round-cap style.
+ */
+private fun DrawScope.drawNotebook(sx: Float, sy: Float, color: Color, stroke: Stroke) {
+    val leftPage = parseSvg("M3.5 6.2C6.2 5.2 9.3 5.6 12 7.1v11.7c-2.7-1.4-5.8-1.8-8.5-.9V6.2z", sx, sy)
+    val rightPage = parseSvg("M20.5 6.2c-2.7-1-5.8-.6-8.5.9v11.7c2.7-1.4 5.8-1.8 8.5-.9V6.2z", sx, sy)
+    val spine = parseSvg("M12 7.1v11.7", sx, sy)
+    drawPath(leftPage, color, style = stroke)
+    drawPath(rightPage, color, style = stroke)
+    drawPath(spine, color, style = stroke)
+}
+
+/**
+ * SK2 & SK3: Hand-drawn tilted block eraser with divider band and bottom baseline.
+ */
+private fun DrawScope.drawEraser(sx: Float, sy: Float, color: Color, stroke: Stroke) {
+    val body = parseSvg("M16.2 4.6l3.2 3.2c.8.8.8 2.1 0 2.9L10.3 19.8H5.8l-1.9-1.9c-.8-.8-.8-2.1 0-2.9l9.4-10.4c.8-.8 2.1-.8 2.9 0z", sx, sy)
+    val band = parseSvg("M11.2 9.8l4.8 4.8", sx, sy)
+    val base = parseSvg("M10.3 19.8h9.2", sx, sy)
+    drawPath(body, color, style = stroke)
+    drawPath(band, color, style = stroke)
+    drawPath(base, color, style = stroke)
+}
+
+
 
