@@ -51,7 +51,11 @@ data class OnThisDayHit(
 )
 
 enum class CapsulePreset {
-    WEEK_1, MONTH_1, MONTH_3, MONTH_6, YEAR_1, CUSTOM
+    TOMORROW, WEEK_1, MONTH_1, MONTH_3, MONTH_6, YEAR_1, CUSTOM
+}
+
+enum class CapsuleDraftStatus {
+    IDLE, SAVING, SAVED
 }
 
 data class ConfirmDialogData(
@@ -188,12 +192,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _exportSignature = MutableStateFlow(repository.getUserSettings().exportSignature)
     val exportSignature: StateFlow<Boolean> = _exportSignature.asStateFlow()
 
-    // --- Letters / Time Capsule State (CP1–CP10) ---
+    // --- Just Draw v5 Emotional Polish State (JD1, JD3, JD5, JD6) ---
+    private var lastWhisperIndex = -1
+    private val _sketchWhisperIndex = MutableStateFlow(0)
+    val sketchWhisperIndex: StateFlow<Int> = _sketchWhisperIndex.asStateFlow()
+
+    private val _sketchMoodLabelVisible = MutableStateFlow(false)
+    val sketchMoodLabelVisible: StateFlow<Boolean> = _sketchMoodLabelVisible.asStateFlow()
+    private var moodLabelJob: kotlinx.coroutines.Job? = null
+
+    private val _sketchPageTurnCount = MutableStateFlow(0)
+    val sketchPageTurnCount: StateFlow<Int> = _sketchPageTurnCount.asStateFlow()
+
+    private val _sketchClearUndoVisible = MutableStateFlow(false)
+    val sketchClearUndoVisible: StateFlow<Boolean> = _sketchClearUndoVisible.asStateFlow()
+    private var clearUndoJob: kotlinx.coroutines.Job? = null
+
+    private var lastSavedWhisperIndex = -1
+    private val _sketchSavedWhisperIndex = MutableStateFlow<Int?>(null)
+    val sketchSavedWhisperIndex: StateFlow<Int?> = _sketchSavedWhisperIndex.asStateFlow()
+    private var savedWhisperJob: kotlinx.coroutines.Job? = null
+
+    // --- Letters / Time Capsule State (CP1–CP10 & LC1–LC5) ---
     private val _isCapsuleComposeOpen = MutableStateFlow(false)
     val isCapsuleComposeOpen: StateFlow<Boolean> = _isCapsuleComposeOpen.asStateFlow()
 
+    private val _capsuleComposeSessionId = MutableStateFlow(0)
+    val capsuleComposeSessionId: StateFlow<Int> = _capsuleComposeSessionId.asStateFlow()
+
+    private val _capsuleTitleText = MutableStateFlow("")
+    val capsuleTitleText: StateFlow<String> = _capsuleTitleText.asStateFlow()
+
     private val _capsuleDraftText = MutableStateFlow("")
     val capsuleDraftText: StateFlow<String> = _capsuleDraftText.asStateFlow()
+
+    // LC5: Lightweight boolean that only flips when body transitions between blank and non-blank
+    private val _capsuleHasBodyText = MutableStateFlow(false)
+    val capsuleHasBodyText: StateFlow<Boolean> = _capsuleHasBodyText.asStateFlow()
+
+    private var liveCapsuleTitle: String = ""
+    private var liveCapsuleBody: String = ""
+    private var initialCapsuleSnapshot: String = ""
+    private var capsuleDraftAutosaveJob: kotlinx.coroutines.Job? = null
+
+    private val _capsuleDraftStatus = MutableStateFlow(CapsuleDraftStatus.IDLE)
+    val capsuleDraftStatus: StateFlow<CapsuleDraftStatus> = _capsuleDraftStatus.asStateFlow()
+
+    private val _isCapsuleBackSheetOpen = MutableStateFlow(false)
+    val isCapsuleBackSheetOpen: StateFlow<Boolean> = _isCapsuleBackSheetOpen.asStateFlow()
+
+    private val _isCapsuleSealSheetOpen = MutableStateFlow(false)
+    val isCapsuleSealSheetOpen: StateFlow<Boolean> = _isCapsuleSealSheetOpen.asStateFlow()
 
     private val _capsuleDoodleVisible = MutableStateFlow(false)
     val capsuleDoodleVisible: StateFlow<Boolean> = _capsuleDoodleVisible.asStateFlow()
@@ -247,6 +296,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         checkOnThisDay()
         checkReadyCapsule()
+        pickNextSketchWhisper()
         if (reminder.value.enabled) {
             NotificationHelper.scheduleDailyReminder(getApplication(), reminder.value.time)
         }
@@ -685,6 +735,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectTab(tab: Tab) {
         if (_currentTab.value != tab) {
             vibrate(6)
+            if (tab == Tab.DRAW) {
+                pickNextSketchWhisper()
+            }
             _currentTab.value = tab
         } else if (tab == Tab.PAGE && (_currentYear.value != nowYear || _currentMonth.value != nowMonth)) {
             vibrate(6)
@@ -754,11 +807,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    // --- Time Capsule / Letters Page (CP1–CP10) ---
+    // --- Time Capsule / Letters Page (CP1–CP10 & LC1–LC5) ---
 
     fun computePresetDateKey(preset: CapsulePreset): String {
         val cal = Calendar.getInstance()
         when (preset) {
+            CapsulePreset.TOMORROW -> cal.add(Calendar.DAY_OF_YEAR, 1)
             CapsulePreset.WEEK_1 -> cal.add(Calendar.DAY_OF_YEAR, 7)
             CapsulePreset.MONTH_1 -> cal.add(Calendar.MONTH, 1)
             CapsulePreset.MONTH_3 -> cal.add(Calendar.MONTH, 3)
@@ -767,6 +821,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             CapsulePreset.CUSTOM -> cal.add(Calendar.MONTH, 1)
         }
         return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+    }
+
+    private fun buildCapsuleSnapshot(
+        title: String,
+        body: String,
+        preset: CapsulePreset,
+        unlockDate: String,
+        strokes: List<List<Point>>,
+        color: String
+    ): String {
+        return "${title.trim()}|${body.trim()}|${preset.name}|$unlockDate|${strokes.size}|$color"
+    }
+
+    private fun persistCapsuleDraftNow() {
+        val draft = CapsuleDraft(
+            title = liveCapsuleTitle,
+            body = liveCapsuleBody,
+            presetName = _capsulePreset.value.name,
+            unlockDate = _capsuleUnlockDate.value,
+            strokes = _capsuleDoodleStrokes.value,
+            color = _capsuleDoodleColor.value,
+            doodleVisible = _capsuleDoodleVisible.value,
+            updatedAt = System.currentTimeMillis()
+        )
+        repository.saveCapsuleDraft(draft)
+    }
+
+    /**
+     * LC2 & LC5: Debounced autosave (800 ms) of title, body, date choice, and attachment
+     * to SharedPreferences key `capsule_draft`.
+     */
+    private fun scheduleCapsuleDraftAutosave() {
+        if (_capsuleDraftStatus.value != CapsuleDraftStatus.SAVING) {
+            _capsuleDraftStatus.value = CapsuleDraftStatus.SAVING
+        }
+        capsuleDraftAutosaveJob?.cancel()
+        capsuleDraftAutosaveJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(800L)
+            _capsuleTitleText.value = liveCapsuleTitle
+            _capsuleDraftText.value = liveCapsuleBody
+            persistCapsuleDraftNow()
+            _capsuleDraftStatus.value = CapsuleDraftStatus.SAVED
+        }
     }
 
     fun openCapsulePage() {
@@ -779,33 +876,169 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openCapsuleCompose() {
         vibrate(6)
+        capsuleDraftAutosaveJob?.cancel()
         _openedCapsuleView.value = null
-        val strings = I18n.forLanguage(language.value)
-        _capsuleDraftText.value = "${strings.capsulePrefill}\n"
-        _capsuleDoodleVisible.value = false
-        _capsuleDoodleStrokes.value = emptyList()
-        _capsuleDoodleColor.value = DEFAULT_GREEN_HEX
-        _capsulePreset.value = CapsulePreset.MONTH_1
-        _capsuleUnlockDate.value = computePresetDateKey(CapsulePreset.MONTH_1)
+        _isCapsuleBackSheetOpen.value = false
+        _isCapsuleSealSheetOpen.value = false
+
+        val savedDraft = repository.getCapsuleDraft()
+        if (savedDraft != null && (
+                savedDraft.title.isNotBlank() ||
+                    savedDraft.body.isNotBlank() ||
+                    savedDraft.strokes.isNotEmpty() ||
+                    savedDraft.unlockDate.isNotBlank()
+                )
+        ) {
+            liveCapsuleTitle = savedDraft.title
+            liveCapsuleBody = savedDraft.body
+            _capsuleTitleText.value = savedDraft.title
+            _capsuleDraftText.value = savedDraft.body
+            _capsuleHasBodyText.value = savedDraft.body.trim().isNotEmpty()
+            val preset = runCatching { CapsulePreset.valueOf(savedDraft.presetName) }
+                .getOrDefault(CapsulePreset.MONTH_1)
+            _capsulePreset.value = preset
+            _capsuleUnlockDate.value = savedDraft.unlockDate.ifBlank { computePresetDateKey(preset) }
+            _capsuleDoodleStrokes.value = savedDraft.strokes
+            _capsuleDoodleColor.value = savedDraft.color.ifBlank { DEFAULT_GREEN_HEX }
+            _capsuleDoodleVisible.value = savedDraft.doodleVisible || savedDraft.strokes.isNotEmpty()
+            _capsuleDraftStatus.value = CapsuleDraftStatus.SAVED
+            initialCapsuleSnapshot = "" // Restored draft triggers Keep/Discard/Continue sheet on back
+        } else {
+            val defaultPreset = CapsulePreset.MONTH_1
+            val defaultUnlock = computePresetDateKey(defaultPreset)
+            liveCapsuleTitle = ""
+            liveCapsuleBody = ""
+            _capsuleTitleText.value = ""
+            _capsuleDraftText.value = ""
+            _capsuleHasBodyText.value = false
+            _capsulePreset.value = defaultPreset
+            _capsuleUnlockDate.value = defaultUnlock
+            _capsuleDoodleStrokes.value = emptyList()
+            _capsuleDoodleColor.value = DEFAULT_GREEN_HEX
+            _capsuleDoodleVisible.value = false
+            _capsuleDraftStatus.value = CapsuleDraftStatus.IDLE
+            initialCapsuleSnapshot = buildCapsuleSnapshot(
+                title = "",
+                body = "",
+                preset = defaultPreset,
+                unlockDate = defaultUnlock,
+                strokes = emptyList(),
+                color = DEFAULT_GREEN_HEX
+            )
+        }
+        _capsuleComposeSessionId.value += 1
         _isCapsuleComposeOpen.value = true
     }
 
+    /**
+     * LC2: On back with unsaved changes (or active draft), show bottom sheet:
+     * Keep draft · Discard · Continue writing.
+     */
+    fun requestCloseCapsuleCompose() {
+        if (_isCapsuleSealSheetOpen.value) {
+            _isCapsuleSealSheetOpen.value = false
+            return
+        }
+        if (_isCapsuleBackSheetOpen.value) {
+            _isCapsuleBackSheetOpen.value = false
+            return
+        }
+        val currentSnapshot = buildCapsuleSnapshot(
+            title = liveCapsuleTitle,
+            body = liveCapsuleBody,
+            preset = _capsulePreset.value,
+            unlockDate = _capsuleUnlockDate.value,
+            strokes = _capsuleDoodleStrokes.value,
+            color = _capsuleDoodleColor.value
+        )
+        val hasContent = liveCapsuleTitle.isNotBlank() ||
+            liveCapsuleBody.isNotBlank() ||
+            _capsuleDoodleStrokes.value.isNotEmpty()
+        val isDirty = hasContent || currentSnapshot != initialCapsuleSnapshot || repository.hasCapsuleDraft()
+
+        if (isDirty) {
+            vibrate(6)
+            _isCapsuleBackSheetOpen.value = true
+        } else {
+            capsuleDraftAutosaveJob?.cancel()
+            _isCapsuleComposeOpen.value = false
+        }
+    }
+
     fun closeCapsuleCompose() {
+        requestCloseCapsuleCompose()
+    }
+
+    fun keepCapsuleDraftAndClose() {
+        vibrate(6)
+        capsuleDraftAutosaveJob?.cancel()
+        _capsuleTitleText.value = liveCapsuleTitle
+        _capsuleDraftText.value = liveCapsuleBody
+        persistCapsuleDraftNow()
+        _capsuleDraftStatus.value = CapsuleDraftStatus.SAVED
+        _isCapsuleBackSheetOpen.value = false
+        _isCapsuleComposeOpen.value = false
+        showToast(I18n.forLanguage(language.value).draftKept)
+    }
+
+    fun discardCapsuleDraftAndClose() {
+        vibrate(8)
+        capsuleDraftAutosaveJob?.cancel()
+        repository.clearCapsuleDraft()
+        liveCapsuleTitle = ""
+        liveCapsuleBody = ""
+        _capsuleTitleText.value = ""
+        _capsuleDraftText.value = ""
+        _capsuleHasBodyText.value = false
+        _capsuleDoodleStrokes.value = emptyList()
+        _capsuleDoodleVisible.value = false
+        _capsuleDraftStatus.value = CapsuleDraftStatus.IDLE
+        _isCapsuleBackSheetOpen.value = false
         _isCapsuleComposeOpen.value = false
     }
 
+    fun continueWritingCapsuleDraft() {
+        vibrate(5)
+        _isCapsuleBackSheetOpen.value = false
+    }
+
+    /**
+     * LC5: Holds title in local field state and hoists to StateFlow only on 800ms debounce.
+     */
+    fun onCapsuleTitleInputChanged(newTitle: String) {
+        if (liveCapsuleTitle == newTitle) return
+        liveCapsuleTitle = newTitle
+        scheduleCapsuleDraftAutosave()
+    }
+
+    /**
+     * LC5: Holds body text in local field state and hoists to StateFlow only on 800ms debounce.
+     * Only flips `_capsuleHasBodyText` when empty/non-empty changes so the screen never recomposes per keystroke.
+     */
+    fun onCapsuleBodyInputChanged(newBody: String) {
+        if (liveCapsuleBody == newBody) return
+        liveCapsuleBody = newBody
+        val hasBody = newBody.trim().isNotEmpty()
+        if (_capsuleHasBodyText.value != hasBody) {
+            _capsuleHasBodyText.value = hasBody
+        }
+        scheduleCapsuleDraftAutosave()
+    }
+
     fun updateCapsuleDraftText(text: String) {
-        _capsuleDraftText.value = text
+        onCapsuleBodyInputChanged(text)
     }
 
     fun toggleCapsuleDoodle() {
         vibrate(5)
         _capsuleDoodleVisible.value = !_capsuleDoodleVisible.value
+        scheduleCapsuleDraftAutosave()
     }
 
     fun addCapsuleDoodleStroke(stroke: List<Point>) {
         if (stroke.isNotEmpty()) {
             _capsuleDoodleStrokes.value = _capsuleDoodleStrokes.value + listOf(stroke)
+            scheduleCapsuleDraftAutosave()
         }
     }
 
@@ -813,6 +1046,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_capsuleDoodleStrokes.value.isNotEmpty()) {
             vibrate(6)
             _capsuleDoodleStrokes.value = _capsuleDoodleStrokes.value.dropLast(1)
+            scheduleCapsuleDraftAutosave()
         }
     }
 
@@ -820,12 +1054,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_capsuleDoodleStrokes.value.isNotEmpty()) {
             vibrate(6)
             _capsuleDoodleStrokes.value = emptyList()
+            scheduleCapsuleDraftAutosave()
         }
     }
 
     fun selectCapsuleDoodleColor(hex: String) {
         vibrate(5)
         _capsuleDoodleColor.value = hex
+        scheduleCapsuleDraftAutosave()
     }
 
     fun selectCapsulePreset(preset: CapsulePreset) {
@@ -834,17 +1070,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (preset != CapsulePreset.CUSTOM) {
             _capsuleUnlockDate.value = computePresetDateKey(preset)
         }
+        scheduleCapsuleDraftAutosave()
     }
 
     fun setCustomCapsuleDate(dateKey: String) {
-        val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        if (dateKey <= todayIso) {
-            showToast(I18n.forLanguage(language.value).capsuleDateError)
-            return
-        }
         vibrate(5)
         _capsulePreset.value = CapsulePreset.CUSTOM
         _capsuleUnlockDate.value = dateKey
+        scheduleCapsuleDraftAutosave()
     }
 
     fun onLockedCapsuleTap(capsule: TimeCapsule) {
@@ -884,47 +1117,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * CP7: Validates the draft letter and opens the confirmation dialog:
-     * "Once sealed, you won't see it until {date}." (cancel = "Keep writing").
+     * LC3: Tapping Seal opens the one-step confirm sheet showing the envelope preview
+     * (title + opens-on sentence), warning copy, and "Seal" / "Not yet".
      */
-    fun requestSealCapsule(onConfirmedPermissionCheck: () -> Unit = {}) {
+    fun requestSealCapsule() {
         val strings = I18n.forLanguage(language.value)
         val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val text = _capsuleDraftText.value.trim()
+        _capsuleTitleText.value = liveCapsuleTitle
+        _capsuleDraftText.value = liveCapsuleBody
+        val text = liveCapsuleBody.trim()
         val unlockDate = _capsuleUnlockDate.value
 
         if (text.isBlank()) {
-            showToast(strings.writeSomething)
+            showToast(strings.capsuleHelperWriteFirst)
             return
         }
         if (unlockDate.isBlank() || unlockDate <= todayIso) {
-            showToast(strings.capsuleDateError)
+            showToast(strings.capsuleHelperChooseDate)
             return
         }
 
-        val longDate = I18n.formatLongDate(unlockDate, language.value)
-        _confirmDialog.value = ConfirmDialogData(
-            title = strings.capsuleSaveBtn,
-            message = strings.capsuleSealConfirmMsg.replace("{d}", longDate),
-            confirmText = strings.capsuleSaveBtn,
-            cancelText = strings.capsuleKeepWriting,
-            isDestructive = false,
-            onConfirm = {
-                dismissConfirmDialog()
-                onConfirmedPermissionCheck()
-                sealDraftCapsuleWithCeremony()
-            },
-            onCancel = { dismissConfirmDialog() }
-        )
+        vibrate(6)
+        _isCapsuleSealSheetOpen.value = true
+    }
+
+    fun closeCapsuleSealSheet() {
+        vibrate(5)
+        _isCapsuleSealSheetOpen.value = false
+    }
+
+    fun confirmSealCapsule(onConfirmedPermissionCheck: () -> Unit = {}) {
+        _isCapsuleSealSheetOpen.value = false
+        capsuleDraftAutosaveJob?.cancel()
+        repository.clearCapsuleDraft()
+        _capsuleDraftStatus.value = CapsuleDraftStatus.IDLE
+        onConfirmedPermissionCheck()
+        sealDraftCapsuleWithCeremony()
     }
 
     fun sealDraftCapsuleWithCeremony() {
-        val text = _capsuleDraftText.value.trim()
+        val title = liveCapsuleTitle.trim()
+        val text = liveCapsuleBody.trim()
         val unlockDate = _capsuleUnlockDate.value
         val strokes = _capsuleDoodleStrokes.value
         val color = _capsuleDoodleColor.value
 
-        val capsule = saveCapsule(text, unlockDate, strokes, color) ?: return
+        val capsule = saveCapsule(
+            text = text,
+            unlockDate = unlockDate,
+            strokes = strokes,
+            color = color,
+            title = title
+        ) ?: return
         _isSealingCeremonyActive.value = true
         _highlightedCapsuleId.value = capsule.id
     }
@@ -942,7 +1186,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         text: String,
         unlockDate: String,
         strokes: List<List<Point>> = emptyList(),
-        color: String = DEFAULT_GREEN_HEX
+        color: String = DEFAULT_GREEN_HEX,
+        title: String = ""
     ): TimeCapsule? {
         val strings = I18n.forLanguage(language.value)
         val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -961,7 +1206,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             emptyList()
         }
-        val capsule = repository.addCapsule(text.trim(), unlockDate, normalizedStrokes, color)
+        val capsule = repository.addCapsule(
+            text = text.trim(),
+            unlockDate = unlockDate,
+            strokes = normalizedStrokes,
+            color = color,
+            title = title.trim()
+        )
         NotificationHelper.scheduleCapsuleNotification(getApplication(), capsule)
         checkReadyCapsule()
         vibrate(14)
@@ -969,7 +1220,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return capsule
     }
 
-    // --- Sketchpad Page (SK1–SK11) ---
+    // --- Sketchpad Page (SK1–SK11 & JD1–JD6) ---
+
+    fun pickNextSketchWhisper() {
+        val candidates = (0..3).filter { it != lastWhisperIndex }
+        val chosen = candidates.random()
+        lastWhisperIndex = chosen
+        _sketchWhisperIndex.value = chosen
+        if (_sketchStrokes.value.isEmpty()) {
+            _sketchIntroDismissed.value = false
+        }
+    }
 
     fun openSketchPage() {
         selectTab(Tab.DRAW)
@@ -979,11 +1240,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectTab(Tab.PAGE)
     }
 
+    fun onSketchStrokeStarted() {
+        if (!_sketchEraserMode.value) {
+            _sketchIntroDismissed.value = true
+            if (_sketchClearUndoVisible.value) {
+                clearUndoJob?.cancel()
+                _sketchClearUndoVisible.value = false
+            }
+        }
+    }
+
     fun addSketchStroke(stroke: SketchStroke) {
         if (stroke.points.isNotEmpty()) {
             _sketchUndoStack.add(_sketchStrokes.value)
             _sketchStrokes.value = _sketchStrokes.value + listOf(stroke)
             _sketchIntroDismissed.value = true
+            if (_sketchClearUndoVisible.value) {
+                clearUndoJob?.cancel()
+                _sketchClearUndoVisible.value = false
+            }
         }
     }
 
@@ -1000,8 +1275,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * SK3: Eraser mode removes a stroke when a touch point comes within 14 canvas units
-     * of any of its points. One undo step restores it.
+     * SK3 & JD3: Eraser mode removes a stroke when a touch point comes within 14 canvas units
+     * of any of its points. One undo step restores it. No haptics while drawing/erasing.
      */
     fun eraseSketchAt(pt: Point) {
         val current = _sketchStrokes.value
@@ -1013,13 +1288,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         if (remaining.size != current.size) {
-            vibrate(5)
             _sketchUndoStack.add(current)
             _sketchStrokes.value = remaining
         }
     }
 
     fun undoSketchStroke() {
+        if (_sketchClearUndoVisible.value) {
+            clearUndoJob?.cancel()
+            _sketchClearUndoVisible.value = false
+        }
         if (_sketchUndoStack.isNotEmpty()) {
             vibrate(6)
             _sketchStrokes.value = _sketchUndoStack.removeAt(_sketchUndoStack.lastIndex)
@@ -1029,34 +1307,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * JD5: Clearing is a page turn. The sheet slides out by KannachMotion.PAGE and fresh paper
+     * slides in; an Undo action appears for 5 s.
+     */
     fun clearSketchStrokes() {
         if (_sketchStrokes.value.isNotEmpty()) {
             vibrate(6)
             _sketchUndoStack.add(_sketchStrokes.value)
             _sketchStrokes.value = emptyList()
+            _sketchPageTurnCount.value = _sketchPageTurnCount.value + 1
+            _sketchClearUndoVisible.value = true
+            clearUndoJob?.cancel()
+            clearUndoJob = viewModelScope.launch {
+                kotlinx.coroutines.delay(5000L)
+                _sketchClearUndoVisible.value = false
+            }
         }
     }
 
     fun requestClearSketchStrokes() {
-        if (_sketchStrokes.value.isEmpty()) return
-        val strings = I18n.forLanguage(language.value)
-        _confirmDialog.value = ConfirmDialogData(
-            title = strings.clear,
-            message = strings.confirmDeleteMsg,
-            confirmText = strings.clear,
-            cancelText = strings.keep,
-            onConfirm = {
-                dismissConfirmDialog()
-                clearSketchStrokes()
-            },
-            onCancel = { dismissConfirmDialog() }
-        )
+        clearSketchStrokes()
     }
 
+    /**
+     * JD3: Selecting a swatch shows its mood name as a 1-line label above the tray for 1.2 s, then fades.
+     */
     fun setSketchColor(hex: String) {
         vibrate(5)
         _sketchColor.value = hex
         _sketchEraserMode.value = false
+        _sketchMoodLabelVisible.value = true
+        moodLabelJob?.cancel()
+        moodLabelJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(1200L)
+            _sketchMoodLabelVisible.value = false
+        }
     }
 
     fun setSketchBrushWidth(width: Float) {
@@ -1105,6 +1391,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.updateUserSettings { it.copy(exportSignature = enabled) }
     }
 
+    /**
+     * JD6: On a successful save/share show one whisper line from drawSaved1..2 for 2.4 s. No confetti.
+     */
+    fun triggerSketchSavedWhisper() {
+        val nextIdx = if (lastSavedWhisperIndex == 0) 1 else 0
+        lastSavedWhisperIndex = nextIdx
+        _sketchSavedWhisperIndex.value = nextIdx
+        savedWhisperJob?.cancel()
+        savedWhisperJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(2400L)
+            _sketchSavedWhisperIndex.value = null
+        }
+    }
+
     fun saveSketchToPhotos(context: Context, palette: KannachPalette = BasePalette): android.net.Uri? {
         val strings = I18n.forLanguage(language.value)
         if (_sketchStrokes.value.isEmpty()) {
@@ -1127,7 +1427,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (uri != null) {
                 vibrate(12)
                 _isExportSheetOpen.value = false
-                showToast(strings.exportSaved)
+                triggerSketchSavedWhisper()
             } else {
                 showToast(strings.saveError)
             }
@@ -1169,7 +1469,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             _isExportSheetOpen.value = false
             context.startActivity(chooser)
-            showToast(strings.sketchExported)
+            triggerSketchSavedWhisper()
         } catch (e: Exception) {
             showToast(strings.saveError)
         }

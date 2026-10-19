@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -42,7 +41,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -83,14 +84,18 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.State
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Matrix
@@ -100,6 +105,7 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.input.pointer.pointerInput
@@ -108,6 +114,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -125,6 +132,8 @@ import kotlin.math.sin
  * 1. GlyphView:
  * Renders normalized strokes on a 300x300 virtual canvas using quadratic Bezier curves,
  * replicating SVG <g stroke-width="11" stroke-linecap="round" stroke-linejoin="round">.
+ * Scales and centers within min(width, height) so strokes always fit strictly inside non-square bounds (DL2).
+ * PF2: Uses Modifier.drawWithCache keyed by (strokes, size) so StrokeMath.composePathFrom runs once per size change.
  */
 @Composable
 fun GlyphView(
@@ -132,26 +141,43 @@ fun GlyphView(
     color: Color,
     modifier: Modifier = Modifier
 ) {
-    Canvas(modifier = modifier) {
-        val scale = size.width / StrokeMath.NORMALIZED_BOX_SIZE
-        val strokeWidth = 11f * scale
-        val strokeStyle = Stroke(
-            width = strokeWidth,
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round
-        )
+    Spacer(
+        modifier = modifier.drawWithCache {
+            val minDim = minOf(size.width, size.height)
+            if (minDim <= 0f) {
+                onDrawBehind {}
+            } else {
+                val scale = minDim / StrokeMath.NORMALIZED_BOX_SIZE
+                val dx = (size.width - minDim) / 2f
+                val dy = (size.height - minDim) / 2f
+                val strokeWidth = 11f * scale
+                val strokeStyle = Stroke(
+                    width = strokeWidth,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
 
-        for (stroke in strokes) {
-            if (stroke.isNotEmpty()) {
-                val path = StrokeMath.composePathFrom(stroke)
-                val matrix = androidx.compose.ui.graphics.Matrix().apply {
-                    scale(scale, scale)
+                val paths = ArrayList<Path>(strokes.size)
+                for (stroke in strokes) {
+                    if (stroke.isNotEmpty()) {
+                        val path = StrokeMath.composePathFrom(stroke)
+                        val matrix = androidx.compose.ui.graphics.Matrix().apply {
+                            scale(scale, scale)
+                            translate(dx / scale, dy / scale)
+                        }
+                        path.transform(matrix)
+                        paths.add(path)
+                    }
                 }
-                path.transform(matrix)
-                drawPath(path = path, color = color, style = strokeStyle)
+
+                onDrawBehind {
+                    for (path in paths) {
+                        drawPath(path = path, color = color, style = strokeStyle)
+                    }
+                }
             }
         }
-    }
+    )
 }
 
 /**
@@ -493,16 +519,20 @@ fun AppHeader(
  *   1.5 dp border palette.greenLine, stitched inner edge (dashed 1.2 dp, dash 8/6, inset 4 dp, greenLine @ 0.7 alpha),
  *   soft paper shadow from tokens (paperShadow), no Material elevation, tilt paperTilt(-0.4f).
  * - NV6 Slots: 24 dp hand-drawn icons (NOTEBOOK, GRID, SEAL, BRUSH). Only the selected slot shows its label
- *   (hand font 12 sp, greenDeep) with animateContentSize and a hand-drawn rounded highlight behind it
+ *   (hand font 12 sp, greenDeep) cross-faded by alpha and a hand-drawn rounded highlight behind it
  *   (greenSoft, drawn on with a path-trim animation, SOFT). Unselected slots are icon-only (inkSoft)
  *   with contentDescription from I18n. Letters shows 7 dp red dot when a capsule is ready.
  * - NV6b Plant button: Detached 64 dp circle to pill's end side (mirrored in RTL), 10 dp gap,
  *   palette.green fill, greenDeep border 1.5 dp, inner dashed ring inset 5 dp, SPROUT icon 28 dp in palette.onGreen.
  *   On press the sprout scales 1 -> 0.9 -> 1.08 -> 1 (SOFT).
+ * - DK1–DK6: Collapsible into a 52 dp round green bud anchored at the bottom center (cross-fading with graphicsLayer).
  */
 @Composable
 fun KannachDock(
     viewModel: MainViewModel,
+    dockState: DockState = DockState.EXPANDED,
+    onExpandDock: () -> Unit = {},
+    onCollapseDock: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val palette = LocalKannachPalette.current
@@ -516,146 +546,249 @@ fun KannachDock(
     val todayKey = viewModel.getTodayKey()
     val sproutScale = remember { Animatable(1f) }
 
-    Row(
+    // DK5: One Float progress (0 = collapsed, 1 = expanded) animated with KannachMotion.SOFT and Settle easing.
+    val initialProgress = if (dockState == DockState.EXPANDED) 1f else 0f
+    val dockProgress = remember { Animatable(initialProgress) }
+    var isTransitioning by remember { mutableStateOf(false) }
+
+    LaunchedEffect(dockState, reduceMotion) {
+        val target = if (dockState == DockState.EXPANDED) 1f else 0f
+        if (reduceMotion) {
+            isTransitioning = false
+            dockProgress.snapTo(target)
+        } else if (dockProgress.value != target) {
+            isTransitioning = true
+            try {
+                dockProgress.animateTo(
+                    targetValue = target,
+                    animationSpec = tween(KannachMotion.SOFT, easing = KannachMotion.Settle)
+                )
+            } finally {
+                isTransitioning = false
+            }
+        } else {
+            isTransitioning = false
+        }
+    }
+
+    // DK5: A layer at alpha 0 is not composed and not focusable.
+    val showExpandedDock = (dockState == DockState.EXPANDED) || isTransitioning
+    val showCollapsedBud = (dockState == DockState.COLLAPSED) || isTransitioning
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
-            .padding(bottom = 12.dp)
-            .testTag("kannach_dock"),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(bottom = 12.dp),
+        contentAlignment = Alignment.BottomCenter
     ) {
-        // NV5: Stitched Paper Pill (4 equal tab slots)
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .height(64.dp)
-                .paperTilt(-0.4f)
-                .paperShadow(
-                    shadowColor = palette.paperShadow,
-                    shape = HandDrawnDockShape,
-                    offsetY = 4.dp
-                )
-                .clip(HandDrawnDockShape)
-                .background(palette.paperHi)
-                .border(1.5.dp, palette.greenLine, HandDrawnDockShape)
-                .dashedHandDrawnBorder(
-                    color = palette.greenLine.copy(alpha = 0.7f),
-                    shape = HandDrawnDockShape,
-                    strokeWidth = 1.2.dp,
-                    dashIntervals = floatArrayOf(8f, 6f),
-                    inset = 4.dp
-                )
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 1. Page (Month Home)
-            PaperDockSlot(
-                icon = KannachIconType.NOTEBOOK,
-                label = strings.dockPage,
-                selected = currentTab == Tab.PAGE,
-                reduceMotion = reduceMotion,
-                onClick = { viewModel.selectTab(Tab.PAGE) },
+        if (showExpandedDock) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("dock_tab_page")
-            )
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        val p = dockProgress.value.coerceIn(0f, 1f)
+                        alpha = p
+                        val s = 0.6f + 0.4f * p
+                        scaleX = s
+                        scaleY = s
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    }
+                    .testTag("kannach_dock"),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // NV5: Stitched Paper Pill (4 equal tab slots)
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(64.dp)
+                        .paperTilt(-0.4f)
+                        .paperShadow(
+                            shadowColor = palette.paperShadow,
+                            shape = HandDrawnDockShape,
+                            offsetY = 4.dp
+                        )
+                        .clip(HandDrawnDockShape)
+                        .background(palette.paperHi)
+                        .border(1.5.dp, palette.greenLine, HandDrawnDockShape)
+                        .dashedHandDrawnBorder(
+                            color = palette.greenLine.copy(alpha = 0.7f),
+                            shape = HandDrawnDockShape,
+                            strokeWidth = 1.2.dp,
+                            dashIntervals = floatArrayOf(8f, 6f),
+                            inset = 4.dp
+                        )
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 1. Page (Month Home)
+                    PaperDockSlot(
+                        icon = KannachIconType.NOTEBOOK,
+                        label = strings.dockPage,
+                        selected = currentTab == Tab.PAGE,
+                        reduceMotion = reduceMotion,
+                        enabled = dockState == DockState.EXPANDED,
+                        onClick = { viewModel.selectTab(Tab.PAGE) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("dock_tab_page")
+                    )
 
-            // 2. Garden (Gallery)
-            PaperDockSlot(
-                icon = KannachIconType.GRID,
-                label = strings.dockGarden,
-                selected = currentTab == Tab.GARDEN,
-                reduceMotion = reduceMotion,
-                onClick = { viewModel.selectTab(Tab.GARDEN) },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("dock_tab_garden")
-            )
+                    // 2. Garden (Gallery)
+                    PaperDockSlot(
+                        icon = KannachIconType.GRID,
+                        label = strings.dockGarden,
+                        selected = currentTab == Tab.GARDEN,
+                        reduceMotion = reduceMotion,
+                        enabled = dockState == DockState.EXPANDED,
+                        onClick = { viewModel.selectTab(Tab.GARDEN) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("dock_tab_garden")
+                    )
 
-            // 3. Letters (Time Capsules)
-            PaperDockSlot(
-                icon = KannachIconType.SEAL,
-                label = strings.dockLetters,
-                selected = currentTab == Tab.LETTERS,
-                hasBadge = readyCapsule != null,
-                reduceMotion = reduceMotion,
-                onClick = { viewModel.selectTab(Tab.LETTERS) },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("dock_tab_letters")
-            )
+                    // 3. Letters (Time Capsules)
+                    PaperDockSlot(
+                        icon = KannachIconType.SEAL,
+                        label = strings.dockLetters,
+                        selected = currentTab == Tab.LETTERS,
+                        hasBadge = readyCapsule != null,
+                        reduceMotion = reduceMotion,
+                        enabled = dockState == DockState.EXPANDED,
+                        onClick = { viewModel.selectTab(Tab.LETTERS) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("dock_tab_letters")
+                    )
 
-            // 4. Draw (Sketchpad)
-            PaperDockSlot(
-                icon = KannachIconType.BRUSH,
-                label = strings.dockDraw,
-                selected = currentTab == Tab.DRAW,
-                reduceMotion = reduceMotion,
-                onClick = { viewModel.selectTab(Tab.DRAW) },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("dock_tab_draw")
-            )
+                    // 4. Draw (Sketchpad)
+                    PaperDockSlot(
+                        icon = KannachIconType.BRUSH,
+                        label = strings.dockDraw,
+                        selected = currentTab == Tab.DRAW,
+                        reduceMotion = reduceMotion,
+                        enabled = dockState == DockState.EXPANDED,
+                        onClick = {
+                            viewModel.selectTab(Tab.DRAW)
+                            onCollapseDock()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("dock_tab_draw")
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // NV6b & DK3: Detached Plant button inside the expanded dock only (64 dp circle, stitched inner ring inset 5 dp)
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .paperShadow(
+                            shadowColor = palette.paperShadow,
+                            shape = CircleShape,
+                            offsetY = 4.dp
+                        )
+                        .clip(CircleShape)
+                        .background(palette.green)
+                        .border(1.5.dp, palette.greenDeep, CircleShape)
+                        .dashedHandDrawnBorder(
+                            color = palette.greenLine.copy(alpha = 0.7f),
+                            shape = CircleShape,
+                            strokeWidth = 1.2.dp,
+                            dashIntervals = floatArrayOf(8f, 6f),
+                            inset = 5.dp
+                        )
+                        .semantics { contentDescription = strings.dockToday }
+                        .testTag("dock_plant_button")
+                        .clickable(
+                            enabled = dockState == DockState.EXPANDED,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            coroutineScope.launch {
+                                if (!reduceMotion) {
+                                    sproutScale.animateTo(
+                                        targetValue = 0.9f,
+                                        animationSpec = tween(KannachMotion.SOFT / 3, easing = KannachMotion.Settle)
+                                    )
+                                    sproutScale.animateTo(
+                                        targetValue = 1.08f,
+                                        animationSpec = tween(KannachMotion.SOFT / 3, easing = KannachMotion.Settle)
+                                    )
+                                    sproutScale.animateTo(
+                                        targetValue = 1f,
+                                        animationSpec = tween(KannachMotion.SOFT / 3, easing = KannachMotion.Settle)
+                                    )
+                                }
+                            }
+                            viewModel.openSheet(todayKey)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    KannachIcon(
+                        icon = KannachIconType.SPROUT,
+                        tint = palette.onGreen,
+                        strokeWidthDp = 2.dp,
+                        contentDescription = strings.dockToday,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .scale(sproutScale.value)
+                    )
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.width(10.dp))
-
-        // NV6b: Detached Plant button (64 dp circle, stitched inner ring inset 5 dp)
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .paperShadow(
-                    shadowColor = palette.paperShadow,
-                    shape = CircleShape,
-                    offsetY = 4.dp
-                )
-                .clip(CircleShape)
-                .background(palette.green)
-                .border(1.5.dp, palette.greenDeep, CircleShape)
-                .dashedHandDrawnBorder(
-                    color = palette.greenLine.copy(alpha = 0.7f),
-                    shape = CircleShape,
-                    strokeWidth = 1.2.dp,
-                    dashIntervals = floatArrayOf(8f, 6f),
-                    inset = 5.dp
-                )
-                .semantics { contentDescription = strings.dockToday }
-                .testTag("dock_plant_button")
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    coroutineScope.launch {
-                        if (!reduceMotion) {
-                            sproutScale.animateTo(
-                                targetValue = 0.9f,
-                                animationSpec = tween(KannachMotion.SOFT / 3, easing = KannachMotion.Settle)
-                            )
-                            sproutScale.animateTo(
-                                targetValue = 1.08f,
-                                animationSpec = tween(KannachMotion.SOFT / 3, easing = KannachMotion.Settle)
-                            )
-                            sproutScale.animateTo(
-                                targetValue = 1f,
-                                animationSpec = tween(KannachMotion.SOFT / 3, easing = KannachMotion.Settle)
-                            )
-                        }
-                    }
-                    viewModel.openSheet(todayKey)
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            KannachIcon(
-                icon = KannachIconType.SPROUT,
-                tint = palette.onGreen,
-                strokeWidthDp = 2.dp,
-                contentDescription = strings.dockToday,
+        // DK1: COLLAPSED — 52 dp round bud, palette.green, sprout icon in palette.onGreen,
+        // centered at the bottom (above navigationBarsPadding()), same paperShadow weight as Plant button,
+        // contentDescription = strings.dockOpen.
+        if (showCollapsedBud) {
+            Box(
                 modifier = Modifier
-                    .size(28.dp)
-                    .scale(sproutScale.value)
-            )
+                    .graphicsLayer {
+                        val p = (1f - dockProgress.value).coerceIn(0f, 1f)
+                        alpha = p
+                        val s = 0.6f + 0.4f * p
+                        scaleX = s
+                        scaleY = s
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    }
+                    .size(52.dp)
+                    .paperShadow(
+                        shadowColor = palette.paperShadow,
+                        shape = CircleShape,
+                        offsetY = 4.dp
+                    )
+                    .clip(CircleShape)
+                    .background(palette.green)
+                    .border(1.5.dp, palette.greenDeep, CircleShape)
+                    .dashedHandDrawnBorder(
+                        color = palette.greenLine.copy(alpha = 0.7f),
+                        shape = CircleShape,
+                        strokeWidth = 1.2.dp,
+                        dashIntervals = floatArrayOf(8f, 6f),
+                        inset = 4.dp
+                    )
+                    .semantics { contentDescription = strings.dockOpen }
+                    .testTag("dock_bud_button")
+                    .clickable(
+                        enabled = dockState == DockState.COLLAPSED,
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onExpandDock
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                KannachIcon(
+                    icon = KannachIconType.SPROUT,
+                    tint = palette.onGreen,
+                    strokeWidthDp = 2.dp,
+                    contentDescription = strings.dockOpen,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
@@ -668,6 +801,7 @@ private fun PaperDockSlot(
     reduceMotion: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     hasBadge: Boolean = false
 ) {
     val palette = LocalKannachPalette.current
@@ -690,6 +824,7 @@ private fun PaperDockSlot(
         }
     }
 
+    // DK6: Fixed slots — no animateContentSize; slot widths are fixed; label cross-fades by alpha for the selected slot.
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -698,6 +833,7 @@ private fun PaperDockSlot(
             .clip(HandDrawnRadiusShape)
             .semantics { contentDescription = label }
             .clickable(
+                enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
@@ -727,12 +863,6 @@ private fun PaperDockSlot(
                 }
             }
             .padding(horizontal = 6.dp, vertical = 4.dp)
-            .animateContentSize(
-                animationSpec = tween(
-                    durationMillis = if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT,
-                    easing = KannachMotion.Settle
-                )
-            )
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -765,7 +895,10 @@ private fun PaperDockSlot(
                     color = palette.greenDeep,
                     maxLines = 1,
                     softWrap = false,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = highlightTrim.value
+                    }
                 )
             }
         }
@@ -868,7 +1001,7 @@ private fun TearOffPageSurface(
                     )
                 }
 
-                // HM2: Top edge torn zig-zag path in palette.line
+                // HM2 & TC3: Top and bottom torn zig-zag paths in palette.line
                 val zigStep = 8.dp.toPx().coerceAtLeast(4f)
                 val zigDepth = 4.dp.toPx().coerceAtMost(h * 0.1f)
                 val teethCount = (w / zigStep).toInt().coerceAtLeast(2)
@@ -878,6 +1011,11 @@ private fun TearOffPageSurface(
                     for (i in 0 until teethCount) {
                         lineTo((i + 0.5f) * actualStep, 0f)
                         lineTo((i + 1) * actualStep, zigDepth)
+                    }
+                    moveTo(0f, h - zigDepth)
+                    for (i in 0 until teethCount) {
+                        lineTo((i + 0.5f) * actualStep, h)
+                        lineTo((i + 1) * actualStep, h - zigDepth)
                     }
                 }
                 drawPath(
@@ -912,17 +1050,12 @@ private fun TearOffPageSurface(
 }
 
 /**
- * HM2: TodayPageCard (current month).
- * A tear-off desk-calendar page that owns all remaining height below the month grid:
- * - Top edge: torn zig-zag path in palette.line; two small punched holes at the top (circles, palette.paperLo)
- * - Weekday name (UI font, 13 sp, letter-spaced only for Latin scripts — never letter-space Arabic)
- * - Huge day number in the hand font (72 sp, greenDeep), month + year below (14 sp)
- * - Greeting line (greet* copy) inside the card under the date
- * - Lower half = ruled paper (linedPaperBackground):
- *   - Today empty: faint placeholder line + sprout + todayCardEmpty
- *   - Today written: the doodle (>= 112 dp, tilt) beside the first 3 lines of text in the hand font, maxLines = 3, ellipsis
- * - Tap anywhere -> write (empty) or memory card (written). No extra button.
- * - Tilt paperTilt(-0.5f); shadow paperShadow.
+ * HM2 & TC1–TC5: TodayPageCard (current month).
+ * Constraint-driven tiers based on the card's own available height via BoxWithConstraints:
+ * - Full (h >= 230.dp): Current layout (weekday, 72 sp day number, month+year, greeting, ruled area with 112 dp doodle + up to 3 lines of text).
+ * - Compact (150.dp <= h < 230.dp): Day number 48 sp; weekday and month/year on one line beside it; doodle 72 dp; greeting hidden; ruled area shows 2 lines of text max.
+ * - Mini (h < 150.dp): One row: day number 40 sp at the start, then the doodle (56 dp) or sprout icon, then one line of text (maxLines = 1, ellipsis). No ruled lines, no greeting, no month line.
+ * - TC2: Nothing may exceed the card. No child uses a fixed height larger than the tier allows. The ruled area uses weight(1f) with heightIn(min = 0.dp).
  */
 @Composable
 fun TodayPageCard(
@@ -935,6 +1068,7 @@ fun TodayPageCard(
     val isRtl = I18n.isRtl(language)
     val strings = I18n.forLanguage(language)
     val entries by viewModel.entries.collectAsState()
+    val density = LocalDensity.current
 
     val todayKey = viewModel.getTodayKey()
     val todayEntry = entries[todayKey]
@@ -955,6 +1089,10 @@ fun TodayPageCard(
         I18n.formatMonthLabel(nowYear, nowMonth, language, userSettings.useArabicIndicNumerals)
     }
 
+    val tightTextStyle = remember {
+        TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+    }
+
     TearOffPageSurface(
         modifier = modifier.fillMaxSize(),
         showPunchedHoles = true,
@@ -963,147 +1101,423 @@ fun TodayPageCard(
             viewModel.openSheet(todayKey)
         }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 22.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Upper half: Desk-calendar header (weekday, 72sp day number, month+year, greeting)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = weekdayName,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    fontFamily = LocalKannachUiFont.current,
-                    letterSpacing = if (isRtl) 0.sp else 1.6.sp,
-                    color = palette.inkSoft,
-                    maxLines = 1
-                )
-
-                Text(
-                    text = dayNumberStr,
-                    fontSize = 72.sp,
-                    lineHeight = 72.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = LocalKannachHandFont.current,
-                    color = palette.greenDeep,
-                    maxLines = 1,
-                    modifier = Modifier.testTag("today_page_huge_day")
-                )
-
-                Text(
-                    text = monthYearStr,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    fontFamily = LocalKannachUiFont.current,
-                    color = palette.inkSoft,
-                    maxLines = 1
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Text(
-                    text = greetingText,
-                    fontSize = 13.sp,
-                    fontFamily = LocalKannachHandFont.current,
-                    color = palette.inkFaint,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.testTag("today_page_greeting")
-                )
+            val cardHeight = maxHeight
+            val tier = when {
+                cardHeight >= 230.dp -> 2 // Full
+                cardHeight >= 150.dp -> 1 // Compact
+                else -> 0                 // Mini
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Lower half: Ruled paper (linedPaperBackground)
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .linedPaperBackground(
-                        lineColor = palette.line.copy(alpha = 0.7f),
-                        lineHeightDp = 26.dp
+            if (tier == 0) {
+                // Mini tier (h < 150.dp): One row: day number 40 sp at the start,
+                // then the doodle (56 dp) or sprout icon, then one line of text (maxLines = 1, ellipsis).
+                // No ruled lines, no greeting, no month line.
+                val miniDoodleSize = (cardHeight - 20.dp).coerceIn(24.dp, 56.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .testTag("today_page_mini_row"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = dayNumberStr,
+                        fontSize = 40.sp,
+                        lineHeight = 40.sp,
+                        style = tightTextStyle,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = LocalKannachHandFont.current,
+                        color = palette.greenDeep,
+                        maxLines = 1,
+                        modifier = Modifier.testTag("today_page_huge_day")
                     )
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (todayEntry == null) {
-                    // Today empty: faint placeholder line + sprout + todayCardEmpty
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            KannachIcon(
-                                icon = KannachIconType.SPROUT,
-                                tint = palette.green,
-                                strokeWidthDp = 2.dp,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = strings.todayCardEmpty,
-                                fontSize = 15.sp,
-                                fontFamily = LocalKannachHandFont.current,
-                                color = palette.inkSoft,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Box(
-                            modifier = Modifier
-                                .width(120.dp)
-                                .height(1.dp)
-                                .background(palette.line)
-                        )
-                    }
-                } else {
-                    // Today written: doodle (>= 112 dp, tilt) beside first 3 lines of text in hand font, maxLines = 3, ellipsis
-                    val doodleColor = try {
-                        Color(android.graphics.Color.parseColor(todayEntry.color))
-                    } catch (_: Exception) {
-                        palette.green
-                    }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
+                    if (todayEntry == null) {
+                        KannachIcon(
+                            icon = KannachIconType.SPROUT,
+                            tint = palette.green,
+                            strokeWidthDp = 2.dp,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .testTag("today_page_sprout")
+                        )
+                        Text(
+                            text = strings.todayCardEmpty,
+                            fontSize = 15.sp,
+                            lineHeight = 18.sp,
+                            style = tightTextStyle,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.inkSoft,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("today_page_empty_text")
+                        )
+                    } else {
+                        val doodleColor = try {
+                            Color(android.graphics.Color.parseColor(todayEntry.color))
+                        } catch (_: Exception) {
+                            palette.green
+                        }
                         Box(
                             modifier = Modifier
-                                .size(112.dp)
+                                .size(miniDoodleSize)
                                 .paperTilt(-2.2f),
                             contentAlignment = Alignment.Center
                         ) {
                             GlyphView(
                                 strokes = todayEntry.strokes,
                                 color = doodleColor,
-                                modifier = Modifier.size(112.dp)
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .testTag("today_page_doodle")
                             )
                         }
-
                         val displayText = todayEntry.text.trim().ifBlank { strings.drawLabel }
                         Text(
                             text = displayText,
                             fontSize = 15.sp,
-                            lineHeight = 22.sp,
+                            lineHeight = 18.sp,
+                            style = tightTextStyle,
                             fontFamily = LocalKannachHandFont.current,
                             color = palette.ink,
-                            maxLines = 3,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("today_page_written_text")
                         )
+                    }
+                }
+            } else if (tier == 1) {
+                // Compact tier (150.dp <= h < 230.dp):
+                // Day number 48 sp; weekday and month/year on ONE line beside it;
+                // doodle 72 dp; greeting hidden; ruled area shows 2 lines of text max.
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 14.dp, bottom = 6.dp)
+                        .testTag("today_page_compact_col"),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)
+                    ) {
+                        Text(
+                            text = dayNumberStr,
+                            fontSize = 48.sp,
+                            lineHeight = 48.sp,
+                            style = tightTextStyle,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.greenDeep,
+                            maxLines = 1,
+                            modifier = Modifier.testTag("today_page_huge_day")
+                        )
+                        Text(
+                            text = "$weekdayName · $monthYearStr",
+                            fontSize = 13.sp,
+                            lineHeight = 16.sp,
+                            style = tightTextStyle,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = LocalKannachUiFont.current,
+                            color = palette.inkSoft,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .testTag("today_page_compact_date_line")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // TC2: Ruled area uses weight(1f) with heightIn(min = 0.dp)
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 0.dp)
+                            .fillMaxWidth()
+                            .linedPaperBackground(
+                                lineColor = palette.line.copy(alpha = 0.7f),
+                                lineHeightDp = 24.dp
+                            )
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val ruledInnerH = maxHeight
+                        if (todayEntry == null) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    KannachIcon(
+                                        icon = KannachIconType.SPROUT,
+                                        tint = palette.green,
+                                        strokeWidthDp = 2.dp,
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .testTag("today_page_sprout")
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = strings.todayCardEmpty,
+                                        fontSize = 14.sp,
+                                        lineHeight = 18.sp,
+                                        style = tightTextStyle,
+                                        fontFamily = LocalKannachHandFont.current,
+                                        color = palette.inkSoft,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.testTag("today_page_empty_text")
+                                    )
+                                }
+                                if (ruledInnerH >= 36.dp) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(120.dp)
+                                            .height(1.dp)
+                                            .background(palette.line)
+                                    )
+                                }
+                            }
+                        } else {
+                            val doodleColor = try {
+                                Color(android.graphics.Color.parseColor(todayEntry.color))
+                            } catch (_: Exception) {
+                                palette.green
+                            }
+                            val compactDoodleSize = (ruledInnerH - 6.dp).coerceIn(28.dp, 72.dp)
+                            val lineHeightDp = with(density) { 19.sp.toDp() }
+                            val allowedLines = ((ruledInnerH - 4.dp) / lineHeightDp).toInt().coerceIn(1, 2)
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(compactDoodleSize)
+                                        .paperTilt(-2.2f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    GlyphView(
+                                        strokes = todayEntry.strokes,
+                                        color = doodleColor,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .testTag("today_page_doodle")
+                                    )
+                                }
+
+                                val displayText = todayEntry.text.trim().ifBlank { strings.drawLabel }
+                                Text(
+                                    text = displayText,
+                                    fontSize = 14.sp,
+                                    lineHeight = 19.sp,
+                                    style = tightTextStyle,
+                                    fontFamily = LocalKannachHandFont.current,
+                                    color = palette.ink,
+                                    maxLines = allowedLines,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("today_page_written_text")
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Full tier (h >= 230.dp): Current layout
+                val topPad = if (cardHeight < 260.dp) 14.dp else 20.dp
+                val midGap = if (cardHeight < 260.dp) 4.dp else 8.dp
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = topPad, bottom = 6.dp)
+                        .testTag("today_page_full_col"),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Upper half: Desk-calendar header (weekday, 72sp day number, month+year, greeting)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = weekdayName,
+                            fontSize = 13.sp,
+                            lineHeight = 15.sp,
+                            style = tightTextStyle,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = LocalKannachUiFont.current,
+                            letterSpacing = if (isRtl) 0.sp else 1.6.sp,
+                            color = palette.inkSoft,
+                            maxLines = 1
+                        )
+
+                        Text(
+                            text = dayNumberStr,
+                            fontSize = 72.sp,
+                            lineHeight = 72.sp,
+                            style = tightTextStyle,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.greenDeep,
+                            maxLines = 1,
+                            modifier = Modifier.testTag("today_page_huge_day")
+                        )
+
+                        Text(
+                            text = monthYearStr,
+                            fontSize = 14.sp,
+                            lineHeight = 16.sp,
+                            style = tightTextStyle,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = LocalKannachUiFont.current,
+                            color = palette.inkSoft,
+                            maxLines = 1
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = greetingText,
+                            fontSize = 13.sp,
+                            lineHeight = 15.sp,
+                            style = tightTextStyle,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.inkFaint,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag("today_page_greeting")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(midGap))
+
+                    // Lower half: Ruled paper (linedPaperBackground), weight(1f) + heightIn(min = 0.dp) (TC2)
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 0.dp)
+                            .fillMaxWidth()
+                            .linedPaperBackground(
+                                lineColor = palette.line.copy(alpha = 0.7f),
+                                lineHeightDp = 26.dp
+                            )
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val ruledInnerH = maxHeight
+                        if (todayEntry == null) {
+                            // Today empty: faint placeholder line + sprout + todayCardEmpty
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    KannachIcon(
+                                        icon = KannachIconType.SPROUT,
+                                        tint = palette.green,
+                                        strokeWidthDp = 2.dp,
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .testTag("today_page_sprout")
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = strings.todayCardEmpty,
+                                        fontSize = 15.sp,
+                                        lineHeight = 18.sp,
+                                        style = tightTextStyle,
+                                        fontFamily = LocalKannachHandFont.current,
+                                        color = palette.inkSoft,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.testTag("today_page_empty_text")
+                                    )
+                                }
+                                if (ruledInnerH >= 36.dp) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(120.dp)
+                                            .height(1.dp)
+                                            .background(palette.line)
+                                    )
+                                }
+                            }
+                        } else {
+                            // Today written: doodle (up to 112 dp, never exceeding ruledInnerH) beside up to 3 lines of text
+                            val doodleColor = try {
+                                Color(android.graphics.Color.parseColor(todayEntry.color))
+                            } catch (_: Exception) {
+                                palette.green
+                            }
+                            val fullDoodleSize = (ruledInnerH - 6.dp).coerceIn(28.dp, 112.dp)
+                            val lineHeightDp = with(density) { 21.sp.toDp() }
+                            val allowedLines = ((ruledInnerH - 4.dp) / lineHeightDp).toInt().coerceIn(1, 3)
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(fullDoodleSize)
+                                        .paperTilt(-2.2f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    GlyphView(
+                                        strokes = todayEntry.strokes,
+                                        color = doodleColor,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .testTag("today_page_doodle")
+                                    )
+                                }
+
+                                val displayText = todayEntry.text.trim().ifBlank { strings.drawLabel }
+                                Text(
+                                    text = displayText,
+                                    fontSize = 15.sp,
+                                    lineHeight = 21.sp,
+                                    style = tightTextStyle,
+                                    fontFamily = LocalKannachHandFont.current,
+                                    color = palette.ink,
+                                    maxLines = allowedLines,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("today_page_written_text")
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1487,17 +1901,18 @@ fun MonthGrid(
         cal.getActualMaximum(Calendar.DAY_OF_MONTH)
     }
 
-    // H5 & H9: Slow, calm breathing animation for today (3200ms Breathe curve)
+    // H5 & H9 & PF1: Slow, calm breathing animation for today (3200ms Breathe curve)
+    // todayScale is read only inside today's DayCell graphicsLayer lambda so other cells and the grid never recompose.
     val hasTodayEntry = entries[todayKey] != null
     val todayBreathingTransition = rememberInfiniteTransition(label = "todayBreathe")
-    val todayScale by todayBreathingTransition.animateFloat(
+    val todayScaleAnim = todayBreathingTransition.animateFloat(
         initialValue = 1.0f,
         targetValue = if (!hasTodayEntry) 1.06f else 1.0f,
         animationSpec = infiniteRepeatable(
             animation = tween(3200, easing = KannachMotion.Breathe),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "todayScale"
+        label = "todayBreathingScale"
     )
 
     val userSettings by viewModel.userSettings.collectAsState()
@@ -1514,11 +1929,32 @@ fun MonthGrid(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val totalHeight = maxHeight
+        val totalWidth = maxWidth
+        val dockInset = LocalDockInset.current
 
-        // HM1 & HM4: MonthGrid is a non-scrolling Column: weekday row, grid (natural height),
-        // then TodayPageCard/MonthPageCard with Modifier.weight(1f), heightIn(min = 160.dp),
-        // or a 64 dp single-line compact strip when remaining height < 160 dp.
-        // Bottom padding = dock height (76.dp) + 16.dp = 92.dp.
+        // TC4: Grid yields before the card clips.
+        // If the card's available height is below the Full threshold (230.dp),
+        // MonthGrid lowers the cell height ratio from 0.9f down to a floor of 0.78f to give the card room.
+        val totalCellsForCurrent = firstDayOfWeekOffset + daysInMonth
+        val numWeeksForCurrent = ((totalCellsForCurrent + 6) / 7).coerceAtLeast(4)
+        val gridAvailableWidth = (totalWidth - 24.dp).coerceAtLeast(140.dp)
+        val singleCellWidth = ((gridAvailableWidth - 36.dp) / 7f).coerceAtLeast(20.dp)
+        val nonGridOverhead = 4.dp + 28.dp + 8.dp + dockInset + ((numWeeksForCurrent - 1) * 4).dp
+        val maxGridHeightForFullCard = totalHeight - nonGridOverhead - 230.dp
+        val baseCellHeight = singleCellWidth / 0.9f
+        val desiredCellHeight = maxGridHeightForFullCard / numWeeksForCurrent
+        val cellRatioFloor = 0.78f
+        val defaultCellRatio = 0.9f
+        val yieldedRatio = if (desiredCellHeight >= baseCellHeight) {
+            defaultCellRatio
+        } else {
+            val scale = (desiredCellHeight / baseCellHeight).coerceIn(cellRatioFloor / defaultCellRatio, 1f)
+            (defaultCellRatio * scale).coerceIn(cellRatioFloor, defaultCellRatio)
+        }
+        // Compose aspectRatio is width / height; scaling height by (yieldedRatio / defaultCellRatio) increases width/height
+        val effectiveComposeAspectRatio = defaultCellRatio * (defaultCellRatio / yieldedRatio)
+
+        // HM1 & TC3: MonthGrid is a non-scrolling Column using LocalDockInset as bottom padding
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1539,109 +1975,93 @@ fun MonthGrid(
                 }
                 .padding(horizontal = 12.dp)
                 .padding(top = 4.dp)
-                .navigationBarsPadding()
-                .padding(bottom = 92.dp),
+                .padding(bottom = dockInset),
             verticalArrangement = Arrangement.Top
         ) {
 
-        // Weekdays Row (ordered starting from weekStartDow)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp)
-                .testTag("month_weekday_row"),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            val startShift = (weekStartDow - Calendar.SUNDAY + 7) % 7
-            val weekDays = remember(strings.weekdays, startShift) {
-                (0 until 7).map { i -> strings.weekdays[(startShift + i) % 7] }
-            }
-            weekDays.forEachIndexed { idx, wDay ->
-                Text(
-                    text = wDay,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = palette.inkFaint,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("weekday_header_$idx")
-                )
-            }
-        }
-
-        // 7-Column Grid of Month Days with Organic Ground Lines (H6), Page Flip (D3, H8) & Connecting Vines (H7)
-        val density = LocalDensity.current
-        val reduceMotion = rememberReduceMotion()
-        val pageSlideDistance = remember(density) { with(density) { 24.dp.roundToPx() } }
-
-        AnimatedContent(
-            targetState = Pair(currentYear, currentMonth),
-            transitionSpec = {
-                if (reduceMotion) {
-                    fadeIn(animationSpec = tween(KannachMotion.INSTANT)) togetherWith
-                        fadeOut(animationSpec = tween(KannachMotion.INSTANT))
-                } else {
-                    val isForward = (targetState.first * 12 + targetState.second) > (initialState.first * 12 + initialState.second)
-                    val sign = if (isForward) {
-                        if (isRtl) -1 else 1
-                    } else {
-                        if (isRtl) 1 else -1
-                    }
-                    val enterOffsetX = pageSlideDistance * sign
-                    val exitOffsetX = -pageSlideDistance * sign
-
-                    (slideInHorizontally(
-                        animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle),
-                        initialOffsetX = { enterOffsetX }
-                    ) + fadeIn(
-                        animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
-                    )).togetherWith(
-                        slideOutHorizontally(
-                            animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle),
-                            targetOffsetX = { exitOffsetX }
-                        ) + fadeOut(
-                            animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
-                        )
+            // Weekdays Row (ordered starting from weekStartDow)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp)
+                    .testTag("month_weekday_row"),
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                val startShift = (weekStartDow - Calendar.SUNDAY + 7) % 7
+                val weekDays = remember(strings.weekdays, startShift) {
+                    (0 until 7).map { i -> strings.weekdays[(startShift + i) % 7] }
+                }
+                weekDays.forEachIndexed { idx, wDay ->
+                    Text(
+                        text = wDay,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.inkFaint,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("weekday_header_$idx")
                     )
                 }
-            },
-            label = "MonthPageFlip"
-        ) { (targetYear, targetMonth) ->
-            val daysInThisMonth = remember(targetYear, targetMonth) {
-                val cal = Calendar.getInstance()
-                cal.set(targetYear, targetMonth - 1, 1)
-                cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-            }
-            val firstDayOffset = remember(targetYear, targetMonth, weekStartDow) {
-                val cal = Calendar.getInstance()
-                cal.set(targetYear, targetMonth - 1, 1)
-                (cal.get(Calendar.DAY_OF_WEEK) - weekStartDow + 7) % 7
             }
 
-            // H7: Vine draws progressively once when month is displayed (PAGE ms)
-            val vineAnim = remember { Animatable(0f) }
-            LaunchedEffect(targetYear, targetMonth) {
-                vineAnim.snapTo(0f)
-                vineAnim.animateTo(1f, tween(KannachMotion.PAGE, easing = KannachMotion.Settle))
-            }
+            // 7-Column Grid of Month Days with Page Flip (D3, H8) & DL1–DL4
+            val density = LocalDensity.current
+            val reduceMotion = rememberReduceMotion()
+            val pageSlideDistance = remember(density) { with(density) { 24.dp.roundToPx() } }
 
-            val totalCells = firstDayOffset + daysInThisMonth
-            val numWeeks = (totalCells + 6) / 7
+            AnimatedContent(
+                targetState = Pair(currentYear, currentMonth),
+                transitionSpec = {
+                    if (reduceMotion) {
+                        fadeIn(animationSpec = tween(KannachMotion.INSTANT)) togetherWith
+                            fadeOut(animationSpec = tween(KannachMotion.INSTANT))
+                    } else {
+                        val isForward = (targetState.first * 12 + targetState.second) > (initialState.first * 12 + initialState.second)
+                        val sign = if (isForward) {
+                            if (isRtl) -1 else 1
+                        } else {
+                            if (isRtl) 1 else -1
+                        }
+                        val enterOffsetX = pageSlideDistance * sign
+                        val exitOffsetX = -pageSlideDistance * sign
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                for (weekIndex in 0 until numWeeks) {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        // HX4: Ground line drawn only once per week row at ~88% of the row height
-                        OrganicGroundLine(
-                            color = palette.inkFaint.copy(alpha = 0.2f),
-                            yRatio = 0.88f,
-                            modifier = Modifier.matchParentSize()
+                        (slideInHorizontally(
+                            animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle),
+                            initialOffsetX = { enterOffsetX }
+                        ) + fadeIn(
+                            animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                        )).togetherWith(
+                            slideOutHorizontally(
+                                animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle),
+                                targetOffsetX = { exitOffsetX }
+                            ) + fadeOut(
+                                animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                            )
                         )
+                    }
+                },
+                label = "MonthPageFlip"
+            ) { (targetYear, targetMonth) ->
+                val daysInThisMonth = remember(targetYear, targetMonth) {
+                    val cal = Calendar.getInstance()
+                    cal.set(targetYear, targetMonth - 1, 1)
+                    cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                }
+                val firstDayOffset = remember(targetYear, targetMonth, weekStartDow) {
+                    val cal = Calendar.getInstance()
+                    cal.set(targetYear, targetMonth - 1, 1)
+                    (cal.get(Calendar.DAY_OF_WEEK) - weekStartDow + 7) % 7
+                }
 
+                val totalCells = firstDayOffset + daysInThisMonth
+                val numWeeks = (totalCells + 6) / 7
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    for (weekIndex in 0 until numWeeks) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1652,7 +2072,7 @@ fun MonthGrid(
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .aspectRatio(0.9f)
+                                            .aspectRatio(effectiveComposeAspectRatio)
                                     )
                                 } else {
                                     val day = cellIndex - firstDayOffset + 1
@@ -1671,12 +2091,6 @@ fun MonthGrid(
 
                                     val isDimmed = entry != null && filter == "fav" && !entry.fav
 
-                                    val prevDateKey = if (day > 1) String.format(java.util.Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day - 1) else null
-                                    val nextDateKey = if (day < daysInThisMonth) String.format(java.util.Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day + 1) else null
-
-                                    val hasPrevConsecutive = prevDateKey != null && entries[prevDateKey] != null && entry != null && col > 0
-                                    val hasNextConsecutive = nextDateKey != null && entries[nextDateKey] != null && entry != null && col < 6
-
                                     DayCell(
                                         viewModel = viewModel,
                                         day = day,
@@ -1686,11 +2100,8 @@ fun MonthGrid(
                                         isFuture = isFuture,
                                         isDimmed = isDimmed,
                                         rotation = rot,
-                                        todayScale = todayScale,
-                                        hasPrevConsecutive = hasPrevConsecutive,
-                                        hasNextConsecutive = hasNextConsecutive,
-                                        vineProgress = vineAnim.value,
-                                        isRtl = isRtl,
+                                        todayScale = if (isToday) todayScaleAnim else null,
+                                        cellAspectRatio = effectiveComposeAspectRatio,
                                         onClick = { viewModel.openSheet(dateKey) },
                                         onFutureClick = {
                                             viewModel.vibrate(10)
@@ -1704,53 +2115,38 @@ fun MonthGrid(
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        // HM1–HM4: Tear-off day/month page owning all remaining height (weight(1f), heightIn(min = 160.dp)),
-        // or collapsing to a 64 dp single-line strip on short screens (< 160 dp remaining).
-        val nowCal = remember { Calendar.getInstance() }
-        val isCurrentMonth = currentYear == nowCal.get(Calendar.YEAR) &&
-                currentMonth == (nowCal.get(Calendar.MONTH) + 1)
+            // TC1–TC5: Tear-off day/month page owning all remaining height (weight(1f), heightIn(min = 0.dp))
+            val nowCal = remember { Calendar.getInstance() }
+            val isCurrentMonth = currentYear == nowCal.get(Calendar.YEAR) &&
+                    currentMonth == (nowCal.get(Calendar.MONTH) + 1)
 
-        BoxWithConstraints(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
-            val remainingHeight = maxHeight
-            val isCompactStrip = remainingHeight < 160.dp || totalHeight < 600.dp
-
-            if (isCompactStrip) {
-                CompactPageStrip(
-                    viewModel = viewModel,
-                    currentYear = currentYear,
-                    currentMonth = currentMonth,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .testTag("home_compact_strip")
-                )
-            } else if (isCurrentMonth) {
-                TodayPageCard(
-                    viewModel = viewModel,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .heightIn(min = 160.dp)
-                        .testTag("home_page_card")
-                )
-            } else {
-                MonthPageCard(
-                    viewModel = viewModel,
-                    currentYear = currentYear,
-                    currentMonth = currentMonth,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .heightIn(min = 160.dp)
-                        .testTag("home_page_card")
-                )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 0.dp)
+                    .fillMaxWidth()
+            ) {
+                if (isCurrentMonth) {
+                    TodayPageCard(
+                        viewModel = viewModel,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("home_page_card")
+                    )
+                } else {
+                    MonthPageCard(
+                        viewModel = viewModel,
+                        currentYear = currentYear,
+                        currentMonth = currentMonth,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("home_page_card")
+                    )
+                }
             }
-        }
         }
 
         // E1, E2, E3: Folded-paper corner event
@@ -1762,48 +2158,6 @@ fun MonthGrid(
         )
     }
 }
-
-/**
- * H6 & HX4: Delicate organic hand-drawn ground line drawn once per week row at ~88% of row height.
- * Simulates a faint notebook ruled line with gentle natural waviness.
- */
-@Composable
-fun OrganicGroundLine(
-    color: Color,
-    modifier: Modifier = Modifier,
-    yRatio: Float = 0.88f
-) {
-    Canvas(
-        modifier = modifier.fillMaxWidth()
-    ) {
-        val w = size.width
-        val lineY = size.height * yRatio
-        val path = Path().apply {
-            moveTo(0f, lineY)
-            val segments = 14
-            val step = w / segments
-            for (i in 0 until segments) {
-                val startX = i * step
-                val endX = (i + 1) * step
-                val wave = if (i % 2 == 0) -1.2f else 1.2f
-                quadraticBezierTo(
-                    (startX + endX) / 2f, lineY + wave,
-                    endX, lineY
-                )
-            }
-        }
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(
-                width = 1.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-        )
-    }
-}
-
-
 
 /**
  * W3 & R3: Delicate petal burst blossoming around the cell upon landing.
@@ -1878,13 +2232,13 @@ private fun PetalBurst(
 }
 
 /**
- * Single day cell in the month calendar.
- * - H6: No square background or borders on written days; pressed flowers live directly on paper.
- * - H6: Day numbers are at least 11.sp.
- * - H5 & H9: Slow 3200ms breathing for today; unwritten today displays todayWord + arrow.
- * - H7: Delicate connecting vine runner between consecutive written days.
- * - H10: Future day click triggers a gentle 2.dp horizontal wobble and shows notYet toast.
- * - W3: Records cell bounds for ceremony flight; displays bloom & petal burst on landing.
+ * Single day cell in the month calendar (DL1–DL4):
+ * - DL1: No ground lines or per-day connecting lines.
+ * - DL2: Each written/today cell is a Column with a 14 dp reserved band at the top holding the day number
+ *        (10 sp, palette.ink at 0.6 alpha, start-aligned), then the doodle area filling the rest
+ *        (GlyphView with fillMaxSize() and 2 dp padding). No overlay, no negative offsets.
+ * - DL3: Empty day keeps the HX5 stack: number and 5 dp dot centered together, one stack. Future days at 0.35 alpha.
+ * - DL4: Today keeps its border and the breathing sprout (only when today is empty). Today's number is palette.green, 11 sp, semi-bold.
  */
 @Composable
 private fun DayCell(
@@ -1896,11 +2250,8 @@ private fun DayCell(
     isFuture: Boolean,
     isDimmed: Boolean,
     rotation: Float,
-    todayScale: Float,
-    hasPrevConsecutive: Boolean,
-    hasNextConsecutive: Boolean,
-    vineProgress: Float,
-    isRtl: Boolean,
+    todayScale: State<Float>? = null,
+    cellAspectRatio: Float,
     onClick: () -> Unit,
     onFutureClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -1930,16 +2281,23 @@ private fun DayCell(
     )
 
     val cellShape = RoundedCornerShape(10.dp)
+    val language by viewModel.language.collectAsState()
+    val userSettings by viewModel.userSettings.collectAsState()
+    val dayStr = remember(day, language, userSettings.useArabicIndicNumerals) {
+        I18n.formatNumber(day, language, userSettings.useArabicIndicNumerals)
+    }
+    val tightNumberStyle = remember {
+        TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+    }
 
     Box(
         modifier = modifier
-            .aspectRatio(0.9f)
+            .aspectRatio(cellAspectRatio)
             .offset { IntOffset(wobbleX.value.dp.roundToPx(), 0) }
             .clip(cellShape)
             .onGloballyPositioned { coords ->
                 viewModel.registerCellBounds(dateKey, coords.positionInRoot(), coords.size)
             }
-            // H6: No square backgrounds or borders; only isToday has a gentle outline
             .then(
                 if (isToday) {
                     Modifier
@@ -1962,132 +2320,106 @@ private fun DayCell(
                     onClick()
                 }
             }
+            .testTag("day_cell_$dateKey")
     ) {
-        // H7 & HX4: Delicate connecting vine runner drawn between consecutive written days (drawn behind doodle)
-        if (entry != null && !isFuture && (hasPrevConsecutive || hasNextConsecutive) && vineProgress > 0.05f) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
-                val vineColor = palette.green.copy(alpha = 0.55f)
-                val centerY = size.height * 0.88f
-
-                if (hasPrevConsecutive) {
-                    val startX = if (isRtl) size.width else 0f
-                    val midX = size.width * 0.5f
-                    val path = Path().apply {
-                        moveTo(startX, centerY + 2.dp.toPx())
-                        quadraticBezierTo(
-                            (startX + midX) / 2f, centerY - 3.dp.toPx(),
-                            midX, centerY
-                        )
-                    }
-                    drawPath(path, vineColor, style = stroke)
-                }
-
-                if (hasNextConsecutive) {
-                    val endX = if (isRtl) 0f else size.width
-                    val midX = size.width * 0.5f
-                    val currentEndX = midX + (endX - midX) * vineProgress
-                    val path = Path().apply {
-                        moveTo(midX, centerY)
-                        quadraticBezierTo(
-                            (midX + endX) / 2f, centerY + 3.dp.toPx(),
-                            currentEndX, centerY + 2.dp.toPx()
-                        )
-                    }
-                    drawPath(path, vineColor, style = stroke)
-                }
-            }
-        }
-
-    val language by viewModel.language.collectAsState()
-    val userSettings by viewModel.userSettings.collectAsState()
-    val dayStr = remember(day, language, userSettings.useArabicIndicNumerals) {
-        I18n.formatNumber(day, language, userSettings.useArabicIndicNumerals)
-    }
-
-    if (entry != null && !isFuture) {
-            // Day number in TopStart with palette.paper at 0.7 alpha halo background
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(3.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(palette.paper.copy(alpha = 0.7f))
-                    .padding(horizontal = 2.dp, vertical = 1.dp)
+        if (entry != null && !isFuture) {
+            // DL2 & DL4: Column with 14 dp band at the top holding the day number, then doodle area filling the rest
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                Text(
-                    text = dayStr,
-                    fontSize = if (isToday) 11.5.sp else 11.sp,
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                    color = if (isToday) palette.greenDeep else palette.inkFaint
-                )
-            }
-
-            // Doodle box: padding(top = 14.dp) so the glyph never overlaps the day number
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 14.dp, bottom = 4.dp, start = 2.dp, end = 2.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                val glyphColor = try {
-                    Color(android.graphics.Color.parseColor(entry.color))
-                } catch (_: Exception) {
-                    palette.green
-                }
-
-                GlyphView(
-                    strokes = entry.strokes,
-                    color = glyphColor,
+                Box(
                     modifier = Modifier
-                        .fillMaxSize(0.85f)
-                        .scale(bloomScale)
-                        .rotate(rotation)
-                        .alpha(if (isDimmed) 0.16f else 1.0f)
-                )
+                        .fillMaxWidth()
+                        .height(14.dp)
+                        .padding(start = 3.dp, end = 2.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = dayStr,
+                        fontSize = if (isToday) 11.sp else 10.sp,
+                        lineHeight = if (isToday) 11.sp else 10.sp,
+                        style = tightNumberStyle,
+                        fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Medium,
+                        color = if (isToday) palette.green else palette.ink.copy(alpha = 0.6f),
+                        maxLines = 1
+                    )
+                }
 
-                if (isFreshlyPlanted) {
-                    val firstCelebratedDate by viewModel.firstPlantCelebratedDate.collectAsState()
-                    val isDoubleRing = firstCelebratedDate == dateKey
-                    PetalBurst(color = glyphColor, isDoubleRing = isDoubleRing)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val glyphColor = try {
+                        Color(android.graphics.Color.parseColor(entry.color))
+                    } catch (_: Exception) {
+                        palette.green
+                    }
+
+                    GlyphView(
+                        strokes = entry.strokes,
+                        color = glyphColor,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .scale(bloomScale)
+                            .rotate(rotation)
+                            .alpha(if (isDimmed) 0.16f else 1.0f)
+                    )
+
+                    if (isFreshlyPlanted) {
+                        val firstCelebratedDate by viewModel.firstPlantCelebratedDate.collectAsState()
+                        val isDoubleRing = firstCelebratedDate == dateKey
+                        PetalBurst(color = glyphColor, isDoubleRing = isDoubleRing)
+                    }
                 }
             }
         } else if (isToday) {
-            // Today unwritten: TopStart number with halo + breathing sprout in center
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(3.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(palette.paper.copy(alpha = 0.7f))
-                    .padding(horizontal = 2.dp, vertical = 1.dp)
+            // DL4: Today unwritten: 14 dp top band with Today's number (palette.green, 11 sp, semi-bold) + breathing sprout below
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                Text(
-                    text = dayStr,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = palette.greenDeep
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 12.dp, bottom = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                KannachIcon(
-                    icon = KannachIconType.SPROUT,
-                    tint = palette.green,
+                Box(
                     modifier = Modifier
-                        .size(20.dp)
-                        .scale(todayScale)
-                )
+                        .fillMaxWidth()
+                        .height(14.dp)
+                        .padding(start = 3.dp, end = 2.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = dayStr,
+                        fontSize = 11.sp,
+                        lineHeight = 11.sp,
+                        style = tightNumberStyle,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.green,
+                        maxLines = 1
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    KannachIcon(
+                        icon = KannachIconType.SPROUT,
+                        tint = palette.green,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .graphicsLayer {
+                                val s = todayScale?.value ?: 1f
+                                scaleX = s
+                                scaleY = s
+                            }
+                    )
+                }
             }
         } else {
-            // HX5: Empty (past or future) day = number and dot as ONE centered stack:
-            // number 11 sp on top, 5 dp dot 4 dp below, both horizontally centered.
-            // Future days: same stack, alpha 0.35.
+            // DL3: Empty (past or future) day = number and 5 dp dot centered together, one stack. Future days at 0.35 alpha.
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -3174,6 +3506,12 @@ private fun ToolButton(
 /**
  * Interactive touch drawing surface capturing points on a virtual 300x400 canvas.
  */
+/**
+ * Interactive touch drawing surface capturing points on a virtual 300x400 canvas.
+ * PF3: Uses awaitEachGesture without touch slop (a tap with no movement draws a dot),
+ * caches committed strokes in remembered Paths, extends only live stroke per move via quadraticTo,
+ * and redraws via a single mutableIntStateOf version counter.
+ */
 @Composable
 fun DrawingCanvas(
     strokes: List<List<Point>>,
@@ -3182,92 +3520,128 @@ fun DrawingCanvas(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalKannachPalette.current
-    val currentStroke = remember { mutableStateListOf<Point>() }
+    val redrawVersion = remember { mutableIntStateOf(0) }
+    val livePoints = remember { mutableListOf<Point>() }
+    val livePath = remember { Path() }
     val drawColor = try {
         Color(android.graphics.Color.parseColor(colorHex))
     } catch (_: Exception) {
         palette.green
     }
 
+    val latestOnStrokeCompleted by androidx.compose.runtime.rememberUpdatedState(onStrokeCompleted)
+
+    val committedPaths = remember(strokes) {
+        strokes.filter { it.isNotEmpty() }.map { stroke ->
+            StrokeMath.composePathFrom(stroke) to stroke.first()
+        }
+    }
+
     Canvas(
         modifier = modifier
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        val sx = 300f / size.width
-                        val sy = 400f / size.height
-                        val pt = Point(
-                            x = ((offset.x * sx) * 10f).toInt() / 10f,
-                            y = ((offset.y * sy) * 10f).toInt() / 10f
-                        )
-                        currentStroke.clear()
-                        currentStroke.add(pt)
-                    },
-                    onDrag = { change, _ ->
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    val sx = 300f / size.width
+                    val sy = 400f / size.height
+                    val p0 = Point(
+                        x = ((down.position.x * sx) * 10f).toInt() / 10f,
+                        y = ((down.position.y * sy) * 10f).toInt() / 10f
+                    )
+                    livePoints.clear()
+                    livePoints.add(p0)
+                    livePath.reset()
+                    livePath.moveTo(p0.x, p0.y)
+                    livePath.lineTo(p0.x + 0.1f, p0.y + 0.1f)
+                    var prevPoint = p0
+                    var prevMidPoint: Point? = null
+                    redrawVersion.intValue++
+
+                    var hasMoved = false
+                    drag(down.id) { change ->
                         change.consume()
-                        val sx = 300f / size.width
-                        val sy = 400f / size.height
                         val pt = Point(
                             x = ((change.position.x * sx) * 10f).toInt() / 10f,
                             y = ((change.position.y * sy) * 10f).toInt() / 10f
                         )
-                        if (currentStroke.isEmpty() || Math.hypot(
-                                (pt.x - currentStroke.last().x).toDouble(),
-                                (pt.y - currentStroke.last().y).toDouble()
+                        if (Math.hypot(
+                                (pt.x - livePoints.last().x).toDouble(),
+                                (pt.y - livePoints.last().y).toDouble()
                             ) > 2.0
                         ) {
-                            currentStroke.add(pt)
+                            livePoints.add(pt)
+                            if (livePoints.size == 2) {
+                                livePath.reset()
+                                livePath.moveTo(p0.x, p0.y)
+                                val mid = Point((p0.x + pt.x) / 2f, (p0.y + pt.y) / 2f)
+                                livePath.lineTo(mid.x, mid.y)
+                                prevMidPoint = mid
+                            } else {
+                                val mid = Point((prevPoint.x + pt.x) / 2f, (prevPoint.y + pt.y) / 2f)
+                                livePath.quadraticTo(prevPoint.x, prevPoint.y, mid.x, mid.y)
+                                prevMidPoint = mid
+                            }
+                            prevPoint = pt
+                            hasMoved = true
+                            redrawVersion.intValue++
                         }
-                    },
-                    onDragEnd = {
-                        if (currentStroke.isNotEmpty()) {
-                            onStrokeCompleted(currentStroke.toList())
-                            currentStroke.clear()
-                        }
-                    },
-                    onDragCancel = {
-                        currentStroke.clear()
                     }
-                )
+
+                    if (livePoints.isNotEmpty()) {
+                        if (hasMoved && livePoints.size >= 2) {
+                            livePath.lineTo(prevPoint.x, prevPoint.y)
+                        }
+                        latestOnStrokeCompleted(livePoints.toList())
+                        livePoints.clear()
+                        livePath.reset()
+                        redrawVersion.intValue++
+                    }
+                }
             }
     ) {
+        val version = redrawVersion.intValue
         val scaleX = size.width / 300f
         val scaleY = size.height / 400f
-        val strokeWidth = 8f * scaleX
-        val strokeStyle = Stroke(
-            width = strokeWidth,
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round
-        )
 
-        // Draw existing strokes
-        for (stroke in strokes) {
-            if (stroke.isNotEmpty()) {
-                val path = StrokeMath.composePathFrom(stroke)
-                val matrix = androidx.compose.ui.graphics.Matrix().apply {
-                    scale(scaleX, scaleY)
-                }
-                path.transform(matrix)
-                drawPath(path = path, color = drawColor, style = strokeStyle)
+        withTransform({
+            scale(scaleX, scaleY, Offset.Zero)
+        }) {
+            for ((path, firstPt) in committedPaths) {
+                drawCircle(
+                    color = drawColor.copy(alpha = 0.9f),
+                    radius = (8f * 1.25f) / 2f,
+                    center = Offset(firstPt.x, firstPt.y)
+                )
+                drawPath(path = path, color = drawColor, style = Stroke(width = 8f, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
-        }
-
-        // Draw current active stroke
-        if (currentStroke.isNotEmpty()) {
-            val path = StrokeMath.composePathFrom(currentStroke.toList())
-            val matrix = androidx.compose.ui.graphics.Matrix().apply {
-                scale(scaleX, scaleY)
+            if (version >= 0 && livePoints.isNotEmpty()) {
+                val firstPt = livePoints.first()
+                drawCircle(
+                    color = drawColor.copy(alpha = 0.9f),
+                    radius = (8f * 1.25f) / 2f,
+                    center = Offset(firstPt.x, firstPt.y)
+                )
+                drawPath(path = livePath, color = drawColor, style = Stroke(width = 8f, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
-            path.transform(matrix)
-            drawPath(path = path, color = drawColor, style = strokeStyle)
         }
     }
 }
 
+private data class CachedSketchStroke(
+    val path: Path,
+    val color: Color,
+    val width: Float,
+    val firstPoint: Point
+)
+
 /**
- * SK1 & SK3: Parameterized DrawingCanvas overload for Just Draw (Draw tab)
+ * SK1 & SK3 & PF3 & JD3 & JD4: Parameterized DrawingCanvas overload for Just Draw (Draw tab)
  * supporting per-stroke color & width (SketchStroke) and 14-canvas-unit proximity eraser mode.
- * Preserves the exact same `composePathFrom` Bezier smoothing and point filtering (`> 2.0`).
+ * - JD3: One light tick on first stroke only (HapticFeedbackType.TextHandleMove), respecting
+ *   the system touch-feedback setting. No haptics while drawing.
+ * - JD4: Round caps and joins. The first point of each stroke also draws a dot of width * 1.25
+ *   at 0.9 alpha (ink pooling). Width stays constant per stroke.
  */
 @Composable
 fun DrawingCanvas(
@@ -3277,10 +3651,15 @@ fun DrawingCanvas(
     isEraserMode: Boolean,
     onStrokeCompleted: (SketchStroke) -> Unit,
     onEraseAt: (Point) -> Unit,
+    onStrokeStarted: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val palette = LocalKannachPalette.current
-    val currentStroke = remember { mutableStateListOf<Point>() }
+    val hapticFeedback = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val hapticsEnabled = LocalHapticsEnabled.current
+    val redrawVersion = remember { mutableIntStateOf(0) }
+    val livePoints = remember { mutableListOf<Point>() }
+    val livePath = remember { Path() }
     val activeColor = try {
         Color(android.graphics.Color.parseColor(currentColorHex))
     } catch (_: Exception) {
@@ -3292,103 +3671,148 @@ fun DrawingCanvas(
     val latestWidth by androidx.compose.runtime.rememberUpdatedState(currentWidth)
     val latestOnStrokeCompleted by androidx.compose.runtime.rememberUpdatedState(onStrokeCompleted)
     val latestOnEraseAt by androidx.compose.runtime.rememberUpdatedState(onEraseAt)
+    val latestOnStrokeStarted by androidx.compose.runtime.rememberUpdatedState(onStrokeStarted)
+    val latestStrokesEmpty by androidx.compose.runtime.rememberUpdatedState(sketchStrokes.isEmpty())
+    val latestHapticsEnabled by androidx.compose.runtime.rememberUpdatedState(hapticsEnabled)
+
+    val committedPaths = remember(sketchStrokes) {
+        sketchStrokes.filter { it.points.isNotEmpty() }.map { stroke ->
+            val strokeColor = try {
+                Color(android.graphics.Color.parseColor(stroke.colorHex))
+            } catch (_: Exception) {
+                palette.green
+            }
+            CachedSketchStroke(
+                path = StrokeMath.composePathFrom(stroke.points),
+                color = strokeColor,
+                width = stroke.width,
+                firstPoint = stroke.points.first()
+            )
+        }
+    }
 
     Canvas(
         modifier = modifier
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        val sx = 300f / size.width
-                        val sy = 400f / size.height
-                        val pt = Point(
-                            x = ((offset.x * sx) * 10f).toInt() / 10f,
-                            y = ((offset.y * sy) * 10f).toInt() / 10f
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    val wasFirstStroke = !latestEraserMode && latestStrokesEmpty
+                    latestOnStrokeStarted()
+                    if (wasFirstStroke && latestHapticsEnabled) {
+                        hapticFeedback.performHapticFeedback(
+                            androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove
                         )
-                        currentStroke.clear()
-                        if (latestEraserMode) {
+                    }
+                    val sx = 300f / size.width
+                    val sy = 400f / size.height
+                    val p0 = Point(
+                        x = ((down.position.x * sx) * 10f).toInt() / 10f,
+                        y = ((down.position.y * sy) * 10f).toInt() / 10f
+                    )
+
+                    if (latestEraserMode) {
+                        latestOnEraseAt(p0)
+                        drag(down.id) { change ->
+                            change.consume()
+                            val pt = Point(
+                                x = ((change.position.x * sx) * 10f).toInt() / 10f,
+                                y = ((change.position.y * sy) * 10f).toInt() / 10f
+                            )
                             latestOnEraseAt(pt)
-                        } else {
-                            currentStroke.add(pt)
                         }
-                    },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        val sx = 300f / size.width
-                        val sy = 400f / size.height
-                        val pt = Point(
-                            x = ((change.position.x * sx) * 10f).toInt() / 10f,
-                            y = ((change.position.y * sy) * 10f).toInt() / 10f
-                        )
-                        if (latestEraserMode) {
-                            latestOnEraseAt(pt)
-                        } else {
-                            if (currentStroke.isEmpty() || Math.hypot(
-                                    (pt.x - currentStroke.last().x).toDouble(),
-                                    (pt.y - currentStroke.last().y).toDouble()
+                    } else {
+                        livePoints.clear()
+                        livePoints.add(p0)
+                        livePath.reset()
+                        livePath.moveTo(p0.x, p0.y)
+                        livePath.lineTo(p0.x + 0.1f, p0.y + 0.1f)
+                        var prevPoint = p0
+                        var prevMidPoint: Point? = null
+                        redrawVersion.intValue++
+
+                        var hasMoved = false
+                        drag(down.id) { change ->
+                            change.consume()
+                            val pt = Point(
+                                x = ((change.position.x * sx) * 10f).toInt() / 10f,
+                                y = ((change.position.y * sy) * 10f).toInt() / 10f
+                            )
+                            if (Math.hypot(
+                                    (pt.x - livePoints.last().x).toDouble(),
+                                    (pt.y - livePoints.last().y).toDouble()
                                 ) > 2.0
                             ) {
-                                currentStroke.add(pt)
+                                livePoints.add(pt)
+                                if (livePoints.size == 2) {
+                                    livePath.reset()
+                                    livePath.moveTo(p0.x, p0.y)
+                                    val mid = Point((p0.x + pt.x) / 2f, (p0.y + pt.y) / 2f)
+                                    livePath.lineTo(mid.x, mid.y)
+                                    prevMidPoint = mid
+                                } else {
+                                    val mid = Point((prevPoint.x + pt.x) / 2f, (prevPoint.y + pt.y) / 2f)
+                                    livePath.quadraticTo(prevPoint.x, prevPoint.y, mid.x, mid.y)
+                                    prevMidPoint = mid
+                                }
+                                prevPoint = pt
+                                hasMoved = true
+                                redrawVersion.intValue++
                             }
                         }
-                    },
-                    onDragEnd = {
-                        if (!latestEraserMode && currentStroke.isNotEmpty()) {
+
+                        if (livePoints.isNotEmpty()) {
+                            if (hasMoved && livePoints.size >= 2) {
+                                livePath.lineTo(prevPoint.x, prevPoint.y)
+                            }
                             latestOnStrokeCompleted(
                                 SketchStroke(
-                                    points = currentStroke.toList(),
+                                    points = livePoints.toList(),
                                     colorHex = latestColorHex,
                                     width = latestWidth
                                 )
                             )
-                            currentStroke.clear()
-                        } else {
-                            currentStroke.clear()
+                            livePoints.clear()
+                            livePath.reset()
+                            redrawVersion.intValue++
                         }
-                    },
-                    onDragCancel = {
-                        currentStroke.clear()
                     }
-                )
+                }
             }
     ) {
+        val version = redrawVersion.intValue
         val scaleX = size.width / 300f
         val scaleY = size.height / 400f
 
-        // Draw existing per-style strokes
-        for (stroke in sketchStrokes) {
-            if (stroke.points.isNotEmpty()) {
-                val strokeColor = try {
-                    Color(android.graphics.Color.parseColor(stroke.colorHex))
-                } catch (_: Exception) {
-                    palette.green
-                }
-                val strokeStyle = Stroke(
-                    width = stroke.width * scaleX,
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round
+        withTransform({
+            scale(scaleX, scaleY, Offset.Zero)
+        }) {
+            for (cached in committedPaths) {
+                // JD4: First point of each stroke draws a dot of width * 1.25 at 0.9 alpha (ink pooling)
+                drawCircle(
+                    color = cached.color.copy(alpha = 0.9f),
+                    radius = (cached.width * 1.25f) / 2f,
+                    center = Offset(cached.firstPoint.x, cached.firstPoint.y)
                 )
-                val path = StrokeMath.composePathFrom(stroke.points)
-                val matrix = androidx.compose.ui.graphics.Matrix().apply {
-                    scale(scaleX, scaleY)
-                }
-                path.transform(matrix)
-                drawPath(path = path, color = strokeColor, style = strokeStyle)
+                drawPath(
+                    path = cached.path,
+                    color = cached.color,
+                    style = Stroke(width = cached.width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                )
             }
-        }
-
-        // Draw current active stroke when not in eraser mode
-        if (!latestEraserMode && currentStroke.isNotEmpty()) {
-            val activeStyle = Stroke(
-                width = latestWidth * scaleX,
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
-            val path = StrokeMath.composePathFrom(currentStroke.toList())
-            val matrix = androidx.compose.ui.graphics.Matrix().apply {
-                scale(scaleX, scaleY)
+            if (version >= 0 && !latestEraserMode && livePoints.isNotEmpty()) {
+                val firstPt = livePoints.first()
+                drawCircle(
+                    color = activeColor.copy(alpha = 0.9f),
+                    radius = (latestWidth * 1.25f) / 2f,
+                    center = Offset(firstPt.x, firstPt.y)
+                )
+                drawPath(
+                    path = livePath,
+                    color = activeColor,
+                    style = Stroke(width = latestWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                )
             }
-            path.transform(matrix)
-            drawPath(path = path, color = activeColor, style = activeStyle)
         }
     }
 }

@@ -14,6 +14,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -35,9 +38,75 @@ object KannachMotion {
     val Breathe: Easing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
 }
 
+/**
+ * DK1: Two states for the Paper Dock (not persisted).
+ */
+enum class DockState {
+    EXPANDED,
+    COLLAPSED
+}
+
+/**
+ * DK4: NestedScrollConnection updating one Boolean (hysteresis 24 dp) and returning Offset.Zero without consuming scroll.
+ */
+class DockScrollConnection(
+    private val thresholdPx: Float = 72f,
+    private val onCollapsedChanged: (Boolean) -> Unit = {}
+) : NestedScrollConnection {
+    private var cumulativeDelta: Float = 0f
+
+    fun reset() {
+        cumulativeDelta = 0f
+    }
+
+    fun onReachedTop() {
+        cumulativeDelta = 0f
+        onCollapsedChanged(false)
+    }
+
+    fun collapse() {
+        cumulativeDelta = 0f
+        onCollapsedChanged(true)
+    }
+
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+        return Offset.Zero
+    }
+
+    override fun onPostScroll(
+        consumed: Offset,
+        available: Offset,
+        source: NestedScrollSource
+    ): Offset {
+        val dy = consumed.y
+        if (dy < 0f) {
+            if (cumulativeDelta > 0f) cumulativeDelta = 0f
+            cumulativeDelta += dy
+            if (-cumulativeDelta > thresholdPx) {
+                cumulativeDelta = 0f
+                onCollapsedChanged(true)
+            }
+        } else if (dy > 0f) {
+            if (cumulativeDelta < 0f) cumulativeDelta = 0f
+            cumulativeDelta += dy
+            if (cumulativeDelta >= thresholdPx) {
+                cumulativeDelta = 0f
+                onCollapsedChanged(false)
+            }
+        }
+        if (available.y > 0.5f && dy >= 0f) {
+            cumulativeDelta = 0f
+            onCollapsedChanged(false)
+        }
+        return Offset.Zero
+    }
+}
+
 val LocalReduceMotionOverride = androidx.compose.runtime.compositionLocalOf { false }
 val LocalHapticsEnabled = androidx.compose.runtime.compositionLocalOf { true }
 val LocalHandwritingSp = androidx.compose.runtime.compositionLocalOf { 20 }
+val LocalDockInset = androidx.compose.runtime.compositionLocalOf { 88.dp }
+val LocalDockScroll = androidx.compose.runtime.staticCompositionLocalOf { DockScrollConnection() }
 
 /**
  * Inspects system accessibility settings for reduced motion / animator duration scale,

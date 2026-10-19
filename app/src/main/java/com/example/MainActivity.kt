@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -134,7 +135,43 @@ fun KannachApp(viewModel: MainViewModel) {
     val nowMonth = remember { java.util.Calendar.getInstance().get(java.util.Calendar.MONTH) + 1 }
     val tabSlidePx = remember(density) { with(density) { 8.dp.roundToPx() } }
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
+    val navBarBottomPx = WindowInsets.navigationBars.getBottom(density)
+    val navBarBottom = with(density) { navBarBottomPx.toDp() }
+    val dockInset = 88.dp + navBarBottom
 
+    // DK1, DK2, DK4: DockState and DockScrollConnection held in KannachApp (not persisted)
+    var isDockCollapsed by remember { mutableStateOf(false) }
+    val hysteresis24Px = remember(density) { with(density) { 24.dp.toPx() } }
+    val dockScrollConnection = remember(hysteresis24Px) {
+        DockScrollConnection(
+            thresholdPx = hysteresis24Px,
+            onCollapsedChanged = { collapsed ->
+                isDockCollapsed = collapsed
+            }
+        )
+    }
+
+    androidx.compose.runtime.LaunchedEffect(currentTab) {
+        dockScrollConnection.reset()
+        isDockCollapsed = when (currentTab) {
+            Tab.PAGE -> false
+            Tab.GARDEN, Tab.LETTERS -> false
+            Tab.DRAW -> true
+        }
+    }
+
+    val dockState = if (currentTab == Tab.PAGE) {
+        DockState.EXPANDED
+    } else if (isDockCollapsed) {
+        DockState.COLLAPSED
+    } else {
+        DockState.EXPANDED
+    }
+
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalDockInset provides dockInset,
+        LocalDockScroll provides dockScrollConnection
+    ) {
     @Suppress("UnusedMaterial3ScaffoldPaddingParameter")
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -253,7 +290,18 @@ fun KannachApp(viewModel: MainViewModel) {
                 },
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
-                KannachDock(viewModel = viewModel)
+                KannachDock(
+                    viewModel = viewModel,
+                    dockState = dockState,
+                    onExpandDock = {
+                        dockScrollConnection.reset()
+                        isDockCollapsed = false
+                    },
+                    onCollapseDock = {
+                        dockScrollConnection.reset()
+                        isDockCollapsed = true
+                    }
+                )
             }
 
             // Overlays (Year Wrap, Settings, Entry Sheet, Planting Ceremony, Opened Letter, Sealing Ceremony, Confirm & Toast)
@@ -318,5 +366,6 @@ fun KannachApp(viewModel: MainViewModel) {
                 )
             }
         }
+    }
     }
 }

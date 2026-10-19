@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -17,7 +18,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
@@ -27,12 +30,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,6 +49,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -58,10 +68,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -136,6 +148,53 @@ fun GalleryScreen(
         }.toList()
     }
 
+    // Group months from the user's active history
+    val activeMonthsData = remember(entries, currentYear) {
+        val monthsWithEntries = entries.keys
+            .filter { it.startsWith("$currentYear-") }
+            .mapNotNull { it.split("-").getOrNull(1)?.toIntOrNull() }
+            .toSet()
+        val cal = Calendar.getInstance()
+        val thisYear = cal.get(Calendar.YEAR)
+        val thisMonth = cal.get(Calendar.MONTH) + 1
+        val maxMonth = if (currentYear == thisYear) thisMonth else 12
+        val minMonth = if (monthsWithEntries.isNotEmpty()) monthsWithEntries.minOrNull() ?: 1 else thisMonth
+
+        (minMonth..maxMonth).map { m ->
+            val monthStr = String.format(Locale.US, "%02d", m)
+            val writtenInMonth = entries.filter { (k, e) ->
+                k.startsWith("$currentYear-$monthStr-") && (e.strokes.isNotEmpty() || e.text.isNotBlank())
+            }.toList().sortedBy { it.first }
+
+            val calM = Calendar.getInstance().apply {
+                set(Calendar.YEAR, currentYear)
+                set(Calendar.MONTH, m - 1)
+                set(Calendar.DAY_OF_MONTH, 1)
+            }
+            val daysInM = calM.getActualMaximum(Calendar.DAY_OF_MONTH)
+            val limitDay = if (currentYear == thisYear && m == thisMonth) cal.get(Calendar.DAY_OF_MONTH) else daysInM
+            val unwrittenDays = (1..limitDay).filter { d ->
+                val dKey = String.format(Locale.US, "%04d-%02d-%02d", currentYear, m, d)
+                entries[dKey] == null || (entries[dKey]!!.strokes.isEmpty() && entries[dKey]!!.text.isBlank())
+            }
+            Triple(m, writtenInMonth, unwrittenDays)
+        }
+    }
+
+    val dockInset = LocalDockInset.current
+    val dockScroll = LocalDockScroll.current
+    val listState = rememberLazyListState()
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    LaunchedEffect(isAtTop) {
+        if (isAtTop) {
+            dockScroll.onReachedTop()
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -143,232 +202,243 @@ fun GalleryScreen(
             .paperBackground(palette.paper)
             .clickable(enabled = false) {}
     ) {
-        Column(
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(bottom = dockInset),
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(bottom = 92.dp)
+                .nestedScroll(dockScroll)
         ) {
             // Header (NV7: Settings icon in leading 48dp slot)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wavyHeaderDivider(palette.greenLine, waveHeightDp = 6.dp)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                IconButton(
-                    onClick = { viewModel.openSettings() },
-                    modifier = Modifier.size(48.dp)
+            item(key = "gallery_header", contentType = "header") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wavyHeaderDivider(palette.greenLine, waveHeightDp = 6.dp)
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    KannachIcon(
-                        icon = KannachIconType.SLIDERS,
-                        tint = palette.inkSoft,
-                        contentDescription = strings.openSettings,
-                        modifier = Modifier.size(22.dp)
+                    IconButton(
+                        onClick = { viewModel.openSettings() },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        KannachIcon(
+                            icon = KannachIconType.SLIDERS,
+                            tint = palette.inkSoft,
+                            contentDescription = strings.openSettings,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Text(
+                        text = strings.galleryTitle,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = LocalKannachHandFont.current,
+                        color = palette.greenDeep
                     )
+                    Spacer(modifier = Modifier.size(48.dp))
                 }
-                Text(
-                    text = strings.galleryTitle,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = LocalKannachHandFont.current,
-                    color = palette.greenDeep
-                )
-                Spacer(modifier = Modifier.size(48.dp))
             }
 
             // G2: Poetic gallery sentence with days count in handwriting font
-            Text(
-                text = strings.galleryCount.format(language, yearEntries.size),
-                fontSize = 17.sp,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.greenDeep,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 6.dp)
-            )
-
-            // G5: Action Links: Quiet handwritten text links (Year Wrap & Surprise Me)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            item(key = "gallery_count", contentType = "count") {
                 Text(
-                    text = strings.wrapBtn,
-                    fontSize = 14.5.sp,
+                    text = strings.galleryCount.format(language, yearEntries.size),
+                    fontSize = 17.sp,
                     fontFamily = LocalKannachHandFont.current,
                     color = palette.greenDeep,
+                    textAlign = TextAlign.Center,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable { viewModel.openWrap() }
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 6.dp)
                 )
+            }
 
-                Text(
-                    text = "·",
-                    fontSize = 16.sp,
-                    color = palette.inkFaint,
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
-
+            // G5: Action Links: Quiet handwritten text links (Year Wrap & Surprise Me)
+            item(key = "gallery_action_links", contentType = "action_links") {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable {
-                            val randKey = viewModel.getRandomEntryDateKey()
-                            if (randKey != null) {
-                                viewModel.openSheet(randKey)
-                            } else {
-                                viewModel.showToast(strings.noMemoriesYet)
-                            }
-                        }
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    KannachIcon(
-                        icon = KannachIconType.SPARKLE,
-                        tint = palette.orange,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = strings.surpriseMe,
+                        text = strings.wrapBtn,
                         fontSize = 14.5.sp,
                         fontFamily = LocalKannachHandFont.current,
-                        color = palette.inkSoft
+                        color = palette.greenDeep,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { viewModel.openWrap() }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     )
-                }
-            }
 
-            Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "·",
+                        fontSize = 16.sp,
+                        color = palette.inkFaint,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
 
-            // Light Paper Search Bar without extra redundant icon
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(palette.paperHi)
-                    .border(1.dp, palette.line.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        if (searchQuery.isEmpty()) {
-                            Text(
-                                text = strings.searchHint,
-                                fontSize = 13.sp,
-                                fontFamily = LocalKannachUiFont.current,
-                                color = palette.inkFaint
-                            )
-                        }
-                        BasicTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            textStyle = TextStyle(
-                                fontSize = 13.sp,
-                                fontFamily = LocalKannachUiFont.current,
-                                color = palette.ink
-                            ),
-                            cursorBrush = SolidColor(palette.greenDeep),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable {
+                                val randKey = viewModel.getRandomEntryDateKey()
+                                if (randKey != null) {
+                                    viewModel.openSheet(randKey)
+                                } else {
+                                    viewModel.showToast(strings.noMemoriesYet)
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        KannachIcon(
+                            icon = KannachIconType.SPARKLE,
+                            tint = palette.orange,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = strings.surpriseMe,
+                            fontSize = 14.5.sp,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.inkSoft
                         )
                     }
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(
-                            onClick = { searchQuery = "" },
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            KannachIcon(
-                                icon = KannachIconType.X,
-                                tint = palette.inkFaint,
-                                modifier = Modifier.size(14.dp)
+                }
+            }
+
+            // Light Paper Search Bar without extra redundant icon
+            item(key = "gallery_search_bar", contentType = "search_bar") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(palette.paperHi)
+                        .border(1.dp, palette.line.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = strings.searchHint,
+                                    fontSize = 13.sp,
+                                    fontFamily = LocalKannachUiFont.current,
+                                    color = palette.inkFaint
+                                )
+                            }
+                            BasicTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                textStyle = TextStyle(
+                                    fontSize = 13.sp,
+                                    fontFamily = LocalKannachUiFont.current,
+                                    color = palette.ink
+                                ),
+                                cursorBrush = SolidColor(palette.greenDeep),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
                             )
+                        }
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { searchQuery = "" },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                KannachIcon(
+                                    icon = KannachIconType.X,
+                                    tint = palette.inkFaint,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(14.dp))
+            item(key = "gallery_spacer_search", contentType = "spacer") {
+                Spacer(modifier = Modifier.height(10.dp))
+            }
 
             if (searchQuery.isNotBlank()) {
                 if (matchingEntries.isEmpty()) {
-                    Text(
-                        text = strings.searchNoMatch.replace("{q}", searchQuery),
-                        fontSize = 15.sp,
-                        fontFamily = LocalKannachHandFont.current,
-                        color = palette.inkFaint,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp)
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 6.dp)
-                            .clip(HandDrawnRadiusShape)
-                            .background(palette.paperHi)
-                            .border(1.dp, palette.line.copy(alpha = 0.6f), HandDrawnRadiusShape)
-                            .padding(14.dp)
-                    ) {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(4),
+                    item(key = "gallery_search_empty", contentType = "empty") {
+                        Text(
+                            text = strings.searchNoMatch.replace("{q}", searchQuery),
+                            fontSize = 15.sp,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.inkFaint,
+                            textAlign = TextAlign.Center,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(max = 1400.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            userScrollEnabled = false
+                                .padding(24.dp)
+                        )
+                    }
+                } else {
+                    item(key = "gallery_search_results", contentType = "search_results") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                                .clip(HandDrawnRadiusShape)
+                                .background(palette.paperHi)
+                                .border(1.dp, palette.line.copy(alpha = 0.6f), HandDrawnRadiusShape)
+                                .padding(14.dp)
                         ) {
-                            items(matchingEntries.size) { idx ->
-                                val (dateKey, entry) = matchingEntries[idx]
-                                val glyphColor = try {
-                                    Color(android.graphics.Color.parseColor(entry.color))
-                                } catch (_: Exception) {
-                                    palette.green
-                                }
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            viewModel.openSheet(dateKey)
-                                        }
-                                        .padding(vertical = 4.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier.size(62.dp),
-                                        contentAlignment = Alignment.Center
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(4),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 1400.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                userScrollEnabled = false
+                            ) {
+                                items(matchingEntries.size, key = { matchingEntries[it].first }, contentType = { "search_entry" }) { idx ->
+                                    val (dateKey, entry) = matchingEntries[idx]
+                                    val glyphColor = try {
+                                        Color(android.graphics.Color.parseColor(entry.color))
+                                    } catch (_: Exception) {
+                                        palette.green
+                                    }
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                viewModel.openSheet(dateKey)
+                                            }
+                                            .padding(vertical = 4.dp)
                                     ) {
-                                        GlyphView(
-                                            strokes = entry.strokes,
-                                            color = glyphColor,
-                                            modifier = Modifier.fillMaxSize(0.92f)
+                                        Box(
+                                            modifier = Modifier.size(62.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            GlyphView(
+                                                strokes = entry.strokes,
+                                                color = glyphColor,
+                                                modifier = Modifier.fillMaxSize(0.92f)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = dateKey,
+                                            fontSize = 11.sp,
+                                            fontFamily = LocalKannachHandFont.current,
+                                            color = palette.inkSoft,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1
                                         )
                                     }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = dateKey,
-                                        fontSize = 11.sp,
-                                        fontFamily = LocalKannachHandFont.current,
-                                        color = palette.inkSoft,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1
-                                    )
                                 }
                             }
                         }
@@ -377,7 +447,8 @@ fun GalleryScreen(
             } else {
                 // G2, G3, G4: Mosaic divided by months with written drawings first + gentle stagger
                 if (writtenEntries.isEmpty()) {
-                    Box(
+                    item(key = "gallery_empty_card", contentType = "empty") {
+                        Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 18.dp, vertical = 12.dp)
@@ -438,45 +509,13 @@ fun GalleryScreen(
                             }
                         }
                     }
-                } else {
-                    // Group months from the user's active history
-                    val activeMonthsData = remember(entries, currentYear) {
-                        val monthsWithEntries = entries.keys
-                            .filter { it.startsWith("$currentYear-") }
-                            .mapNotNull { it.split("-").getOrNull(1)?.toIntOrNull() }
-                            .toSet()
-                        val cal = Calendar.getInstance()
-                        val thisYear = cal.get(Calendar.YEAR)
-                        val thisMonth = cal.get(Calendar.MONTH) + 1
-                        val maxMonth = if (currentYear == thisYear) thisMonth else 12
-                        val minMonth = if (monthsWithEntries.isNotEmpty()) monthsWithEntries.minOrNull() ?: 1 else thisMonth
-
-                        (minMonth..maxMonth).map { m ->
-                            val monthStr = String.format(Locale.US, "%02d", m)
-                            val writtenInMonth = entries.filter { (k, e) ->
-                                k.startsWith("$currentYear-$monthStr-") && (e.strokes.isNotEmpty() || e.text.isNotBlank())
-                            }.toList().sortedBy { it.first }
-
-                            val calM = Calendar.getInstance().apply {
-                                set(Calendar.YEAR, currentYear)
-                                set(Calendar.MONTH, m - 1)
-                                set(Calendar.DAY_OF_MONTH, 1)
-                            }
-                            val daysInM = calM.getActualMaximum(Calendar.DAY_OF_MONTH)
-                            val limitDay = if (currentYear == thisYear && m == thisMonth) cal.get(Calendar.DAY_OF_MONTH) else daysInM
-                            val unwrittenDays = (1..limitDay).filter { d ->
-                                val dKey = String.format(Locale.US, "%04d-%02d-%02d", currentYear, m, d)
-                                entries[dKey] == null || (entries[dKey]!!.strokes.isEmpty() && entries[dKey]!!.text.isBlank())
-                            }
-                            Triple(m, writtenInMonth, unwrittenDays)
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        activeMonthsData.forEach { (monthNum, writtenInMonth, unwrittenDays) ->
+                }
+            } else {
+                items(
+                    items = activeMonthsData,
+                    key = { "month_gallery_block_${it.first}" },
+                    contentType = { "month_gallery_block" }
+                ) { (monthNum, writtenInMonth, unwrittenDays) ->
                             if (writtenInMonth.isNotEmpty() || unwrittenDays.isNotEmpty()) {
                                 Column(
                                     modifier = Modifier
@@ -521,7 +560,11 @@ fun GalleryScreen(
                                             verticalArrangement = Arrangement.spacedBy(12.dp),
                                             userScrollEnabled = false
                                         ) {
-                                            items(writtenInMonth.size) { idx ->
+                                            items(
+                                                count = writtenInMonth.size,
+                                                key = { idx -> "month_${monthNum}_entry_${writtenInMonth[idx].first}" },
+                                                contentType = { "month_entry" }
+                                            ) { idx ->
                                                 val (dateKey, entry) = writtenInMonth[idx]
                                                 val glyphColor = try {
                                                     Color(android.graphics.Color.parseColor(entry.color))
@@ -623,7 +666,6 @@ fun GalleryScreen(
             }
         }
     }
-}
 
 /**
  * 2. YearWrapScreen (موسم السنة):
@@ -864,10 +906,18 @@ private fun StatCard(
 
 
 /**
- * 4. SketchpadScreen (فقط ارسم / Just Draw — SK1–SK12):
- * A free drawing canvas with per-stroke color & width (SketchStroke), 6 color swatches
- * (5 existing + palette.ink), 3 brush sizes (4 / 8 / 14), 14-canvas-unit proximity eraser,
- * undo, clear, 4 procedural paper types (plain, ruled, dotted, kraft), and an export bottom sheet.
+ * 4. SketchpadScreen (فقط ارسم / Just Draw — SK1–SK12 & v5 JD1–JD7):
+ * - JD1: Whisper line above the canvas (hand font 15 sp, palette.ink at 0.55 alpha, fades in 320 ms
+ *   after entry and fades out at the first stroke; rotates through drawWhisper1..4 without repeating).
+ * - JD2: Paper on a desk (palette.paperDesk background, canvas sheet with paperTilt(0.4f), paperShadow,
+ *   and a dotted margin 12 dp inside the edge; when empty the sheet shows nothing else).
+ * - JD3: Inks by feeling (selecting a swatch shows its mood name as a 1-line label above the tray
+ *   for 1.2 s, then fades; light haptic tick on first stroke only).
+ * - JD4: Ink feel (round caps/joins + ink pooling dot of width * 1.25 at 0.9 alpha on first point).
+ * - JD5: Clearing is a page turn (sheet slides out by KannachMotion.PAGE and fresh paper slides in,
+ *   or 120 ms cross-fade with reduce-motion; Undo action appears for 5 s).
+ * - JD6: After export (shows one whisper line from drawSaved1..2 for 2.4 s, no confetti).
+ * - JD7: Tray vs dock (tray's bottom edge is strictly above LocalDockInset even at largest font scale).
  */
 @Composable
 fun SketchpadScreen(
@@ -886,6 +936,11 @@ fun SketchpadScreen(
     val isEraserMode by viewModel.sketchEraserMode.collectAsState()
     val paperType by viewModel.sketchPaperType.collectAsState()
     val introDismissed by viewModel.sketchIntroDismissed.collectAsState()
+    val whisperIndex by viewModel.sketchWhisperIndex.collectAsState()
+    val moodLabelVisible by viewModel.sketchMoodLabelVisible.collectAsState()
+    val pageTurnCount by viewModel.sketchPageTurnCount.collectAsState()
+    val clearUndoVisible by viewModel.sketchClearUndoVisible.collectAsState()
+    val savedWhisperIndex by viewModel.sketchSavedWhisperIndex.collectAsState()
     val isExportSheetOpen by viewModel.isExportSheetOpen.collectAsState()
     val exportFormat by viewModel.exportFormat.collectAsState()
     val exportSignature by viewModel.exportSignature.collectAsState()
@@ -896,26 +951,55 @@ fun SketchpadScreen(
     }
     val brushSizes = remember { listOf(4f, 8f, 14f) }
 
+    val dockInset = LocalDockInset.current
+    val dockScroll = LocalDockScroll.current
+
+    // JD1: Whisper line fades in 320 ms after entry and fades out at the first stroke
+    var whisperFadeInReady by remember { mutableStateOf(reduceMotion) }
+    LaunchedEffect(whisperIndex, reduceMotion) {
+        if (reduceMotion) {
+            whisperFadeInReady = true
+        } else {
+            whisperFadeInReady = false
+            kotlinx.coroutines.delay(KannachMotion.SOFT.toLong())
+            whisperFadeInReady = true
+        }
+    }
+
+    val drawWhispers = remember(language) { I18n.getDrawWhispers(language) }
+    val drawSavedWhispers = remember(language) { I18n.getDrawSavedWhispers(language) }
+    val currentWhisperText = drawWhispers.getOrElse(whisperIndex.coerceIn(0, 3)) { strings.drawWhisper1 }
+    val currentSavedWhisperText = savedWhisperIndex?.let { idx ->
+        drawSavedWhispers.getOrElse(idx.coerceIn(0, 1)) { strings.drawSaved1 }
+    }
+
+    // Show post-export whisper (JD6, 2.4 s) if active; otherwise entry whisper (JD1) until first stroke
+    val activeTopWhisper: String? = when {
+        currentSavedWhisperText != null -> currentSavedWhisperText
+        whisperFadeInReady && !introDismissed && strokes.isEmpty() -> currentWhisperText
+        else -> null
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .paperBackground(palette.paper)
+            // JD2: The canvas sits on paperDesk
+            .paperBackground(palette.paperDesk)
             .clickable(enabled = false) {}
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(bottom = 92.dp)
+                // JD7: Tray's bottom edge is strictly above LocalDockInset
+                .padding(bottom = dockInset)
         ) {
             // Header (NV7: Settings icon in leading 48dp slot; SK5: no X, title in hand font; SK7: share icon top-end)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .wavyHeaderDivider(palette.greenLine, waveHeightDp = 6.dp)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -938,7 +1022,13 @@ fun SketchpadScreen(
                     fontWeight = FontWeight.Bold,
                     fontFamily = LocalKannachHandFont.current,
                     color = palette.greenDeep,
-                    modifier = Modifier.testTag("sketch_title")
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 4.dp)
+                        .testTag("sketch_title")
                 )
                 IconButton(
                     onClick = { viewModel.openExportSheet() },
@@ -955,34 +1045,46 @@ fun SketchpadScreen(
                 }
             }
 
+            // Top controls: JD1 / JD6 single whisper line above canvas + SK4 Paper types
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // SK5: The intro sentence shows only until the first stroke is drawn (hint once)
-                AnimatedVisibility(
-                    visible = !introDismissed && strokes.isEmpty(),
-                    enter = fadeIn(tween(if (reduceMotion) 0 else KannachMotion.SOFT)),
-                    exit = fadeOut(tween(if (reduceMotion) 0 else KannachMotion.SOFT))
+                // JD1 & JD6: Fixed-height single whisper line slot above the canvas (hand font 15 sp, palette.ink at 0.55 alpha)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 24.dp)
+                        .padding(bottom = 2.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = strings.sketchIntro,
-                        fontSize = 14.sp,
-                        fontFamily = LocalKannachHandFont.current,
-                        color = palette.inkSoft,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 10.dp)
-                            .testTag("sketch_intro_hint")
-                    )
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = activeTopWhisper != null,
+                        enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT, easing = KannachMotion.Settle)),
+                        exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
+                    ) {
+                        Text(
+                            text = activeTopWhisper ?: "",
+                            fontSize = 15.sp,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.ink.copy(alpha = 0.55f),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag(if (currentSavedWhisperText != null) "sketch_saved_whisper" else "sketch_whisper_line")
+                        )
+                    }
                 }
 
                 // SK4: Paper types (small row of four swatches: plain, ruled, dotted, kraft)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 10.dp),
+                        .padding(bottom = 4.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -991,7 +1093,7 @@ fun SketchpadScreen(
                         Box(
                             modifier = Modifier
                                 .padding(horizontal = 5.dp)
-                                .size(48.dp)
+                                .size(40.dp)
                                 .clip(HandDrawnRadiusAltShape)
                                 .then(
                                     if (isSelected) {
@@ -1000,12 +1102,12 @@ fun SketchpadScreen(
                                             .border(1.8.dp, palette.greenDeep, HandDrawnRadiusAltShape)
                                     } else {
                                         Modifier
-                                            .background(palette.paperLo.copy(alpha = 0.5f))
+                                            .background(palette.paperHi.copy(alpha = 0.65f))
                                             .border(1.dp, palette.line, HandDrawnRadiusAltShape)
                                     }
                                 )
                                 .clickable { viewModel.setSketchPaperType(type) }
-                                .padding(6.dp)
+                                .padding(4.dp)
                                 .testTag("sketch_paper_${type.name.lowercase(Locale.ROOT)}"),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1017,224 +1119,332 @@ fun SketchpadScreen(
                         }
                     }
                 }
+            }
 
-                // Free Canvas (300x400) with procedural paper background (SK1, SK3, SK4)
-                val canvasBaseBg = when (paperType) {
-                    SketchPaperType.KRAFT -> palette.paperKraft
-                    else -> palette.paperHi
-                }
-                val canvasPaperModifier = when (paperType) {
-                    SketchPaperType.PLAIN -> Modifier.paperBackground(canvasBaseBg)
-                    SketchPaperType.RULED -> Modifier
-                        .paperBackground(canvasBaseBg)
-                        .linedPaperBackground(palette.line, 24.dp)
-                    SketchPaperType.DOTTED -> Modifier
-                        .paperBackground(canvasBaseBg)
-                        .dottedPaperBackground(palette.line, 18.dp, 1.4.dp)
-                    SketchPaperType.KRAFT -> Modifier.paperBackground(canvasBaseBg, drawNoise = true)
-                }
+            // PF5 & JD2 & JD5: Free Canvas (300x400) sitting on paperDesk with paperTilt(0.4f),
+            // paperShadow, and a 12 dp inner dotted margin. Clearing is a page turn (AnimatedContent).
+            val canvasBaseBg = when (paperType) {
+                SketchPaperType.KRAFT -> palette.paperKraft
+                else -> palette.paperHi
+            }
+            val canvasPaperModifier = when (paperType) {
+                SketchPaperType.PLAIN -> Modifier.paperBackground(canvasBaseBg)
+                SketchPaperType.RULED -> Modifier
+                    .paperBackground(canvasBaseBg)
+                    .linedPaperBackground(palette.line, 24.dp)
+                SketchPaperType.DOTTED -> Modifier
+                    .paperBackground(canvasBaseBg)
+                    .dottedPaperBackground(palette.line, 18.dp, 1.4.dp)
+                SketchPaperType.KRAFT -> Modifier.paperBackground(canvasBaseBg, drawNoise = true)
+            }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .widthIn(max = 320.dp)
-                        .aspectRatio(3f / 4f)
-                        .paperShadow(palette.paperShadow, HandDrawnRadiusShape, offsetY = 5.dp)
-                        .clip(HandDrawnRadiusShape)
-                        .then(canvasPaperModifier)
-                        .border(2.dp, palette.ink, HandDrawnRadiusShape)
-                        .testTag("sketch_canvas_box")
-                ) {
-                    DrawingCanvas(
-                        sketchStrokes = strokes,
-                        currentColorHex = selectedColor,
-                        currentWidth = brushWidth,
-                        isEraserMode = isEraserMode,
-                        onStrokeCompleted = { viewModel.addSketchStroke(it) },
-                        onEraseAt = { viewModel.eraseSketchAt(it) },
+            BoxWithConstraints(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                val sheetW = minOf(maxWidth, maxHeight * (3f / 4f))
+                val sheetH = sheetW * (4f / 3f)
+
+                AnimatedContent(
+                    targetState = pageTurnCount,
+                    transitionSpec = {
+                        if (reduceMotion) {
+                            fadeIn(tween(KannachMotion.INSTANT)) togetherWith fadeOut(tween(KannachMotion.INSTANT))
+                        } else {
+                            val dir = if (strings.dir == "rtl") 1 else -1
+                            (slideInHorizontally(
+                                animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                            ) { fullWidth -> -dir * fullWidth } + fadeIn(
+                                animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                            )).togetherWith(
+                                slideOutHorizontally(
+                                    animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                                ) { fullWidth -> dir * fullWidth } + fadeOut(
+                                    animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                                )
+                            )
+                        }
+                    },
+                    label = "SketchSheetPageTurn"
+                ) { _ ->
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .testTag("sketch_drawing_canvas")
-                    )
-
-                    if (strokes.isEmpty()) {
-                        Text(
-                            text = strings.drawHint,
-                            fontSize = 15.sp,
-                            fontFamily = LocalKannachHandFont.current,
-                            color = palette.inkFaint,
-                            textAlign = TextAlign.Center,
+                            .size(sheetW, sheetH)
+                            // JD2: paperTilt(0.4f), paperShadow, and a dotted margin 12 dp inside the edge
+                            .paperTilt(0.4f)
+                            .paperShadow(palette.paperShadow, HandDrawnRadiusShape, offsetY = 5.dp)
+                            .clip(HandDrawnRadiusShape)
+                            .then(canvasPaperModifier)
+                            .border(1.6.dp, palette.line, HandDrawnRadiusShape)
+                            .dashedHandDrawnBorder(
+                                color = palette.line.copy(alpha = 0.75f),
+                                shape = HandDrawnRadiusShape,
+                                strokeWidth = 1.2.dp,
+                                dashIntervals = floatArrayOf(4f, 6f),
+                                inset = 12.dp
+                            )
+                            .testTag("sketch_canvas_box")
+                    ) {
+                        // JD2: When the desk is empty the sheet shows nothing else.
+                        DrawingCanvas(
+                            sketchStrokes = strokes,
+                            currentColorHex = selectedColor,
+                            currentWidth = brushWidth,
+                            isEraserMode = isEraserMode,
+                            onStrokeCompleted = { viewModel.addSketchStroke(it) },
+                            onEraseAt = { viewModel.eraseSketchAt(it) },
+                            onStrokeStarted = {
+                                dockScroll.collapse()
+                                viewModel.onSketchStrokeStarted()
+                            },
                             modifier = Modifier
-                                .align(Alignment.Center)
-                                .padding(16.dp)
+                                .fillMaxSize()
+                                .testTag("sketch_drawing_canvas")
+                        )
+                    }
+                }
+            }
+
+            // JD3 & JD5: 1-line ephemeral slot directly above the tray:
+            // - JD5: Undo action appears for 5 s after page-turn Clear
+            // - JD3: Selecting a swatch shows its mood name as a 1-line label above the tray for 1.2 s, then fades
+            val moodName = I18n.getMoodName(selectedColor, language)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 24.dp)
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = clearUndoVisible,
+                    enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT)),
+                    exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clip(HandDrawnRadiusAltShape)
+                            .background(palette.paperHi)
+                            .border(1.2.dp, palette.greenLine, HandDrawnRadiusAltShape)
+                            .clickable { viewModel.undoSketchStroke() }
+                            .padding(horizontal = 12.dp, vertical = 3.dp)
+                            .testTag("sketch_clear_undo_action"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        KannachIcon(
+                            icon = KannachIconType.UNDO,
+                            tint = palette.greenDeep,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = strings.undo,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.greenDeep,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // SK2: Hand-drawn paper tools tray below the canvas
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .paperTilt(-0.3f)
-                        .paperShadow(palette.paperShadow, HandDrawnRadiusShape, offsetY = 4.dp)
-                        .clip(HandDrawnRadiusShape)
-                        .background(palette.paperHi)
-                        .border(1.5.dp, palette.greenLine, HandDrawnRadiusShape)
-                        .dashedHandDrawnBorder(
-                            color = palette.greenLine.copy(alpha = 0.7f),
-                            shape = HandDrawnRadiusShape,
-                            strokeWidth = 1.2.dp,
-                            dashIntervals = floatArrayOf(8f, 6f),
-                            inset = 4.dp
-                        )
-                        .padding(horizontal = 12.dp, vertical = 12.dp)
-                        .testTag("sketch_tools_tray")
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !clearUndoVisible && moodLabelVisible && !isEraserMode,
+                    enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.INSTANT)),
+                    exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    Text(
+                        text = moodName,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = LocalKannachHandFont.current,
+                        color = palette.greenDeep,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("sketch_mood_label")
+                    )
+                }
+            }
+
+            // PF5 & SK2 & JD7: Hand-drawn paper tools tray below the canvas, fixed (scrolls horizontally if needed), above LocalDockInset
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .paperTilt(-0.3f)
+                    .paperShadow(palette.paperShadow, HandDrawnRadiusShape, offsetY = 4.dp)
+                    .clip(HandDrawnRadiusShape)
+                    .background(palette.paperHi)
+                    .border(1.5.dp, palette.greenLine, HandDrawnRadiusShape)
+                    .dashedHandDrawnBorder(
+                        color = palette.greenLine.copy(alpha = 0.7f),
+                        shape = HandDrawnRadiusShape,
+                        strokeWidth = 1.2.dp,
+                        dashIntervals = floatArrayOf(8f, 6f),
+                        inset = 4.dp
+                    )
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .testTag("sketch_tools_tray")
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Row 1: Mood palette swatches - scrolls horizontally if constrained
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Row 1: 6 color swatches (5 existing + palette.ink)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            allSwatches.forEachIndexed { idx, hex ->
-                                val isSelected = !isEraserMode && selectedColor.equals(hex, ignoreCase = true)
-                                val swatchColor = try {
-                                    Color(android.graphics.Color.parseColor(hex))
-                                } catch (_: Exception) {
-                                    palette.ink
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(HandDrawnRadiusAltShape)
-                                        .then(
-                                            if (isSelected) {
-                                                Modifier
-                                                    .background(palette.greenSoft)
-                                                    .border(1.4.dp, palette.greenLine, HandDrawnRadiusAltShape)
-                                            } else Modifier
-                                        )
-                                        .clickable { viewModel.setSketchColor(hex) }
-                                        .testTag("sketch_swatch_$idx"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .scale(if (isSelected) 1.12f else 1.0f)
-                                            .clip(CircleShape)
-                                            .background(swatchColor)
-                                            .border(
-                                                width = if (isSelected) 2.2.dp else 1.dp,
-                                                color = if (isSelected) palette.greenDeep else palette.line,
-                                                shape = CircleShape
-                                            )
-                                    )
-                                }
+                        allSwatches.forEachIndexed { idx, hex ->
+                            val isSelected = !isEraserMode && selectedColor.equals(hex, ignoreCase = true)
+                            val swatchColor = try {
+                                Color(android.graphics.Color.parseColor(hex))
+                            } catch (_: Exception) {
+                                palette.ink
                             }
-                        }
+                            val swatchMoodDesc = I18n.getMoodName(hex, language)
 
-                        // Row 2: 3 brush sizes (4 / 8 / 14 as three dots) + Eraser toggle + Undo + Clear
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // 3 Brush size dots (canvas units 4 / 8 / 14)
-                            brushSizes.forEach { w ->
-                                val isSelected = !isEraserMode && brushWidth == w
-                                val dotDp = when (w) {
-                                    4f -> 6.dp
-                                    8f -> 11.dp
-                                    else -> 16.dp
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(HandDrawnRadiusAltShape)
-                                        .then(
-                                            if (isSelected) {
-                                                Modifier
-                                                    .background(palette.greenSoft)
-                                                    .border(1.4.dp, palette.greenLine, HandDrawnRadiusAltShape)
-                                            } else Modifier
-                                        )
-                                        .clickable { viewModel.setSketchBrushWidth(w) }
-                                        .testTag("sketch_brush_${w.toInt()}"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(dotDp)
-                                            .clip(CircleShape)
-                                            .background(if (isSelected) palette.greenDeep else palette.inkSoft)
-                                    )
-                                }
-                            }
-
-                            // Eraser toggle (SK2 & SK3)
                             Box(
                                 modifier = Modifier
+                                    .padding(horizontal = 4.dp)
                                     .size(48.dp)
                                     .clip(HandDrawnRadiusAltShape)
                                     .then(
-                                        if (isEraserMode) {
+                                        if (isSelected) {
                                             Modifier
                                                 .background(palette.greenSoft)
                                                 .border(1.4.dp, palette.greenLine, HandDrawnRadiusAltShape)
                                         } else Modifier
                                     )
-                                    .clickable { viewModel.toggleSketchEraser() }
-                                    .testTag("sketch_tool_eraser"),
+                                    .clickable { viewModel.setSketchColor(hex) }
+                                    .testTag("sketch_swatch_$idx"),
                                 contentAlignment = Alignment.Center
                             ) {
-                                KannachIcon(
-                                    icon = KannachIconType.ERASER,
-                                    tint = if (isEraserMode) palette.greenDeep else palette.inkSoft,
-                                    strokeWidthDp = if (isEraserMode) 2.2.dp else 1.8.dp,
-                                    modifier = Modifier.size(22.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(26.dp)
+                                        .scale(if (isSelected) 1.12f else 1.0f)
+                                        .clip(CircleShape)
+                                        .background(swatchColor)
+                                        .border(
+                                            width = if (isSelected) 2.2.dp else 1.dp,
+                                            color = if (isSelected) palette.greenDeep else palette.line,
+                                            shape = CircleShape
+                                        )
                                 )
                             }
+                        }
+                    }
 
-                            // Undo button
+                    // Row 2: 3 brush sizes (4 / 8 / 14 as three dots) + Eraser toggle + Undo + Clear (page turn) - scrolls horizontally if constrained
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 3 Brush size dots (canvas units 4 / 8 / 14)
+                        brushSizes.forEach { w ->
+                            val isSelected = !isEraserMode && brushWidth == w
+                            val dotDp = when (w) {
+                                4f -> 6.dp
+                                8f -> 11.dp
+                                else -> 16.dp
+                            }
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(HandDrawnRadiusAltShape)
-                                    .clickable { viewModel.undoSketchStroke() }
-                                    .testTag("sketch_tool_undo"),
+                                    .then(
+                                        if (isSelected) {
+                                            Modifier
+                                                .background(palette.greenSoft)
+                                                .border(1.4.dp, palette.greenLine, HandDrawnRadiusAltShape)
+                                        } else Modifier
+                                    )
+                                    .clickable { viewModel.setSketchBrushWidth(w) }
+                                    .testTag("sketch_brush_${w.toInt()}"),
                                 contentAlignment = Alignment.Center
                             ) {
-                                KannachIcon(
-                                    icon = KannachIconType.UNDO,
-                                    tint = palette.inkSoft,
-                                    modifier = Modifier.size(20.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(dotDp)
+                                        .clip(CircleShape)
+                                        .background(if (isSelected) palette.greenDeep else palette.inkSoft)
                                 )
                             }
+                        }
 
-                            // Clear button (uses ConfirmDialogOverlay for destructive action)
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(HandDrawnRadiusAltShape)
-                                    .clickable { viewModel.requestClearSketchStrokes() }
-                                    .testTag("sketch_tool_clear"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                KannachIcon(
-                                    icon = KannachIconType.TRASH,
-                                    tint = palette.inkSoft,
-                                    modifier = Modifier.size(20.dp)
+                        // Eraser toggle (SK2 & SK3)
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(HandDrawnRadiusAltShape)
+                                .then(
+                                    if (isEraserMode) {
+                                        Modifier
+                                            .background(palette.greenSoft)
+                                            .border(1.4.dp, palette.greenLine, HandDrawnRadiusAltShape)
+                                    } else Modifier
                                 )
-                            }
+                                .clickable { viewModel.toggleSketchEraser() }
+                                .testTag("sketch_tool_eraser"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            KannachIcon(
+                                icon = KannachIconType.ERASER,
+                                tint = if (isEraserMode) palette.greenDeep else palette.inkSoft,
+                                strokeWidthDp = if (isEraserMode) 2.2.dp else 1.8.dp,
+                                contentDescription = strings.clear,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        // Undo button
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(HandDrawnRadiusAltShape)
+                                .clickable { viewModel.undoSketchStroke() }
+                                .testTag("sketch_tool_undo"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            KannachIcon(
+                                icon = KannachIconType.UNDO,
+                                tint = palette.inkSoft,
+                                contentDescription = strings.undo,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // JD5: Clear button triggers page turn + 5s Undo action
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(HandDrawnRadiusAltShape)
+                                .clickable { viewModel.clearSketchStrokes() }
+                                .testTag("sketch_tool_clear"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            KannachIcon(
+                                icon = KannachIconType.TRASH,
+                                tint = palette.inkSoft,
+                                contentDescription = strings.clear,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -2464,8 +2674,8 @@ private fun SettingsLanguageRow(
 ) {
     val palette = LocalKannachPalette.current
     val rowFont = when (code) {
-        "ar" -> PlaypenSansArabicFamily
-        "en", "fr", "es" -> PlaypenSansFamily
+        "ar" -> KannachFonts.handAr
+        "en", "fr", "es" -> KannachFonts.handLatin
         else -> LocalKannachUiFont.current
     }
 

@@ -9,20 +9,38 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 import kotlin.random.Random
 
 /**
  * Handles scheduling and displaying local OS notifications for:
- * 1. Daily writing reminders (with rotating inspirational messages).
+ * 1. Daily writing reminders (with time-of-day & comeback pools, NT1–NT3).
  * 2. Time Capsule delivery on the unlocked date.
+ * 3. Monthly backup copy reminder.
  */
 class KannachAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        val type = intent.getStringExtra(EXTRA_NOTIF_TYPE) ?: TYPE_REMINDER
         val repo = KannachRepository(context)
+
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            val reminder = repo.getReminder()
+            if (reminder.enabled) {
+                NotificationHelper.scheduleDailyReminder(context, reminder.time)
+            }
+            if (repo.getUserSettings().copyReminder == "monthly") {
+                NotificationHelper.scheduleMonthlyCopyReminder(context)
+            }
+            repo.getCapsules().filter { !it.opened }.forEach { capsule ->
+                NotificationHelper.scheduleCapsuleNotification(context, capsule)
+            }
+            return
+        }
+
+        val type = intent.getStringExtra(EXTRA_NOTIF_TYPE) ?: TYPE_REMINDER
         val lang = repo.getLanguage()
         val strings = I18n.forLanguage(lang)
 
@@ -48,15 +66,21 @@ class KannachAlarmReceiver : BroadcastReceiver() {
 
                 val settings = repo.getUserSettings()
                 val todayDow = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
-                if (settings.reminderDays.contains(todayDow)) {
-                    val msgs = strings.reminderMsgs
-                    var idx = Random.nextInt(msgs.size)
-                    if (msgs.size > 1 && idx == reminder.lastIdx) {
-                        idx = (idx + 1) % msgs.size
-                    }
-                    repo.updateReminderLastIdx(idx)
+                val todayKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
-                    val message = msgs[idx]
+                // NT3: Never guilt. If today already has an entry, send nothing.
+                val hasTodayEntry = repo.getEntry(todayKey) != null
+                if (!hasTodayEntry && settings.reminderDays.contains(todayDow)) {
+                    val scheduledTime = intent.getStringExtra(EXTRA_SCHEDULED_TIME)
+                        ?.takeIf { it.isNotBlank() }
+                        ?: reminder.time
+
+                    val message = NotificationHelper.pickAndRecordReminderMessage(
+                        repo = repo,
+                        strings = strings,
+                        scheduledTime = scheduledTime,
+                        todayKey = todayKey
+                    )
 
                     val notif = NotificationCompat.Builder(context, CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -132,6 +156,7 @@ class KannachAlarmReceiver : BroadcastReceiver() {
         const val NOTIF_ID_TEST_NUDGE = 1002
         const val NOTIF_ID_COPY_REMINDER = 1003
         const val EXTRA_NOTIF_TYPE = "extra_notif_type"
+        const val EXTRA_SCHEDULED_TIME = "extra_scheduled_time"
         const val EXTRA_CAPSULE_ID = "extra_capsule_id"
         const val EXTRA_CAPSULE_STRING_ID = "extra_capsule_string_id"
         const val TYPE_REMINDER = "reminder"
@@ -147,21 +172,99 @@ object NotificationHelper {
     }
 
     /**
-     * Immediately sends a test nudge notification using one of the 7 rotating messages
-     * and returns the chosen message text.
+     * NT1: Resolves the time-of-day pool from a scheduled time string ("HH:mm"),
+     * falling back to [fallbackHour] (current hour of day):
+     * - MORNING: before 12:00 (0..11)
+     * - AFTERNOON: 12:00–16:59 (12..16)
+     * - EVENING: 17:00–20:59 (17..20)
+     * - NIGHT: 21:00+ (21..23)
+     */
+    fun poolForTime(
+        scheduledTime: String?,
+        fallbackHour: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    ): NotificationPool {
+        val parsedHour = scheduledTime
+            ?.trim()
+            ?.split(":")
+            ?.firstOrNull()
+            ?.toIntOrNull()
+            ?.takeIf { it in 0..23 }
+        val hour = parsedHour ?: fallbackHour.coerceIn(0, 23)
+        return when {
+            hour < 12 -> NotificationPool.MORNING
+            hour in 12..16 -> NotificationPool.AFTERNOON
+            hour in 17..20 -> NotificationPool.EVENING
+            else -> NotificationPool.NIGHT
+        }
+    }
+
+    /**
+     * NT1: Resolves the active [NotificationPool].
+     * - If the user has had no entry for 3 or more days, returns [NotificationPool.COMEBACK]
+     *   (which overrides the time pools).
+     * - Otherwise chooses the time pool from [scheduledTime], falling back to the current time.
+     */
+    fun resolvePool(
+        repo: KannachRepository,
+        scheduledTime: String? = repo.getReminder().time.takeIf { it.isNotBlank() },
+        todayKey: String? = null,
+        fallbackHour: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    ): NotificationPool {
+        val daysSince = repo.daysSinceLastEntry(todayKey)
+        if (daysSince != null && daysSince >= 3) {
+            return NotificationPool.COMEBACK
+        }
+        return poolForTime(scheduledTime, fallbackHour)
+    }
+
+    /**
+     * NT2: Stores the last 5 shown indices per pool (`notif_recent_<pool>`) and
+     * chooses randomly among the rest.
+     */
+    fun pickAndRecordReminderMessage(
+        repo: KannachRepository,
+        strings: I18n.Strings,
+        scheduledTime: String? = repo.getReminder().time.takeIf { it.isNotBlank() },
+        todayKey: String? = null,
+        poolOverride: NotificationPool? = null
+    ): String {
+        val pool = poolOverride ?: resolvePool(repo, scheduledTime, todayKey)
+        val msgs = strings.messagesForPool(pool)
+        if (msgs.isEmpty()) return ""
+
+        val recent = repo.getRecentNotifIndices(pool)
+        val candidates = msgs.indices.filter { it !in recent }
+        val chosenIdx = when {
+            candidates.isNotEmpty() -> candidates[Random.nextInt(candidates.size)]
+            msgs.size > 1 -> {
+                val lastShown = recent.lastOrNull()
+                val nonLast = msgs.indices.filter { it != lastShown }
+                nonLast[Random.nextInt(nonLast.size)]
+            }
+            else -> 0
+        }
+
+        repo.recordNotifIndex(pool, chosenIdx)
+        return msgs[chosenIdx]
+    }
+
+    /**
+     * Immediately sends a test nudge notification using the active pool and non-repeating
+     * selection (NT1 & NT2), and returns the chosen message text.
      */
     fun sendTestNudge(context: Context): String {
         val repo = KannachRepository(context)
         val lang = repo.getLanguage()
         val strings = I18n.forLanguage(lang)
         val reminder = repo.getReminder()
-        val msgs = strings.reminderMsgs
-        var idx = Random.nextInt(msgs.size)
-        if (msgs.size > 1 && idx == reminder.lastIdx) {
-            idx = (idx + 1) % msgs.size
-        }
-        repo.updateReminderLastIdx(idx)
-        val message = msgs[idx]
+        val todayKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+        val message = pickAndRecordReminderMessage(
+            repo = repo,
+            strings = strings,
+            scheduledTime = reminder.time.takeIf { it.isNotBlank() },
+            todayKey = todayKey
+        )
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -228,6 +331,7 @@ object NotificationHelper {
 
         val intent = Intent(context, KannachAlarmReceiver::class.java).apply {
             putExtra(KannachAlarmReceiver.EXTRA_NOTIF_TYPE, KannachAlarmReceiver.TYPE_REMINDER)
+            putExtra(KannachAlarmReceiver.EXTRA_SCHEDULED_TIME, timeStr)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
@@ -404,4 +508,3 @@ object NotificationHelper {
         return existing != null
     }
 }
-

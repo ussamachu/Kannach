@@ -6,6 +6,22 @@ import java.util.Locale
 
 typealias Strings = I18n.Strings
 
+/**
+ * NT1: Notification pools replacing the flat reminderMsgs list.
+ * - MORNING (before 12:00)
+ * - AFTERNOON (12:00–16:59)
+ * - EVENING (17:00–20:59)
+ * - NIGHT (21:00+)
+ * - COMEBACK (no entry for 3 or more days; overrides time pools)
+ */
+enum class NotificationPool {
+    MORNING,
+    AFTERNOON,
+    EVENING,
+    NIGHT,
+    COMEBACK
+}
+
 object I18n {
 
     data class ColorOption(val key: String, val hex: String)
@@ -156,6 +172,7 @@ object I18n {
         val dockToday: String,
         val dockDraw: String,
         val dockSettings: String,
+        val dockOpen: String,
         val todayCardEmpty: String,
         val monthRecapPlanted: PluralString,
         val monthRecapQuiet: String,
@@ -191,6 +208,7 @@ object I18n {
         val capsulePrefill: String,
         val capsuleWrittenStamp: String,
         val capsuleAddDoodle: String,
+        val capsulePresetTomorrow: String,
         val capsulePreset1w: String,
         val capsulePreset1m: String,
         val capsulePreset3m: String,
@@ -201,6 +219,21 @@ object I18n {
         val capsuleKeepWriting: String,
         val capsuleWriteBack: String,
         val capsuleNotifPermNote: String,
+        val capsuleComposeTitle: String,
+        val capsuleDraftSaved: String,
+        val capsuleDraftSaving: String,
+        val capsuleToMe: String,
+        val capsuleOpensOnFull: String,
+        val capsuleTitleHint: String,
+        val capsuleHelperWriteFirst: String,
+        val capsuleHelperChooseDate: String,
+        val capsuleDraftSheetTitle: String,
+        val capsuleDraftKeep: String,
+        val capsuleDraftDiscard: String,
+        val capsuleDraftContinue: String,
+        val capsuleSealWarning: String,
+        val capsuleSealNow: String,
+        val capsuleSealNotYet: String,
         val langFollowSystem: String,
         val reminderDaysLabel: String,
         val reminderPermOn: String,
@@ -244,8 +277,29 @@ object I18n {
         val settingsSignatureExport: String,
         val settingsReplayWelcome: String,
         val settingsTellFriend: String,
-        val settingsTellFriendMsg: String
-    )
+        val settingsTellFriendMsg: String,
+        val drawWhisper1: String,
+        val drawWhisper2: String,
+        val drawWhisper3: String,
+        val drawWhisper4: String,
+        val drawSaved1: String,
+        val drawSaved2: String,
+        val notifMorning: List<String> = emptyList(),
+        val notifAfternoon: List<String> = emptyList(),
+        val notifEvening: List<String> = emptyList(),
+        val notifNight: List<String> = emptyList(),
+        val notifComeback: List<String> = emptyList()
+    ) {
+        fun messagesForPool(pool: NotificationPool): List<String> {
+            return when (pool) {
+                NotificationPool.MORNING -> notifMorning.ifEmpty { reminderMsgs }
+                NotificationPool.AFTERNOON -> notifAfternoon.ifEmpty { reminderMsgs }
+                NotificationPool.EVENING -> notifEvening.ifEmpty { reminderMsgs }
+                NotificationPool.NIGHT -> notifNight.ifEmpty { reminderMsgs }
+                NotificationPool.COMEBACK -> notifComeback.ifEmpty { reminderMsgs }
+            }
+        }
+    }
 
     val EN: Strings get() = com.example.EN
     val AR: Strings get() = com.example.AR
@@ -357,6 +411,16 @@ object I18n {
         }
     }
 
+    fun getDrawWhispers(language: String): List<String> {
+        val s = forLanguage(language)
+        return listOf(s.drawWhisper1, s.drawWhisper2, s.drawWhisper3, s.drawWhisper4)
+    }
+
+    fun getDrawSavedWhispers(language: String): List<String> {
+        val s = forLanguage(language)
+        return listOf(s.drawSaved1, s.drawSaved2)
+    }
+
     fun seasonOf(month: Int): String {
         return when (month) {
             12, 1, 2 -> "winter"
@@ -464,6 +528,28 @@ object I18n {
             set(Calendar.DAY_OF_MONTH, parts[2])
         }
         return applyNumerals(SimpleDateFormat("d MMMM yyyy", localeFor(lang)).format(cal.time), lang)
+    }
+
+    /**
+     * LC1.3: Formats a YYYY-MM-DD dateKey with localized weekday + day + month + year
+     * (e.g., "Sunday, 18 October 2027" in EN, "الأحد، 18 أكتوبر 2027" in AR).
+     */
+    fun formatFullWeekdayDate(dateKey: String, lang: String): String {
+        val parts = dateKey.split("-").mapNotNull { it.toIntOrNull() }
+        if (parts.size != 3) return applyNumerals(dateKey, lang)
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, parts[0])
+            set(Calendar.MONTH, parts[1] - 1)
+            set(Calendar.DAY_OF_MONTH, parts[2])
+        }
+        val normalized = if (lang == "system") resolveSystemLanguage() else normalizeCode(lang)
+        val pattern = when (normalized) {
+            "ar" -> "EEEE، d MMMM yyyy"
+            "fr" -> "EEEE d MMMM yyyy"
+            "es" -> "EEEE, d 'de' MMMM 'de' yyyy"
+            else -> "EEEE, d MMMM yyyy"
+        }
+        return applyNumerals(SimpleDateFormat(pattern, localeFor(lang)).format(cal.time), lang)
     }
 
     /**

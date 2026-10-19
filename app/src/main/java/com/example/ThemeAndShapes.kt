@@ -11,6 +11,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -18,14 +19,21 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -69,6 +77,8 @@ data class KannachPalette(
     val todEvening: Color = Color(0xFFE9C5A6),
     val todNight: Color = Color(0xFF33423A),
     val dangerBorder: Color = Color(0xFFB44636),
+    val danger: Color = Color(0xFFD95F4C),
+    val dangerBg: Color = Color(0xFFFBEBE8),
     val noise: Color = Color(0x083A523D),
     val paperShadow: Color = Color(0x1E3A523D),
     val paperKraft: Color = Color(0xFFE5D7BA)
@@ -219,8 +229,7 @@ val HandDrawnRadiusAltShape = HandDrawnShape(26f, 17f, 24f, 19f, altWobble = tru
 val HandDrawnDockShape = HandDrawnShape(32f, 28f, 30f, 26f, altWobble = false)
 
 /**
- * HM2 & HM3: Tear-off desk-calendar page shape with a torn zig-zag top edge
- * and organic hand-drawn rounded bottom corners.
+ * HM2, HM3 & TC3: Tear-off desk-calendar page shape with torn zig-zag top and bottom edges.
  */
 object TearOffPageShape : Shape {
     override fun createOutline(
@@ -236,12 +245,11 @@ object TearOffPageShape : Shape {
         with(density) {
             val zigStep = 8.dp.toPx().coerceAtLeast(4f)
             val zigDepth = 4.dp.toPx().coerceAtMost(h * 0.1f)
-            val rBR = 19.dp.toPx().coerceAtMost(minOf(w, h) * 0.3f)
-            val rBL = 22.dp.toPx().coerceAtMost(minOf(w, h) * 0.3f)
 
             val teethCount = (w / zigStep).toInt().coerceAtLeast(2)
             val actualStep = w / teethCount
 
+            // Top torn edge (left to right)
             path.moveTo(0f, zigDepth)
             for (i in 0 until teethCount) {
                 val midX = (i + 0.5f) * actualStep
@@ -250,13 +258,16 @@ object TearOffPageShape : Shape {
                 path.lineTo(endX, zigDepth)
             }
 
-            // Right edge down to bottom-right corner
-            path.lineTo(w, h - rBR)
-            path.quadraticBezierTo(w, h, w - rBR, h)
+            // Right edge down to bottom torn edge
+            path.lineTo(w, h - zigDepth)
 
-            // Bottom edge to bottom-left corner
-            path.lineTo(rBL, h)
-            path.quadraticBezierTo(0f, h, 0f, h - rBL)
+            // Bottom torn edge (right to left)
+            for (i in teethCount - 1 downTo 0) {
+                val midX = (i + 0.5f) * actualStep
+                val startX = i * actualStep
+                path.lineTo(midX, h)
+                path.lineTo(startX, h - zigDepth)
+            }
 
             // Left edge back to top-left
             path.close()
@@ -265,14 +276,45 @@ object TearOffPageShape : Shape {
     }
 }
 
+// PF4: Cache noise pattern into a 256x256 ImageBitmap once per palette color, avoiding 13k noise loop on every redraw
+private val noiseBitmapCache = java.util.concurrent.ConcurrentHashMap<Int, ImageBitmap>()
+
+private fun getOrCreateNoiseBitmap(noiseColorArgb: Int): ImageBitmap {
+    return noiseBitmapCache.computeIfAbsent(noiseColorArgb) {
+        val width = 256
+        val height = 256
+        val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val paint = android.graphics.Paint().apply {
+            color = noiseColorArgb
+            isAntiAlias = true
+        }
+        val step = 14f
+        val cols = (width / step).toInt()
+        val rows = (height / step).toInt()
+        var seed = 1337L
+        for (i in 0 until cols) {
+            for (j in 0 until rows) {
+                seed = (seed * 1103515245L + 12345L) and 0x7fffffffL
+                if (seed % 7L == 0L) {
+                    val ox = i * step + (seed % 10L).toFloat()
+                    val oy = j * step + ((seed / 10L) % 10L).toFloat()
+                    canvas.drawCircle(ox, oy, 1.1f, paint)
+                }
+            }
+        }
+        bitmap.asImageBitmap()
+    }
+}
+
 /**
- * NV5: Soft paper shadow drawn from tokens (paperShadow) without Material elevation.
+ * NV5 & PF4: Soft paper shadow built once per size change via drawWithCache without Material elevation.
  */
 fun Modifier.paperShadow(
     shadowColor: Color,
     shape: Shape = HandDrawnRadiusShape,
     offsetY: Dp = 4.dp
-): Modifier = this.drawBehind {
+): Modifier = this.drawWithCache {
     val dy = offsetY.toPx()
     val layers = listOf(
         Pair(dy * 1.35f, 0.35f),
@@ -280,61 +322,74 @@ fun Modifier.paperShadow(
         Pair(dy * 0.45f, 0.75f)
     )
     val outline = shape.createOutline(size, layoutDirection, this)
-    layers.forEach { (shiftY, alphaFactor) ->
-        val c = shadowColor.copy(alpha = (shadowColor.alpha * alphaFactor).coerceIn(0f, 1f))
-        when (outline) {
-            is Outline.Generic -> {
-                val p = Path().apply {
-                    addPath(outline.path, Offset(0f, shiftY))
-                }
+    val genericShadowPaths = if (outline is Outline.Generic) {
+        layers.map { (shiftY, alphaFactor) ->
+            val p = Path().apply {
+                addPath(outline.path, Offset(0f, shiftY))
+            }
+            val c = shadowColor.copy(alpha = (shadowColor.alpha * alphaFactor).coerceIn(0f, 1f))
+            Pair(p, c)
+        }
+    } else null
+
+    onDrawBehind {
+        if (genericShadowPaths != null) {
+            for ((p, c) in genericShadowPaths) {
                 drawPath(p, c)
             }
-            is Outline.Rounded -> {
-                drawRoundRect(
-                    color = c,
-                    topLeft = Offset(outline.roundRect.left, outline.roundRect.top + shiftY),
-                    size = Size(outline.roundRect.width, outline.roundRect.height),
-                    cornerRadius = outline.roundRect.topLeftCornerRadius
-                )
-            }
-            is Outline.Rectangle -> {
-                drawRect(
-                    color = c,
-                    topLeft = Offset(0f, shiftY),
-                    size = size
-                )
+        } else {
+            layers.forEach { (shiftY, alphaFactor) ->
+                val c = shadowColor.copy(alpha = (shadowColor.alpha * alphaFactor).coerceIn(0f, 1f))
+                when (outline) {
+                    is Outline.Rounded -> {
+                        drawRoundRect(
+                            color = c,
+                            topLeft = Offset(outline.roundRect.left, outline.roundRect.top + shiftY),
+                            size = Size(outline.roundRect.width, outline.roundRect.height),
+                            cornerRadius = outline.roundRect.topLeftCornerRadius
+                        )
+                    }
+                    is Outline.Rectangle -> {
+                        drawRect(
+                            color = c,
+                            topLeft = Offset(0f, shiftY),
+                            size = size
+                        )
+                    }
+                    else -> {}
+                }
             }
         }
     }
 }
 
 /**
- * Custom Modifier providing warm craft paper background with subtle noise grain.
+ * PF4: Custom Modifier providing warm craft paper background with tiled noise grain via drawWithCache.
+ * Generates noise once into a 256x256 ImageBitmap and renders it using an ImageShader.
  */
 fun Modifier.paperBackground(
     color: Color = Color(0xFFFBF9EF),
     drawNoise: Boolean = true
-): Modifier = this.drawBehind {
-    drawRect(color = color)
-    if (drawNoise) {
-        val step = 14f
-        val cols = (size.width / step).toInt()
-        val rows = (size.height / step).toInt()
+): Modifier = this.drawWithCache {
+    val noisePaint = if (drawNoise) {
         val noiseColor = Color(0xFF3A523D).copy(alpha = 0.024f)
+        val noiseBitmap = getOrCreateNoiseBitmap(noiseColor.toArgb())
+        val shader = ImageShader(
+            image = noiseBitmap,
+            tileModeX = TileMode.Repeated,
+            tileModeY = TileMode.Repeated
+        )
+        Paint().apply { this.shader = shader }
+    } else null
 
-        var seed = (cols * 31 + rows).toLong()
-        for (i in 0 until cols) {
-            for (j in 0 until rows) {
-                seed = (seed * 1103515245L + 12345L) and 0x7fffffffL
-                if (seed % 7L == 0L) {
-                    val ox = i * step + (seed % 10L).toFloat()
-                    val oy = j * step + ((seed / 10L) % 10L).toFloat()
-                    drawCircle(
-                        color = noiseColor,
-                        radius = 1.1f,
-                        center = Offset(ox, oy)
-                    )
-                }
+    onDrawBehind {
+        drawRect(color = color)
+        if (noisePaint != null) {
+            drawIntoCanvas { canvas ->
+                canvas.drawRect(
+                    Rect(0f, 0f, size.width, size.height),
+                    noisePaint
+                )
             }
         }
     }
@@ -490,19 +545,16 @@ fun Modifier.dashedHandDrawnBorder(
     }
 }
 
-// Google Fonts locally installed via font-util
-val PlaypenSansArabicFamily = FontFamily(Font(R.font.playpen_sans_arabic, FontWeight.Normal))
-val PlaypenSansFamily = FontFamily(Font(R.font.playpen_sans, FontWeight.Normal))
+// Google Fonts locally installed via font-util (Arabic hand font routed via KannachFonts.handAr — FT1)
+val PlaypenSansFamily = KannachFonts.handLatin
 val IbmPlexArabicFamily = FontFamily(Font(R.font.ibm_plex_sans_arabic, FontWeight.Normal))
 val SpaceGroteskFamily = FontFamily(Font(R.font.space_grotesk, FontWeight.Normal))
 
 /**
- * Authentic handwritten font for journal entries, notes, and titles.
- * Contains ONLY Playpen Sans Arabic to ensure Arabic handwriting renders flawlessly without fallback issues.
+ * FT1: Authentic handwritten font for journal entries, notes, titles, letters, and sketch labels.
+ * Routed exclusively through KannachFonts.handAr as the single swap point.
  */
-val KannachHandFont = FontFamily(
-    Font(R.font.playpen_sans_arabic, FontWeight.Normal)
-)
+val KannachHandFont: FontFamily = KannachFonts.handAr
 
 /**
  * Clean UI font for labels, buttons, and app metadata.
@@ -513,7 +565,7 @@ val KannachUiFont = FontFamily(
     Font(R.font.space_grotesk, FontWeight.Normal)
 )
 
-val LocalKannachHandFont = staticCompositionLocalOf { KannachHandFont }
+val LocalKannachHandFont = staticCompositionLocalOf { KannachFonts.handAr }
 val LocalKannachUiFont = staticCompositionLocalOf { KannachUiFont }
 
 /**
@@ -534,7 +586,7 @@ fun KannachTheme(
     val isRtl = I18n.isRtl(language)
     val layoutDirection = if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
 
-    val activeHandFont = if (isRtl) KannachHandFont else PlaypenSansFamily
+    val activeHandFont = if (isRtl) KannachFonts.handAr else KannachFonts.handLatin
     val activeUiFont = if (isRtl) IbmPlexArabicFamily else SpaceGroteskFamily
 
     val m3Colors = lightColorScheme(

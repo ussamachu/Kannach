@@ -31,6 +31,7 @@ private const val KEY_FIRST_RUN_COMPLETED = "kannach.first_run_completed"
 private const val KEY_FIRST_PLANT_CELEBRATED = "kannach.first_plant_celebrated"
 private const val KEY_NOTIF_PERMISSION_ASKED = "kannach.notif_perm_asked"
 const val KEY_USER_SETTINGS = "kannach.settings.v1"
+const val KEY_CAPSULE_DRAFT = "capsule_draft"
 
 val DEFAULT_GREEN_HEX: String = "#5aa25f"
 
@@ -95,7 +96,24 @@ data class TimeCapsule(
     val opened: Boolean = false,
     val openedAt: Long? = null,
     val strokes: List<List<Point>> = emptyList(),
-    val color: String = DEFAULT_GREEN_HEX
+    val color: String = DEFAULT_GREEN_HEX,
+    val title: String = ""
+)
+
+/**
+ * LC2: Separate draft record persisted under SharedPreferences key `capsule_draft`
+ * (not part of the capsule list, no schema bump).
+ */
+@Serializable
+data class CapsuleDraft(
+    val title: String = "",
+    val body: String = "",
+    val presetName: String = "MONTH_1",
+    val unlockDate: String = "",
+    val strokes: List<List<Point>> = emptyList(),
+    val color: String = DEFAULT_GREEN_HEX,
+    val doodleVisible: Boolean = false,
+    val updatedAt: Long = System.currentTimeMillis()
 )
 
 @Serializable
@@ -425,11 +443,38 @@ class KannachRepository(private val context: Context) {
 
     fun getCapsules(): List<TimeCapsule> = _capsulesFlow.value
 
+    // --- Capsule Draft CRUD (LC2: SharedPreferences key `capsule_draft`) ---
+
+    fun getCapsuleDraft(): CapsuleDraft? {
+        val rawJson = prefs.getString(KEY_CAPSULE_DRAFT, null) ?: return null
+        return try {
+            json.decodeFromString<CapsuleDraft>(rawJson)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun saveCapsuleDraft(draft: CapsuleDraft) {
+        try {
+            val rawJson = json.encodeToString(draft)
+            prefs.edit().putString(KEY_CAPSULE_DRAFT, rawJson).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun clearCapsuleDraft() {
+        prefs.edit().remove(KEY_CAPSULE_DRAFT).apply()
+    }
+
+    fun hasCapsuleDraft(): Boolean {
+        return prefs.contains(KEY_CAPSULE_DRAFT)
+    }
+
     fun addCapsule(
         text: String,
         unlockDate: String,
         strokes: List<List<Point>> = emptyList(),
-        color: String = DEFAULT_GREEN_HEX
+        color: String = DEFAULT_GREEN_HEX,
+        title: String = ""
     ): TimeCapsule {
         val capsule = TimeCapsule(
             id = "c" + System.currentTimeMillis(),
@@ -439,7 +484,8 @@ class KannachRepository(private val context: Context) {
             opened = false,
             openedAt = null,
             strokes = strokes,
-            color = color
+            color = color,
+            title = title
         )
         val current = _capsulesFlow.value.toMutableList()
         current.add(capsule)
@@ -509,6 +555,52 @@ class KannachRepository(private val context: Context) {
     fun updateReminderLastIdx(idx: Int) {
         val updated = _reminderFlow.value.copy(lastIdx = idx)
         saveReminder(updated)
+    }
+
+    /**
+     * NT2: Stores the last 5 shown indices per pool (`notif_recent_<pool>`).
+     * Mirrors both uppercase and lowercase pool keys (`notif_recent_MORNING` and `notif_recent_morning`)
+     * for maximum compatibility.
+     */
+    fun getRecentNotifIndices(pool: NotificationPool): List<Int> {
+        val upperKey = "notif_recent_${pool.name}"
+        val lowerKey = "notif_recent_${pool.name.lowercase(Locale.ROOT)}"
+        val raw = prefs.getString(upperKey, null) ?: prefs.getString(lowerKey, null) ?: return emptyList()
+        return raw.split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+            .takeLast(5)
+    }
+
+    fun recordNotifIndex(pool: NotificationPool, index: Int) {
+        val updated = (getRecentNotifIndices(pool) + index).takeLast(5)
+        val serialized = updated.joinToString(",")
+        val upperKey = "notif_recent_${pool.name}"
+        val lowerKey = "notif_recent_${pool.name.lowercase(Locale.ROOT)}"
+        prefs.edit()
+            .putString(upperKey, serialized)
+            .putString(lowerKey, serialized)
+            .apply()
+        updateReminderLastIdx(index)
+    }
+
+    /**
+     * NT1: Computes the number of days since the user's most recent entry on or before [todayKey].
+     * Returns null if there are no entries yet.
+     */
+    fun daysSinceLastEntry(todayKey: String? = null): Int? {
+        val entries = _entriesFlow.value
+        if (entries.isEmpty()) return null
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val refToday = todayKey ?: sdf.format(Date())
+        val lastDateKey = entries.keys.filter { it <= refToday }.maxOrNull() ?: return null
+        return try {
+            val dLast = sdf.parse(lastDateKey)?.time ?: return null
+            val dToday = sdf.parse(refToday)?.time ?: return null
+            val diffDays = kotlin.math.round((dToday - dLast).toDouble() / (1000.0 * 60.0 * 60.0 * 24.0)).toInt()
+            diffDays.coerceAtLeast(0)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     // --- First Run & Milestone Celebrations (R2, R3) ---

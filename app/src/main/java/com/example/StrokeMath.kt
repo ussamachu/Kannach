@@ -451,10 +451,20 @@ object StrokeMath {
                 } catch (_: Exception) {
                     toAndroidColor(palette.green)
                 }
+                val w = stroke.width.coerceAtLeast(1f)
+                val p0 = stroke.points.first()
+                // JD4: First point of each stroke draws a dot of width * 1.25 at 0.9 alpha (ink pooling)
+                val poolPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = strokeColorInt
+                    alpha = (255 * 0.9f).roundToInt().coerceIn(0, 255)
+                    style = Paint.Style.FILL
+                }
+                canvas.drawCircle(p0.x, p0.y, (w * 1.25f) / 2f, poolPaint)
+
                 val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = strokeColorInt
                     style = Paint.Style.STROKE
-                    strokeWidth = stroke.width.coerceAtLeast(1f)
+                    strokeWidth = w
                     strokeCap = Paint.Cap.ROUND
                     strokeJoin = Paint.Join.ROUND
                 }
@@ -470,14 +480,7 @@ object StrokeMath {
         // 6. SK9: Signature (when enabled) inside card's bottom-end corner, inset 36px
         if (includeSignature) {
             val isRtl = I18n.isRtl(language)
-            val handTypeface = try {
-                androidx.core.content.res.ResourcesCompat.getFont(
-                    context,
-                    if (isRtl) R.font.playpen_sans_arabic else R.font.playpen_sans
-                )
-            } catch (_: Exception) {
-                null
-            } ?: android.graphics.Typeface.DEFAULT_BOLD
+            val handTypeface = KannachFonts.resolveHandTypeface(context, isRtl)
 
             val uiTypeface = try {
                 androidx.core.content.res.ResourcesCompat.getFont(
