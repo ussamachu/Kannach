@@ -927,5 +927,37 @@
    - `NotificationHelper.kt`: اختيار المجموعة من وقت المنبه المجدول مع أولوية `COMEBACK`، وفحص `if (!hasTodayEntry && settings.reminderDays.contains(todayDow))` في `KannachAlarmReceiver`.
 
 #### Gate O (قائمة للمالك للتحقق البصري والشعوري — للمالك فقط):
-- [ ] اختيار خط اليد العربي المفضل من صفحة العينات (إن لم يُحسم الاختيار بعد، يُتخطى هذا البند دون تعطيل ويستمر الخط الحالي `Playpen Sans Arabic`).
+- [x] اختيار خط اليد العربي المفضل من صفحة العينات: تم اعتماد **Playpen Sans Arabic** رسمياً وإغلاق `FT3`.
 - [ ] فتح الإعدادات ← التذكيرات، وتجربة زر **"إرسال تذكير تجريبي / Send a test nudge"** باللغتين العربية (`AR`) والإنجليزية (`EN`) والحكم على دفء النبرة الشاعرية وعدم تكرار الرسائل.
+
+---
+
+## سجل التنفيذ — الإصدار 5.1 (Fixes 0, 1, 2, 3 — `kannach-v5-1-fixes.md`)
+
+- **0. القرارات المعتمدة:** تثبيت خط اليد العربي **Playpen Sans Arabic** رسمياً في `KannachFonts.handAr` وإغلاق `FT3`.
+- **1. إصلاح اقتصاص تسمية شريط التنقل السفلي (`DF1–DF4`):**
+  - إزالة `.clip(HandDrawnRadiusShape)` من `PaperDockSlot` مع الإبقاء على الرسم الخلفي `drawBehind`.
+  - ضبط `lineHeight = 14.sp` و`LineHeightStyle(Alignment.Center, Trim.Both)` و`PlatformTextStyle(includeFontPadding = false)` و`maxLines = 1` و`softWrap = false` لتسمية التبويب المختار.
+  - ضبط الحشوة الرأسية داخل الكبسولة البالغ ارتفاعها `64.dp` إلى `6.dp`، وتقييد `fontScale` لشريط التنقل بحد أقصى `1.15f` عبر `CompositionLocalProvider(LocalDensity provides ...)`.
+- **2. إصلاح التفاف شارة "اليوم" في ترويسة التدوين وبطاقة الذكرى (`WH1–WH4`):**
+  - حذف شارة `strings.today` الدائرية من كلتا الترويستين (`MemoryModal` و`WritePulseOne`).
+  - دمج كلمة `{today}` مع سطر المسافة الزمنية الشاعرية (`{today} · {relative}` أو `{today}` منفردة عند فراغ السطر النسبي).
+  - جعل نص التاريخ في سطر واحد دائماً (`maxLines = 1`, `softWrap = false`, `overflow = Ellipsis`) مع تصغير تلقائي من `18.sp` إلى `16.sp` عند ضيق العرض.
+- **3. تحديث تحية إتمام تدوين اليوم (`greetDone`):**
+  - استبدال العبارة الجنائزية في اللغات الأربع بصياغة دافئة ومحايدة جنسياً:
+    - **AR:** `غُرس أثر اليوم في الكُنّاش، وللغد صفحته.`
+    - **EN:** `Today’s mark is planted in the notebook; tomorrow has its page.`
+    - **FR:** `La trace du jour est plantée dans le carnet ; demain aura sa page.`
+    - **ES:** `La huella de hoy quedó plantada en el cuaderno; mañana tendrá su página.`
+- **4. تبسيط شاشة الإعدادات (`Section 4 — Settings: fewer choices, nothing to get lost in`):**
+  - تحويل شاشة الإعدادات في `SubScreens.kt` إلى تمرير واحد مباشر بسبعة صفوف فقط عند الفتح الأول دون بطاقات فصول:
+    1. **اللغة (`Language`):** صف يعرض اللغة الحالية ويفتح لوحة سفلية تضم 5 خيارات راديو، مع مفتاح تبديل `الأرقام (مشرقية ٠–٩)` عند تفعيل العربية.
+    2. **التذكير اليومي (`Daily reminder`):** مفتاح تبديل مع عرض الوقت على نفس الصف عند التفعيل، وسطر واحد مع زر إعدادات النظام عند غياب إذن الإشعارات.
+    3. **ألوان الفصول (`Season colors`):** صف واحد يضم 5 دوائر لونية مصغرة (`Auto`, `Spring`, `Summer`, `Autumn`, `Winter`).
+    4. **نسخ احتياطي ليومياتي (`Back up my diary`):** صف يفتح لوحة سفلية تضم التصدير والاستيراد وتاريخ آخر نسخة ومفتاح التذكير الشهري.
+    5. **إخفاء في التطبيقات الأخيرة (`Hide from recent apps`):** مفتاح تبديل مباشر.
+    6. **المزيد (`More`):** صف قابل للطي (مطوي افتراضياً دون حفظ حالته) يضم: بداية الأسبوع، حجم خط اليد، التوقيع على الرسومات المصدرة، أيام التذكير، إرسال تذكير تجريبي، وعرض الترحيب من جديد.
+    7. **إخبار صديق (`Tell a friend`):** زر نصي للمشاركة.
+  - إزالة خياري تقليل الحركة والاهتزاز اللمسي من الإعدادات بحيث يتبع التطبيق إعدادات النظام دائماً (`rememberReduceMotion()` في `Motion.kt` وتطبيع `loadRawUserSettings()` في `ModelsAndStorage.kt`).
+  - إزالة رقم الإصدار واستبداله بسطر التذييل المتمركز `madeBy` في اللغات الأربع (`صُنع بواسطة أسامة` / `Made By Ossamah` / `Créé par Ossamah` / `Hecho por Ossamah`) مع تطابق تام للمفاتيح (`missing: 0`).
+

@@ -109,13 +109,12 @@ val LocalDockInset = androidx.compose.runtime.compositionLocalOf { 88.dp }
 val LocalDockScroll = androidx.compose.runtime.staticCompositionLocalOf { DockScrollConnection() }
 
 /**
- * Inspects system accessibility settings for reduced motion / animator duration scale,
- * or UserSettings.reduceMotion == "on" override via [LocalReduceMotionOverride].
+ * Inspects system accessibility settings for reduced motion / animator duration scale.
+ * Section 4.3: Always follows the system setting.
  * When true, callers should collapse animation durations to 0 or INSTANT.
  */
 @Composable
 fun rememberReduceMotion(): Boolean {
-    if (LocalReduceMotionOverride.current) return true
     val context = LocalContext.current
     return remember(context) {
         try {
@@ -124,7 +123,7 @@ fun rememberReduceMotion(): Boolean {
                 Settings.Global.ANIMATOR_DURATION_SCALE,
                 1.0f
             )
-            scale == 0f
+            scale <= 0f
         } catch (_: Exception) {
             false
         }

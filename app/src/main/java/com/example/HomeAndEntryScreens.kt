@@ -113,18 +113,22 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import java.util.Calendar
 import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -575,15 +579,22 @@ fun KannachDock(
     val showExpandedDock = (dockState == DockState.EXPANDED) || isTransitioning
     val showCollapsedBud = (dockState == DockState.COLLAPSED) || isTransitioning
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 12.dp),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        if (showExpandedDock) {
+    // DF4: Cap dock label scaling: provide LocalDensity with fontScale = min(fontScale, 1.15f) for the dock only
+    val baseDensity = LocalDensity.current
+    val dockDensity = remember(baseDensity.density, baseDensity.fontScale) {
+        Density(density = baseDensity.density, fontScale = min(baseDensity.fontScale, 1.15f))
+    }
+
+    CompositionLocalProvider(LocalDensity provides dockDensity) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 12.dp),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            if (showExpandedDock) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -790,6 +801,7 @@ fun KannachDock(
                 )
             }
         }
+        }
     }
 }
 
@@ -824,13 +836,13 @@ private fun PaperDockSlot(
         }
     }
 
-    // DK6: Fixed slots — no animateContentSize; slot widths are fixed; label cross-fades by alpha for the selected slot.
+    // DK6 & DF1-DF3: No .clip(HandDrawnRadiusShape) on slot; drawBehind draws the highlight;
+    // icon 24dp + 2dp + label 14dp ≈ 40dp inside 64dp pill (vertical padding 6dp from pill Row).
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .fillMaxHeight()
             .heightIn(min = 48.dp)
-            .clip(HandDrawnRadiusShape)
             .semantics { contentDescription = label }
             .clickable(
                 enabled = enabled,
@@ -862,7 +874,7 @@ private fun PaperDockSlot(
                     )
                 }
             }
-            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .padding(horizontal = 6.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -890,12 +902,20 @@ private fun PaperDockSlot(
                 Text(
                     text = label,
                     fontSize = 12.sp,
+                    lineHeight = 14.sp,
                     fontFamily = LocalKannachHandFont.current,
                     fontWeight = FontWeight.Bold,
                     color = palette.greenDeep,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(
+                        lineHeightStyle = LineHeightStyle(
+                            alignment = LineHeightStyle.Alignment.Center,
+                            trim = LineHeightStyle.Trim.Both
+                        ),
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
                     modifier = Modifier.graphicsLayer {
                         alpha = highlightTrim.value
                     }
@@ -2671,45 +2691,43 @@ private fun MemoryCardView(
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header: Date, Distance line, Today Chip, Favorite, Edit & Close Buttons
+                // Header: Date, Distance line, Favorite, Edit & Close Buttons (WH1-WH3)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = formattedDate,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = palette.greenDeep,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (isToday) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(palette.greenSoft)
-                                        .border(1.dp, palette.greenLine, CircleShape)
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = strings.today,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = palette.greenDeep
-                                    )
+                        var headerDateFontSize by remember(formattedDate) { mutableStateOf(18.sp) }
+                        Text(
+                            text = formattedDate,
+                            fontSize = headerDateFontSize,
+                            fontWeight = FontWeight.Bold,
+                            color = palette.greenDeep,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            onTextLayout = { result ->
+                                if (result.hasVisualOverflow && headerDateFontSize > 16.sp) {
+                                    headerDateFontSize = 16.sp
                                 }
                             }
-                        }
+                        )
 
-                        // M3: Poetic time distance line
-                        if (relativeDistance.isNotBlank()) {
+                        // WH2 & M3: Poetic time distance line (if isToday, prefix with {today} · {relative} or just {today})
+                        val cleanRelative = relativeDistance.takeIf {
+                            it.isNotBlank() &&
+                                !it.equals(strings.today, ignoreCase = true) &&
+                                !it.equals(strings.todayWord, ignoreCase = true)
+                        }.orEmpty()
+                        val distanceLineText = if (isToday) {
+                            if (cleanRelative.isNotBlank()) "${strings.today} · $cleanRelative" else strings.today
+                        } else {
+                            relativeDistance
+                        }
+                        if (distanceLineText.isNotBlank()) {
                             Text(
-                                text = relativeDistance,
+                                text = distanceLineText,
                                 fontSize = 13.5.sp,
                                 fontFamily = LocalKannachHandFont.current,
                                 color = palette.greenDeep,
@@ -3048,36 +3066,52 @@ private fun WritePulseOne(
                 )
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
+            val language by viewModel.language.collectAsState()
+            val relativeDistance = remember(dateKey, language) {
+                I18n.getRelativeTimeDistance(dateKey, language)
+            }
+            val cleanRelative = relativeDistance.takeIf {
+                it.isNotBlank() &&
+                    !it.equals(strings.today, ignoreCase = true) &&
+                    !it.equals(strings.todayWord, ignoreCase = true)
+            }.orEmpty()
+            val distanceLineText = if (isToday) {
+                if (cleanRelative.isNotBlank()) "${strings.today} · $cleanRelative" else strings.today
+            } else {
+                relativeDistance
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f)
             ) {
+                var writeDateFontSize by remember(formattedDate) { mutableStateOf(18.sp) }
                 Text(
                     text = formattedDate,
-                    fontSize = 20.sp,
+                    fontSize = writeDateFontSize,
                     fontWeight = FontWeight.Bold,
                     fontFamily = LocalKannachHandFont.current,
                     color = palette.greenDeep,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (isToday) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(palette.greenSoft)
-                            .border(1.dp, palette.greenLine, CircleShape)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = strings.today,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = palette.greenDeep
-                        )
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { result ->
+                        if (result.hasVisualOverflow && writeDateFontSize > 16.sp) {
+                            writeDateFontSize = 16.sp
+                        }
                     }
+                )
+                if (distanceLineText.isNotBlank()) {
+                    Text(
+                        text = distanceLineText,
+                        fontSize = 13.5.sp,
+                        fontFamily = LocalKannachHandFont.current,
+                        color = palette.greenDeep,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
                 }
             }
 

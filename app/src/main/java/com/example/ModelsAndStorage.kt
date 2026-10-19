@@ -295,7 +295,9 @@ class KannachRepository(private val context: Context) {
             val decoded = json.decodeFromString<UserSettings>(rawJson)
             val validDays = decoded.reminderDays.filter { it in 1..7 }.toSet()
             decoded.copy(
-                reminderDays = if (validDays.isEmpty()) setOf(1, 2, 3, 4, 5, 6, 7) else validDays
+                reminderDays = if (validDays.isEmpty()) setOf(1, 2, 3, 4, 5, 6, 7) else validDays,
+                reduceMotion = "system",
+                hapticsEnabled = true
             )
         } catch (_: Exception) {
             UserSettings()

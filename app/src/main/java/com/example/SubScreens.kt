@@ -1731,9 +1731,17 @@ private fun PaperTypeMiniSwatch(
 }
 
 /**
- * Phase 6 (§6): SettingsScreen v2 — Six paper "chapters", each a card with a hand-drawn icon
- * and a hand-font heading. Header = back chevron + "Settings" (overlay opened from header icon).
- * Settings are stored in `UserSettings` under `kannach.settings.v1` (excluded from diary backup).
+ * v5.1 (§4): Settings: fewer choices, nothing to get lost in.
+ * One scroll, no chapter cards, at most 7 visible rows on first open + centered Made By footer:
+ * 1. Language (row -> bottom sheet with 5 radio choices + Arabic-Indic numerals switch when Arabic is active)
+ * 2. Daily reminder (switch; when on, time inline on the same row; one-line permission notice if missing)
+ * 3. Season colors (one row, 5 choices: Auto, Spring, Summer, Autumn, Winter as small swatches inline)
+ * 4. Back up my diary (row -> bottom sheet with Export, Import, Last backup: {date}, and Monthly copy reminder switch)
+ * 5. Hide from recent apps (switch)
+ * 6. More (expandable row, collapsed by default, state not persisted: Week starts on, Handwriting size,
+ *    Add signature to exported drawings, Reminder days, Send a test reminder, Replay welcome tour)
+ * 7. Tell a friend (text button)
+ * — Footer: centered, 13 sp, palette.inkFaint: strings.madeBy
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1749,6 +1757,18 @@ fun SettingsScreen(
     val reminder by viewModel.reminder.collectAsState()
     val reduceMotion = rememberReduceMotion()
     val context = LocalContext.current
+
+    // Sheet & expansion states (not persisted)
+    var showLanguageSheet by remember { mutableStateOf(false) }
+    var showBackupSheet by remember { mutableStateOf(false) }
+    var isMoreExpanded by remember { mutableStateOf(false) }
+
+    androidx.activity.compose.BackHandler(enabled = showLanguageSheet || showBackupSheet) {
+        when {
+            showLanguageSheet -> showLanguageSheet = false
+            showBackupSheet -> showBackupSheet = false
+        }
+    }
 
     fun checkNotifGranted(): Boolean {
         val systemEnabled = try {
@@ -1820,17 +1840,53 @@ fun SettingsScreen(
             .paperBackground(palette.paper)
             .testTag("settings_screen_root")
     ) {
-        androidx.compose.animation.AnimatedContent(
+        AnimatedContent(
             targetState = language,
             transitionSpec = {
                 val dur = if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT
-                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(dur)) togetherWith
-                    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(dur))
+                fadeIn(tween(dur)) togetherWith fadeOut(tween(dur))
             },
             label = "SettingsLanguageCrossfade"
         ) { activeLang ->
             val strings = I18n.forLanguage(activeLang)
             val isRtl = I18n.isRtl(activeLang)
+
+            val currentLanguageDisplay = remember(languageChoice, activeLang, strings) {
+                if (languageChoice == "system") {
+                    strings.langFollowSystem
+                } else {
+                    I18n.LANGUAGE_LABELS[languageChoice] ?: I18n.LANGUAGE_LABELS[activeLang] ?: activeLang
+                }
+            }
+
+            val formattedTime = remember(reminder.time, activeLang, userSettings.useArabicIndicNumerals) {
+                val parts = reminder.time.split(":")
+                if (parts.size == 2) {
+                    val h = parts[0].toIntOrNull() ?: 20
+                    val m = parts[1].toIntOrNull() ?: 0
+                    val raw = String.format(Locale.US, "%02d:%02d", h, m)
+                    if (I18n.normalizeCode(activeLang) == "ar" && userSettings.useArabicIndicNumerals) {
+                        I18n.toArabicIndicDigits(raw)
+                    } else {
+                        raw
+                    }
+                } else {
+                    reminder.time
+                }
+            }
+
+            val lastSavedDateStr = remember(
+                userSettings.lastBackupTimestamp,
+                activeLang,
+                userSettings.useArabicIndicNumerals
+            ) {
+                val ts = userSettings.lastBackupTimestamp
+                if (ts == null || ts <= 0L) {
+                    strings.settingsBackupNever
+                } else {
+                    I18n.formatEpochLongDate(ts, activeLang, userSettings.useArabicIndicNumerals)
+                }
+            }
 
             Column(
                 modifier = Modifier
@@ -1873,77 +1929,124 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.size(48.dp))
                 }
 
+                // Single clean scroll of rows (no chapter cards)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     // =========================================================================
-                    // CHAPTER 1: Language (with LG6)
+                    // ROW 1: Language (tap -> bottom sheet with 5 radio choices + Arabic numerals switch)
                     // =========================================================================
-                    SettingsChapterCard(
-                        title = strings.language,
-                        icon = KannachIconType.SPARKLE,
-                        tiltDegrees = -0.35f,
-                        modifier = Modifier.testTag("settings_chapter_language")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 54.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showLanguageSheet = true }
+                            .padding(horizontal = 8.dp, vertical = 12.dp)
+                            .testTag("settings_row_language"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val langRows = listOf(
-                            "system" to strings.langFollowSystem,
-                            "ar" to "العربية",
-                            "en" to "English",
-                            "fr" to "Français",
-                            "es" to "Español"
+                        Text(
+                            text = strings.language,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            langRows.forEach { (code, label) ->
-                                val isSelected = if (code == "system") {
-                                    languageChoice == "system"
-                                } else {
-                                    languageChoice == code
-                                }
-                                SettingsLanguageRow(
-                                    code = code,
-                                    label = label,
-                                    selected = isSelected,
-                                    onClick = { viewModel.setLanguage(code) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("settings_lang_row_$code")
-                                )
-                            }
+                            Text(
+                                text = currentLanguageDisplay,
+                                fontSize = 14.sp,
+                                color = palette.inkSoft,
+                                maxLines = 1
+                            )
+                            KannachIcon(
+                                icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
+                                tint = palette.inkSoft,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
 
+                    SettingsThinDivider()
+
                     // =========================================================================
-                    // CHAPTER 2: Reminders
+                    // ROW 2: Daily reminder (switch; when on, time inline on the same row)
                     // =========================================================================
-                    SettingsChapterCard(
-                        title = strings.reminderTitle,
-                        icon = KannachIconType.SPARKLE,
-                        tiltDegrees = 0.3f,
-                        modifier = Modifier.testTag("settings_chapter_reminders")
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                            .testTag("settings_row_reminder")
                     ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Master switch + time
+                            Text(
+                                text = strings.reminderTitle,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = palette.ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Text(
-                                    text = strings.reminderToggle,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.ink,
-                                    modifier = Modifier.weight(1f)
-                                )
+                                if (reminder.enabled) {
+                                    Box(
+                                        modifier = Modifier
+                                            .heightIn(min = 38.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(palette.paperHi)
+                                            .border(1.2.dp, palette.greenLine, RoundedCornerShape(10.dp))
+                                            .clickable {
+                                                val parts = reminder.time.split(":").mapNotNull { it.toIntOrNull() }
+                                                val h = if (parts.isNotEmpty()) parts[0] else 20
+                                                val m = if (parts.size > 1) parts[1] else 0
+                                                try {
+                                                    TimePickerDialog(
+                                                        context,
+                                                        { _, sH, sM ->
+                                                            viewModel.setReminderTime(
+                                                                String.format(Locale.US, "%02d:%02d", sH, sM)
+                                                            )
+                                                        },
+                                                        h,
+                                                        m,
+                                                        true
+                                                    ).show()
+                                                } catch (_: Exception) {}
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                                            .testTag("settings_reminder_time_btn"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = formattedTime,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = palette.greenDeep,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+
                                 Switch(
                                     checked = reminder.enabled,
                                     onCheckedChange = { enabled ->
@@ -1968,71 +2071,316 @@ fun SettingsScreen(
                                     modifier = Modifier.testTag("settings_reminder_switch")
                                 )
                             }
+                        }
 
-                            // Time row
+                        // If notification permission is missing, show one line "Notifications are off" + system settings button
+                        if (!isNotifPermissionGranted) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp, bottom = 4.dp)
+                                    .testTag("settings_reminder_perm_row"),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = strings.reminderPermOff,
+                                    fontSize = 13.sp,
+                                    color = palette.inkSoft,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("settings_reminder_perm_status")
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .heightIn(min = 36.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(palette.greenSoft)
+                                        .border(1.dp, palette.greenLine, RoundedCornerShape(8.dp))
+                                        .clickable { openNotificationSettings() }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        .testTag("settings_reminder_perm_btn"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = strings.reminderPermSettings,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = palette.greenDeep,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsThinDivider()
+
+                    // =========================================================================
+                    // ROW 3: Season colors (one row, 5 choices as small swatches inline)
+                    // =========================================================================
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .padding(horizontal = 8.dp, vertical = 10.dp)
+                            .testTag("settings_row_season"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.settingsSeasonLabel,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        val seasonSwatches = listOf(
+                            Triple("auto", strings.seasonAuto, Color(0xFF56945F)),
+                            Triple("spring", strings.seasonSpring, Color(0xFF5AA25F)),
+                            Triple("summer", strings.seasonSummer, Color(0xFF6A9C3F)),
+                            Triple("autumn", strings.seasonAutumn, Color(0xFFC87D46)),
+                            Triple("winter", strings.seasonWinter, Color(0xFF3F7566))
+                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            seasonSwatches.forEach { (key, label, swatchColor) ->
+                                val isSelected = userSettings.seasonOverride == key
+                                SettingsSeasonSwatch(
+                                    key = key,
+                                    label = label,
+                                    color = swatchColor,
+                                    selected = isSelected,
+                                    onClick = { viewModel.setSeasonOverride(key) },
+                                    modifier = Modifier.testTag("settings_season_$key")
+                                )
+                            }
+                        }
+                    }
+
+                    SettingsThinDivider()
+
+                    // =========================================================================
+                    // ROW 4: Back up my diary (row -> sheet with Export, Import, Last backup, Monthly switch)
+                    // =========================================================================
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 54.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showBackupSheet = true }
+                            .padding(horizontal = 8.dp, vertical = 12.dp)
+                            .testTag("settings_row_backup"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.settingsBackupRow,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        KannachIcon(
+                            icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
+                            tint = palette.inkSoft,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    SettingsThinDivider()
+
+                    // =========================================================================
+                    // ROW 5: Hide from recent apps (switch)
+                    // =========================================================================
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 54.dp)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .testTag("settings_row_hide_recents"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.settingsHideRecents,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = userSettings.hideInRecents,
+                            onCheckedChange = { viewModel.setHideInRecents(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = palette.onGreen,
+                                checkedTrackColor = palette.green
+                            ),
+                            modifier = Modifier.testTag("settings_hide_recents_switch")
+                        )
+                    }
+
+                    SettingsThinDivider()
+
+                    // =========================================================================
+                    // ROW 6: More (expandable row, collapsed by default, state not persisted)
+                    // =========================================================================
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 54.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { isMoreExpanded = !isMoreExpanded }
+                            .padding(horizontal = 8.dp, vertical = 12.dp)
+                            .testTag("settings_row_more"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.settingsMore,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        KannachIcon(
+                            icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
+                            tint = palette.inkSoft,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .rotate(
+                                    if (isMoreExpanded) {
+                                        if (isRtl) -90f else 90f
+                                    } else {
+                                        0f
+                                    }
+                                )
+                        )
+                    }
+
+                    // 4.2 Inside "More" (collapsed by default)
+                    AnimatedVisibility(visible = isMoreExpanded) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 10.dp)
+                                .clip(HandDrawnRadiusShape)
+                                .background(palette.paperHi)
+                                .border(1.dp, palette.line, HandDrawnRadiusShape)
+                                .padding(14.dp)
+                                .testTag("settings_more_section"),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // 1. Week starts on (chip row)
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = strings.settingsWeekStartLabel,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = palette.inkSoft,
+                                    maxLines = 1
+                                )
+                                val activeWeekStart = userSettings.effectiveWeekStart(activeLang)
+                                val weekStartOptions = listOf(
+                                    7 to strings.weekStartSat,
+                                    1 to strings.weekStartSun,
+                                    2 to strings.weekStartMon
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    weekStartOptions.forEach { (dow, label) ->
+                                        SettingsOptionChip(
+                                            label = label,
+                                            selected = activeWeekStart == dow,
+                                            onClick = { viewModel.setWeekStartsOn(dow) },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .testTag("settings_week_start_$dow")
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 2. Handwriting size (chip row)
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = strings.settingsHandSizeLabel,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = palette.inkSoft,
+                                    maxLines = 1
+                                )
+                                val handSizeOptions = listOf(
+                                    "small" to strings.handSizeSmall,
+                                    "normal" to strings.handSizeNormal,
+                                    "large" to strings.handSizeLarge
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    handSizeOptions.forEach { (key, label) ->
+                                        SettingsOptionChip(
+                                            label = label,
+                                            selected = userSettings.handwritingSize == key,
+                                            onClick = { viewModel.setHandwritingSize(key) },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .testTag("settings_hand_size_$key")
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 3. Add signature to exported drawings (switch)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = strings.reminderTimeLabel,
+                                    text = strings.settingsSignatureExport,
                                     fontSize = 14.sp,
-                                    color = palette.inkSoft
+                                    fontWeight = FontWeight.Medium,
+                                    color = palette.ink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
                                 )
-
-                                val formattedTime = remember(reminder.time, activeLang, userSettings.useArabicIndicNumerals) {
-                                    val parts = reminder.time.split(":")
-                                    if (parts.size == 2) {
-                                        val h = parts[0].toIntOrNull() ?: 20
-                                        val m = parts[1].toIntOrNull() ?: 0
-                                        val raw = String.format(Locale.US, "%02d:%02d", h, m)
-                                        if (I18n.normalizeCode(activeLang) == "ar" && userSettings.useArabicIndicNumerals) {
-                                            I18n.toArabicIndicDigits(raw)
-                                        } else {
-                                            raw
-                                        }
-                                    } else {
-                                        reminder.time
-                                    }
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .heightIn(min = 40.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(palette.paper)
-                                        .border(1.2.dp, palette.line, RoundedCornerShape(10.dp))
-                                        .clickable {
-                                            val parts = reminder.time.split(":").mapNotNull { it.toIntOrNull() }
-                                            val h = if (parts.isNotEmpty()) parts[0] else 20
-                                            val m = if (parts.size > 1) parts[1] else 0
-                                            try {
-                                                TimePickerDialog(
-                                                    context,
-                                                    { _, sH, sM ->
-                                                        viewModel.setReminderTime(String.format(Locale.US, "%02d:%02d", sH, sM))
-                                                    },
-                                                    h,
-                                                    m,
-                                                    true
-                                                ).show()
-                                            } catch (_: Exception) {}
-                                        }
-                                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                                        .testTag("settings_reminder_time_btn"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = formattedTime,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = palette.greenDeep
-                                    )
-                                }
+                                Switch(
+                                    checked = exportSignature,
+                                    onCheckedChange = { viewModel.setExportSignature(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = palette.onGreen,
+                                        checkedTrackColor = palette.green
+                                    ),
+                                    modifier = Modifier.testTag("settings_signature_switch")
+                                )
                             }
 
-                            // Days of the week chips (default all)
+                            // 4. Reminder days
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -2041,11 +2389,12 @@ fun SettingsScreen(
                                     text = strings.reminderDaysLabel,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = palette.inkSoft
+                                    color = palette.inkSoft,
+                                    maxLines = 1
                                 )
                                 val weekStartDow = userSettings.effectiveWeekStart(activeLang)
                                 val orderedDays = remember(weekStartDow) {
-                                    val shift = (weekStartDow - java.util.Calendar.SUNDAY + 7) % 7
+                                    val shift = (weekStartDow - Calendar.SUNDAY + 7) % 7
                                     (0 until 7).map { i -> ((shift + i) % 7) + 1 }
                                 }
                                 Row(
@@ -2084,518 +2433,296 @@ fun SettingsScreen(
                                 }
                             }
 
-                            // Permission status row: "Notifications are on / off" with "Allow" or "Open settings" when off
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(palette.paper)
-                                    .border(1.dp, palette.line, RoundedCornerShape(10.dp))
-                                    .padding(horizontal = 12.dp, vertical = 10.dp)
-                                    .testTag("settings_reminder_perm_row"),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (isNotifPermissionGranted) strings.reminderPermOn else strings.reminderPermOff,
-                                    fontSize = 13.sp,
-                                    color = if (isNotifPermissionGranted) palette.greenDeep else palette.inkSoft,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("settings_reminder_perm_status")
-                                )
-                                if (!isNotifPermissionGranted) {
-                                    val canAskRuntime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                        !viewModel.repository.isNotifPermissionAsked()
-                                    val actionText = if (canAskRuntime) {
-                                        strings.reminderPermAllow
-                                    } else {
-                                        strings.reminderPermSettings
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(palette.greenSoft)
-                                            .border(1.dp, palette.greenLine, RoundedCornerShape(8.dp))
-                                            .clickable {
-                                                if (canAskRuntime && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                                    viewModel.repository.markNotifPermissionAsked()
-                                                    try {
-                                                        notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                                    } catch (_: Exception) {
-                                                        openNotificationSettings()
-                                                    }
-                                                } else {
-                                                    openNotificationSettings()
-                                                }
-                                            }
-                                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                                            .testTag("settings_reminder_perm_btn")
-                                    ) {
-                                        Text(
-                                            text = actionText,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = palette.greenDeep
-                                        )
-                                    }
-                                }
-                            }
-
-                            // "Send a test nudge" button
+                            // 5. Send a test reminder
                             SettingsPaperActionRow(
                                 label = strings.reminderTestBtn,
                                 icon = KannachIconType.SPARKLE,
                                 onClick = { viewModel.sendTestNudge(context) },
                                 modifier = Modifier.testTag("settings_test_nudge_btn")
                             )
-                        }
-                    }
 
-                    // =========================================================================
-                    // CHAPTER 3: Writing
-                    // =========================================================================
-                    SettingsChapterCard(
-                        title = strings.settingsWritingTitle,
-                        icon = KannachIconType.EDIT,
-                        tiltDegrees = -0.25f,
-                        modifier = Modifier.testTag("settings_chapter_writing")
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            // Week starts on: Saturday (7) / Sunday (1) / Monday (2)
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = strings.settingsWeekStartLabel,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.inkSoft
-                                )
-                                val activeWeekStart = userSettings.effectiveWeekStart(activeLang)
-                                val weekStartOptions = listOf(
-                                    7 to strings.weekStartSat,
-                                    1 to strings.weekStartSun,
-                                    2 to strings.weekStartMon
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    weekStartOptions.forEach { (dow, label) ->
-                                        SettingsOptionChip(
-                                            label = label,
-                                            selected = activeWeekStart == dow,
-                                            onClick = { viewModel.setWeekStartsOn(dow) },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .testTag("settings_week_start_$dow")
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Numerals (shown ONLY for Arabic): Western 0–9 (default) / Arabic-Indic ٠–٩
-                            if (I18n.normalizeCode(activeLang) == "ar") {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("settings_numerals_section"),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = strings.settingsNumeralsLabel,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = palette.inkSoft
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        SettingsOptionChip(
-                                            label = strings.numeralsWestern,
-                                            selected = !userSettings.useArabicIndicNumerals,
-                                            onClick = { viewModel.setUseArabicIndicNumerals(false) },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .testTag("settings_numerals_western")
-                                        )
-                                        SettingsOptionChip(
-                                            label = strings.numeralsArabicIndic,
-                                            selected = userSettings.useArabicIndicNumerals,
-                                            onClick = { viewModel.setUseArabicIndicNumerals(true) },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .testTag("settings_numerals_arabic")
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Handwriting size: Small (18sp) / Normal (20sp) / Large (24sp)
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = strings.settingsHandSizeLabel,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.inkSoft
-                                )
-                                val handSizeOptions = listOf(
-                                    "small" to strings.handSizeSmall,
-                                    "normal" to strings.handSizeNormal,
-                                    "large" to strings.handSizeLarge
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    handSizeOptions.forEach { (key, label) ->
-                                        SettingsOptionChip(
-                                            label = label,
-                                            selected = userSettings.handwritingSize == key,
-                                            onClick = { viewModel.setHandwritingSize(key) },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .testTag("settings_hand_size_$key")
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // =========================================================================
-                    // CHAPTER 4: Appearance & feel
-                    // =========================================================================
-                    SettingsChapterCard(
-                        title = strings.settingsAppearanceTitle,
-                        icon = KannachIconType.SPROUT,
-                        tiltDegrees = 0.25f,
-                        modifier = Modifier.testTag("settings_chapter_appearance")
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            // Season colors: Automatic / Winter / Spring / Summer / Autumn
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = strings.settingsSeasonLabel,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.inkSoft
-                                )
-                                val seasonOptions = listOf(
-                                    "auto" to strings.seasonAuto,
-                                    "winter" to strings.seasonWinter,
-                                    "spring" to strings.seasonSpring,
-                                    "summer" to strings.seasonSummer,
-                                    "autumn" to strings.seasonAutumn
-                                )
-                                androidx.compose.foundation.layout.FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    seasonOptions.forEach { (key, label) ->
-                                        SettingsOptionChip(
-                                            label = label,
-                                            selected = userSettings.seasonOverride == key,
-                                            onClick = { viewModel.setSeasonOverride(key) },
-                                            modifier = Modifier.testTag("settings_season_$key")
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Reduce motion: Follow system / On
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = strings.settingsReduceMotionLabel,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.inkSoft
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    SettingsOptionChip(
-                                        label = strings.reduceMotionSystem,
-                                        selected = userSettings.reduceMotion == "system",
-                                        onClick = { viewModel.setReduceMotion("system") },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("settings_motion_system")
-                                    )
-                                    SettingsOptionChip(
-                                        label = strings.reduceMotionOn,
-                                        selected = userSettings.reduceMotion == "on",
-                                        onClick = { viewModel.setReduceMotion("on") },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("settings_motion_on")
-                                    )
-                                }
-                            }
-
-                            // Haptics: On (default) / Off
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = strings.settingsHapticsLabel,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.inkSoft
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    SettingsOptionChip(
-                                        label = strings.toggleOn,
-                                        selected = userSettings.hapticsEnabled,
-                                        onClick = { viewModel.setHapticsEnabled(true) },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("settings_haptics_on")
-                                    )
-                                    SettingsOptionChip(
-                                        label = strings.toggleOff,
-                                        selected = !userSettings.hapticsEnabled,
-                                        onClick = { viewModel.setHapticsEnabled(false) },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("settings_haptics_off")
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // =========================================================================
-                    // CHAPTER 5: Privacy & backup
-                    // =========================================================================
-                    SettingsChapterCard(
-                        title = strings.settingsPrivacyTitle,
-                        icon = KannachIconType.SEAL,
-                        tiltDegrees = -0.3f,
-                        modifier = Modifier.testTag("settings_chapter_privacy")
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // Hide in recent apps switch (FLAG_SECURE)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = strings.settingsHideRecents,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.ink,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Switch(
-                                    checked = userSettings.hideInRecents,
-                                    onCheckedChange = { viewModel.setHideInRecents(it) },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = palette.onGreen,
-                                        checkedTrackColor = palette.green
-                                    ),
-                                    modifier = Modifier.testTag("settings_hide_recents_switch")
-                                )
-                            }
-
-                            // Save a copy of your diary
-                            SettingsPaperActionRow(
-                                label = strings.exportBtn,
-                                icon = KannachIconType.UPLOAD,
-                                onClick = { viewModel.exportBackup(context) },
-                                modifier = Modifier.testTag("settings_export_btn")
-                            )
-
-                            // Restore a saved copy
-                            SettingsPaperActionRow(
-                                label = strings.importBtn,
-                                icon = KannachIconType.NOTEBOOK,
-                                onClick = { importLauncher.launch("application/json") },
-                                modifier = Modifier.testTag("settings_import_btn")
-                            )
-
-                            // Last copy saved: {date} / never
-                            val lastSavedDateStr = remember(
-                                userSettings.lastBackupTimestamp,
-                                activeLang,
-                                userSettings.useArabicIndicNumerals
-                            ) {
-                                val ts = userSettings.lastBackupTimestamp
-                                if (ts == null || ts <= 0L) {
-                                    strings.settingsBackupNever
-                                } else {
-                                    I18n.formatEpochLongDate(ts, activeLang, userSettings.useArabicIndicNumerals)
-                                }
-                            }
-                            Text(
-                                text = strings.settingsLastBackup.replace("{d}", lastSavedDateStr),
-                                fontSize = 13.sp,
-                                fontFamily = LocalKannachHandFont.current,
-                                color = palette.inkSoft,
-                                modifier = Modifier.testTag("settings_last_backup_text")
-                            )
-
-                            // Copy reminder: Off / Monthly
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = strings.settingsCopyReminderLabel,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.inkSoft
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    SettingsOptionChip(
-                                        label = strings.toggleOff,
-                                        selected = userSettings.copyReminder == "off",
-                                        onClick = { viewModel.setCopyReminder("off") },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("settings_copy_reminder_off")
-                                    )
-                                    SettingsOptionChip(
-                                        label = strings.copyReminderMonthly,
-                                        selected = userSettings.copyReminder == "monthly",
-                                        onClick = { viewModel.setCopyReminder("monthly") },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("settings_copy_reminder_monthly")
-                                    )
-                                }
-                            }
-
-                            // Plain sentence: "Everything stays on this device."
-                            Text(
-                                text = strings.privacyDeviceNote,
-                                fontSize = 13.sp,
-                                fontFamily = LocalKannachHandFont.current,
-                                color = palette.greenDeep,
-                                modifier = Modifier
-                                    .padding(top = 2.dp)
-                                    .testTag("settings_privacy_note")
-                            )
-                        }
-                    }
-
-                    // =========================================================================
-                    // CHAPTER 6: About
-                    // =========================================================================
-                    SettingsChapterCard(
-                        title = strings.about,
-                        icon = KannachIconType.HEART,
-                        tiltDegrees = 0.2f,
-                        modifier = Modifier.testTag("settings_chapter_about")
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Text(
-                                text = strings.appSub,
-                                fontSize = 16.sp,
-                                fontFamily = LocalKannachHandFont.current,
-                                color = palette.greenDeep
-                            )
-
-                            Text(
-                                text = strings.aboutText,
-                                fontSize = 14.sp,
-                                lineHeight = 21.sp,
-                                color = palette.ink
-                            )
-
-                            // Signature on exported drawings switch (default on, same value as SK7)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = strings.settingsSignatureExport,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.ink,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Switch(
-                                    checked = exportSignature,
-                                    onCheckedChange = { viewModel.setExportSignature(it) },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = palette.onGreen,
-                                        checkedTrackColor = palette.green
-                                    ),
-                                    modifier = Modifier.testTag("settings_signature_switch")
-                                )
-                            }
-
-                            // Show the welcome again (replays FirstRunOnboarding)
+                            // 6. Replay welcome tour
                             SettingsPaperActionRow(
                                 label = strings.settingsReplayWelcome,
                                 icon = KannachIconType.SPROUT,
                                 onClick = { viewModel.replayWelcome() },
                                 modifier = Modifier.testTag("settings_replay_welcome_btn")
                             )
+                        }
+                    }
 
-                            // Tell a friend (share intent with a short sentence)
-                            SettingsPaperActionRow(
-                                label = strings.settingsTellFriend,
-                                icon = KannachIconType.UPLOAD,
-                                onClick = { viewModel.shareAppWithFriend(context) },
-                                modifier = Modifier.testTag("settings_tell_friend_btn")
+                    SettingsThinDivider()
+
+                    // =========================================================================
+                    // ROW 7: Tell a friend (text button)
+                    // =========================================================================
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { viewModel.shareAppWithFriend(context) }
+                            .padding(horizontal = 8.dp, vertical = 12.dp)
+                            .testTag("settings_tell_friend_btn"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        KannachIcon(
+                            icon = KannachIconType.UPLOAD,
+                            tint = palette.greenDeep,
+                            strokeWidthDp = 1.8.dp,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = strings.settingsTellFriend,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.greenDeep,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // =========================================================================
+                    // FOOTER: centered, 13 sp, palette.inkFaint: "Made By" line
+                    // =========================================================================
+                    Text(
+                        text = strings.madeBy,
+                        fontSize = 13.sp,
+                        color = palette.inkFaint,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 24.dp, bottom = 8.dp)
+                            .testTag("settings_version_text")
+                    )
+                }
+            }
+
+            // =========================================================================
+            // SHEET 1: Language bottom sheet (5 radio choices + Arabic-Indic numerals switch)
+            // =========================================================================
+            if (showLanguageSheet) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(palette.scrim)
+                        .clickable { showLanguageSheet = false }
+                        .testTag("settings_language_sheet_scrim"),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 560.dp)
+                            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                            .background(palette.paperHi)
+                            .border(
+                                width = 1.5.dp,
+                                color = palette.line,
+                                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                             )
-
-                            // Version (BR5: Kannach · {version})
-                            val versionStr = remember(activeLang, userSettings.useArabicIndicNumerals) {
-                                val rawVer = BuildConfig.VERSION_NAME
-                                val formattedVer = if (I18n.normalizeCode(activeLang) == "ar" && userSettings.useArabicIndicNumerals) {
-                                    I18n.toArabicIndicDigits(rawVer)
-                                } else {
-                                    rawVer
-                                }
-                                "${strings.appTitle} · $formattedVer"
-                            }
+                            .clickable(enabled = false) {}
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 20.dp)
+                            .testTag("settings_language_sheet"),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = versionStr,
-                                fontSize = 13.sp,
-                                color = palette.inkFaint,
-                                textAlign = TextAlign.Center,
+                                text = strings.language,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = LocalKannachHandFont.current,
+                                color = palette.greenDeep
+                            )
+                            IconButton(
+                                onClick = { showLanguageSheet = false },
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                KannachIcon(
+                                    icon = KannachIconType.X,
+                                    tint = palette.inkSoft,
+                                    contentDescription = strings.dismiss,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        val langRows = listOf(
+                            "system" to strings.langFollowSystem,
+                            "ar" to "العربية",
+                            "en" to "English",
+                            "fr" to "Français",
+                            "es" to "Español"
+                        )
+                        langRows.forEach { (code, label) ->
+                            val isSelected = if (code == "system") {
+                                languageChoice == "system"
+                            } else {
+                                languageChoice == code
+                            }
+                            SettingsLanguageRow(
+                                code = code,
+                                label = label,
+                                selected = isSelected,
+                                onClick = { viewModel.setLanguage(code) },
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .testTag("settings_lang_row_$code")
+                            )
+                        }
+
+                        // When Arabic is active the sheet also shows one switch: "Arabic-Indic numerals"
+                        if (I18n.normalizeCode(activeLang) == "ar") {
+                            SettingsThinDivider()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
                                     .padding(top = 4.dp)
-                                    .testTag("settings_version_text")
+                                    .testTag("settings_numerals_section"),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${strings.settingsNumeralsLabel} (${strings.numeralsArabicIndic})",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = palette.ink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Switch(
+                                    checked = userSettings.useArabicIndicNumerals,
+                                    onCheckedChange = { viewModel.setUseArabicIndicNumerals(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = palette.onGreen,
+                                        checkedTrackColor = palette.green
+                                    ),
+                                    modifier = Modifier.testTag("settings_numerals_switch")
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =========================================================================
+            // SHEET 2: Back up my diary bottom sheet (Export, Import, Last backup, Monthly switch)
+            // =========================================================================
+            if (showBackupSheet) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(palette.scrim)
+                        .clickable { showBackupSheet = false }
+                        .testTag("settings_backup_sheet_scrim"),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 560.dp)
+                            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                            .background(palette.paperHi)
+                            .border(
+                                width = 1.5.dp,
+                                color = palette.line,
+                                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                            )
+                            .clickable(enabled = false) {}
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 20.dp)
+                            .testTag("settings_backup_sheet"),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = strings.settingsBackupRow,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = LocalKannachHandFont.current,
+                                color = palette.greenDeep
+                            )
+                            IconButton(
+                                onClick = { showBackupSheet = false },
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                KannachIcon(
+                                    icon = KannachIconType.X,
+                                    tint = palette.inkSoft,
+                                    contentDescription = strings.dismiss,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Export
+                        SettingsPaperActionRow(
+                            label = strings.exportBtn,
+                            icon = KannachIconType.UPLOAD,
+                            onClick = { viewModel.exportBackup(context) },
+                            modifier = Modifier.testTag("settings_export_btn")
+                        )
+
+                        // Import
+                        SettingsPaperActionRow(
+                            label = strings.importBtn,
+                            icon = KannachIconType.NOTEBOOK,
+                            onClick = { importLauncher.launch("application/json") },
+                            modifier = Modifier.testTag("settings_import_btn")
+                        )
+
+                        // Last backup: {date}
+                        Text(
+                            text = strings.settingsLastBackup.replace("{d}", lastSavedDateStr),
+                            fontSize = 13.sp,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.inkSoft,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag("settings_last_backup_text")
+                        )
+
+                        SettingsThinDivider()
+
+                        // Monthly copy reminder switch (default off)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${strings.settingsCopyReminderLabel} (${strings.copyReminderMonthly})",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = palette.ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(
+                                checked = userSettings.copyReminder == "monthly",
+                                onCheckedChange = { enabled ->
+                                    viewModel.setCopyReminder(if (enabled) "monthly" else "off")
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = palette.onGreen,
+                                    checkedTrackColor = palette.green
+                                ),
+                                modifier = Modifier.testTag("settings_copy_reminder_switch")
                             )
                         }
                     }
@@ -2606,60 +2733,76 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsChapterCard(
-    title: String,
-    icon: KannachIconType,
-    tiltDegrees: Float = 0f,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+private fun SettingsThinDivider() {
+    val palette = LocalKannachPalette.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(palette.line.copy(alpha = 0.65f))
+    )
+}
+
+@Composable
+private fun SettingsSeasonSwatch(
+    key: String,
+    label: String,
+    color: Color,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val palette = LocalKannachPalette.current
     Box(
         modifier = modifier
-            .fillMaxWidth()
-            .paperTilt(tiltDegrees)
-            .paperShadow(
-                shadowColor = palette.paperShadow,
-                shape = HandDrawnRadiusShape,
-                offsetY = 3.dp
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(
+                if (key == "auto") palette.paperHi else color
             )
-            .clip(HandDrawnRadiusShape)
-            .background(palette.paperHi)
-            .border(1.5.dp, palette.line, HandDrawnRadiusShape)
-            .padding(16.dp)
+            .border(
+                width = if (selected) 2.4.dp else 1.2.dp,
+                color = if (selected) palette.ink else palette.line,
+                shape = CircleShape
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(palette.greenSoft)
-                        .border(1.dp, palette.greenLine, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    KannachIcon(
-                        icon = icon,
-                        tint = palette.greenDeep,
-                        strokeWidthDp = 1.8.dp,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                Text(
-                    text = title,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = LocalKannachHandFont.current,
-                    color = palette.greenDeep
+        if (key == "auto") {
+            Canvas(modifier = Modifier.size(22.dp)) {
+                drawArc(
+                    color = Color(0xFF5AA25F),
+                    startAngle = 180f,
+                    sweepAngle = 90f,
+                    useCenter = true
+                )
+                drawArc(
+                    color = Color(0xFF6A9C3F),
+                    startAngle = 270f,
+                    sweepAngle = 90f,
+                    useCenter = true
+                )
+                drawArc(
+                    color = Color(0xFFC87D46),
+                    startAngle = 0f,
+                    sweepAngle = 90f,
+                    useCenter = true
+                )
+                drawArc(
+                    color = Color(0xFF3F7566),
+                    startAngle = 90f,
+                    sweepAngle = 90f,
+                    useCenter = true
                 )
             }
-            content()
+        }
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(if (key == "auto") palette.ink else palette.onGreen)
+            )
         }
     }
 }
