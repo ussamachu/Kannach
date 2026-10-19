@@ -931,6 +931,8 @@ fun SketchpadScreen(
     val reduceMotion = rememberReduceMotion()
 
     val strokes by viewModel.sketchStrokes.collectAsState()
+    val canUndo by viewModel.canUndoSketch.collectAsState()
+    val canRedo by viewModel.canRedoSketch.collectAsState()
     val selectedColor by viewModel.sketchColor.collectAsState()
     val brushWidth by viewModel.sketchBrushWidth.collectAsState()
     val isEraserMode by viewModel.sketchEraserMode.collectAsState()
@@ -944,6 +946,7 @@ fun SketchpadScreen(
     val isExportSheetOpen by viewModel.isExportSheetOpen.collectAsState()
     val exportFormat by viewModel.exportFormat.collectAsState()
     val exportSignature by viewModel.exportSignature.collectAsState()
+    var isHeaderOverflowOpen by remember { mutableStateOf(false) }
 
     val inkHex = "#3a523d"
     val allSwatches = remember {
@@ -1030,18 +1033,66 @@ fun SketchpadScreen(
                         .padding(horizontal = 4.dp)
                         .testTag("sketch_title")
                 )
-                IconButton(
-                    onClick = { viewModel.openExportSheet() },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("sketch_export_button")
-                ) {
-                    KannachIcon(
-                        icon = KannachIconType.UPLOAD,
-                        tint = palette.greenDeep,
-                        contentDescription = strings.exportTitle,
-                        modifier = Modifier.size(22.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { viewModel.openExportSheet() },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("sketch_export_button")
+                    ) {
+                        KannachIcon(
+                            icon = KannachIconType.UPLOAD,
+                            tint = palette.greenDeep,
+                            contentDescription = strings.exportTitle,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    // TR1: Clear is removed from the tray and moves to an overflow control (three-dot icon) in the header
+                    Box {
+                        IconButton(
+                            onClick = { isHeaderOverflowOpen = true },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("sketch_overflow_button")
+                        ) {
+                            KannachIcon(
+                                icon = KannachIconType.MORE,
+                                tint = palette.inkSoft,
+                                contentDescription = strings.settingsMore,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = isHeaderOverflowOpen,
+                            onDismissRequest = { isHeaderOverflowOpen = false },
+                            containerColor = palette.paperHi
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = strings.clear,
+                                        fontSize = 15.sp,
+                                        fontFamily = LocalKannachHandFont.current,
+                                        color = if (strokes.isNotEmpty()) palette.ink else palette.inkSoft.copy(alpha = 0.45f)
+                                    )
+                                },
+                                leadingIcon = {
+                                    KannachIcon(
+                                        icon = KannachIconType.TRASH,
+                                        tint = if (strokes.isNotEmpty()) palette.inkSoft else palette.inkSoft.copy(alpha = 0.45f),
+                                        contentDescription = strings.clear,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                enabled = strokes.isNotEmpty(),
+                                onClick = {
+                                    isHeaderOverflowOpen = false
+                                    viewModel.clearSketchStrokes()
+                                },
+                                modifier = Modifier.testTag("sketch_tool_clear")
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1200,6 +1251,7 @@ fun SketchpadScreen(
                                 dockScroll.collapse()
                                 viewModel.onSketchStrokeStarted()
                             },
+                            onGestureEnded = { viewModel.onSketchGestureEnded() },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .testTag("sketch_drawing_canvas")
@@ -1348,7 +1400,7 @@ fun SketchpadScreen(
                         }
                     }
 
-                    // Row 2: 3 brush sizes (4 / 8 / 14 as three dots) + Eraser toggle + Undo + Clear (page turn) - scrolls horizontally if constrained
+                    // TR1–TR3: Row 2: three size dots · Eraser · Undo · Redo (Clear moved to header overflow)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1356,9 +1408,9 @@ fun SketchpadScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 3 Brush size dots (canvas units 4 / 8 / 14)
+                        // 3 Brush / Eraser size dots (pen width 4/8/14, eraser radius 8/14/24; ER4 keeps current mode)
                         brushSizes.forEach { w ->
-                            val isSelected = !isEraserMode && brushWidth == w
+                            val isSelected = brushWidth == w
                             val dotDp = when (w) {
                                 4f -> 6.dp
                                 8f -> 11.dp
@@ -1388,7 +1440,7 @@ fun SketchpadScreen(
                             }
                         }
 
-                        // Eraser toggle (SK2 & SK3)
+                        // Eraser toggle (ER1–ER4)
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
@@ -1413,36 +1465,36 @@ fun SketchpadScreen(
                             )
                         }
 
-                        // Undo button
+                        // Undo button (TR1–TR2)
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(HandDrawnRadiusAltShape)
-                                .clickable { viewModel.undoSketchStroke() }
+                                .clickable(enabled = canUndo) { viewModel.undoSketchStroke() }
                                 .testTag("sketch_tool_undo"),
                             contentAlignment = Alignment.Center
                         ) {
                             KannachIcon(
                                 icon = KannachIconType.UNDO,
-                                tint = palette.inkSoft,
+                                tint = if (canUndo) palette.inkSoft else palette.inkSoft.copy(alpha = 0.35f),
                                 contentDescription = strings.undo,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
 
-                        // JD5: Clear button triggers page turn + 5s Undo action
+                        // Redo button (TR1–TR2)
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(HandDrawnRadiusAltShape)
-                                .clickable { viewModel.clearSketchStrokes() }
-                                .testTag("sketch_tool_clear"),
+                                .clickable(enabled = canRedo) { viewModel.redoSketchStroke() }
+                                .testTag("sketch_tool_redo"),
                             contentAlignment = Alignment.Center
                         ) {
                             KannachIcon(
-                                icon = KannachIconType.TRASH,
-                                tint = palette.inkSoft,
-                                contentDescription = strings.clear,
+                                icon = KannachIconType.REDO,
+                                tint = if (canRedo) palette.inkSoft else palette.inkSoft.copy(alpha = 0.35f),
+                                contentDescription = strings.undo,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -2393,6 +2445,7 @@ fun SettingsScreen(
                                     maxLines = 1
                                 )
                                 val weekStartDow = userSettings.effectiveWeekStart(activeLang)
+                                val fullWeekdays = remember(activeLang) { I18n.getFullWeekdays(activeLang) }
                                 val orderedDays = remember(weekStartDow) {
                                     val shift = (weekStartDow - Calendar.SUNDAY + 7) % 7
                                     (0 until 7).map { i -> ((shift + i) % 7) + 1 }
@@ -2404,6 +2457,7 @@ fun SettingsScreen(
                                     orderedDays.forEach { dow ->
                                         val isDaySelected = userSettings.reminderDays.contains(dow)
                                         val dayLabel = strings.weekdays.getOrElse(dow - 1) { "" }
+                                        val fullDayLabel = fullWeekdays.getOrElse(dow - 1) { dayLabel }
                                         Box(
                                             modifier = Modifier
                                                 .weight(1f)

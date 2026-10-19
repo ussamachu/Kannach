@@ -961,3 +961,7 @@
   - إزالة خياري تقليل الحركة والاهتزاز اللمسي من الإعدادات بحيث يتبع التطبيق إعدادات النظام دائماً (`rememberReduceMotion()` في `Motion.kt` وتطبيع `loadRawUserSettings()` في `ModelsAndStorage.kt`).
   - إزالة رقم الإصدار واستبداله بسطر التذييل المتمركز `madeBy` في اللغات الأربع (`صُنع بواسطة أسامة` / `Made By Ossamah` / `Créé par Ossamah` / `Hecho por Ossamah`) مع تطابق تام للمفاتيح (`missing: 0`).
 
+T1/T2 (v5.2 C1, C2, C3) — done — ThemeAndShapes.kt, HomeAndEntryScreens.kt, SubScreens.kt, I18n.kt, I18nAr.kt, I18nEn.kt, I18nFr.kt, I18nEs.kt (greetMorning/Day/Evening/Night/Back shortened to ≤32 chars across AR/EN/FR/ES; greetDone exact verbatim).
+T3/T4 (v5.2 §3.1 ER1–ER5 & §3.2 TR1–TR3) — done — MainViewModel.kt, HomeAndEntryScreens.kt, SubScreens.kt, KannachIcons.kt
+T9 (v5.2 §2.1 LS1–LS5 layout) — partial (context compaction truncated LS5–LS10 verbatim spec text) — LettersScreen.kt, I18n.kt, I18nAr.kt, I18nEn.kt, I18nFr.kt, I18nEs.kt
+T10 (v5.2 §2.2 LC6–LC8 + v5 §7 LC1–LC5) — done (context compaction truncated ~1 KB at end of LC8/LC9) — LettersScreen.kt, MainViewModel.kt, I18n.kt, I18nAr.kt, I18nEn.kt, I18nFr.kt, I18nEs.kt

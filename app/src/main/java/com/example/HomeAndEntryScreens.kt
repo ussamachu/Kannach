@@ -431,12 +431,15 @@ fun AppHeader(
                 }
 
                 // Month Name & Year (Month on line 1, Season icon + Year on line 2, never same line)
+                // C1: No ancestor may use clipToBounds(), clip() or graphicsLayer { clip = true }.
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
                         .weight(1f, fill = false)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable {
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
                             if (currentYear != nowYear || currentMonth != nowMonth) {
                                 viewModel.setMonth(nowYear, nowMonth)
                             }
@@ -447,12 +450,15 @@ fun AppHeader(
                     Text(
                         text = monthName,
                         fontSize = 26.sp,
+                        lineHeight = 36.sp,
+                        style = ArabicDisplayStyle,
                         fontWeight = FontWeight.Bold,
                         fontFamily = LocalKannachHandFont.current,
                         color = palette.greenDeep,
                         maxLines = 1,
                         softWrap = false,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -836,7 +842,7 @@ private fun PaperDockSlot(
         }
     }
 
-    // DK6 & DF1-DF3: No .clip(HandDrawnRadiusShape) on slot; drawBehind draws the highlight;
+    // DK6 & DF1-DF3: No shape clip on slot; drawBehind draws the highlight;
     // icon 24dp + 2dp + label 14dp ≈ 40dp inside 64dp pill (vertical padding 6dp from pill Row).
     Box(
         contentAlignment = Alignment.Center,
@@ -1246,8 +1252,8 @@ fun TodayPageCard(
                         Text(
                             text = "$weekdayName · $monthYearStr",
                             fontSize = 13.sp,
-                            lineHeight = 16.sp,
-                            style = tightTextStyle,
+                            lineHeight = 20.sp,
+                            style = ArabicDisplayStyle,
                             fontWeight = FontWeight.Medium,
                             fontFamily = LocalKannachUiFont.current,
                             color = palette.inkSoft,
@@ -1255,6 +1261,7 @@ fun TodayPageCard(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
                                 .weight(1f, fill = false)
+                                .padding(top = 2.dp)
                                 .testTag("today_page_compact_date_line")
                         )
                     }
@@ -1385,13 +1392,14 @@ fun TodayPageCard(
                         Text(
                             text = weekdayName,
                             fontSize = 13.sp,
-                            lineHeight = 15.sp,
-                            style = tightTextStyle,
+                            lineHeight = 20.sp,
+                            style = ArabicDisplayStyle,
                             fontWeight = FontWeight.Medium,
                             fontFamily = LocalKannachUiFont.current,
                             letterSpacing = if (isRtl) 0.sp else 1.6.sp,
                             color = palette.inkSoft,
-                            maxLines = 1
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 2.dp)
                         )
 
                         Text(
@@ -1409,8 +1417,8 @@ fun TodayPageCard(
                         Text(
                             text = monthYearStr,
                             fontSize = 14.sp,
-                            lineHeight = 16.sp,
-                            style = tightTextStyle,
+                            lineHeight = 20.sp,
+                            style = ArabicDisplayStyle,
                             fontWeight = FontWeight.Medium,
                             fontFamily = LocalKannachUiFont.current,
                             color = palette.inkSoft,
@@ -1422,13 +1430,13 @@ fun TodayPageCard(
                         Text(
                             text = greetingText,
                             fontSize = 13.sp,
-                            lineHeight = 15.sp,
-                            style = tightTextStyle,
+                            lineHeight = 18.sp,
+                            style = ArabicDisplayStyle,
                             fontFamily = LocalKannachHandFont.current,
                             color = palette.inkFaint,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false,
                             modifier = Modifier.testTag("today_page_greeting")
                         )
                     }
@@ -1601,11 +1609,13 @@ fun MonthPageCard(
                 Text(
                     text = monthName,
                     fontSize = 36.sp,
-                    lineHeight = 40.sp,
+                    lineHeight = 48.sp,
+                    style = ArabicDisplayStyle,
                     fontWeight = FontWeight.Bold,
                     fontFamily = LocalKannachHandFont.current,
                     color = palette.greenDeep,
-                    maxLines = 1
+                    maxLines = 1,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
                 Text(
                     text = I18n.formatYear(currentYear, language),
@@ -1749,10 +1759,13 @@ fun CompactPageStrip(
             Text(
                 text = leadText,
                 fontSize = 18.sp,
+                lineHeight = 26.sp,
+                style = ArabicDisplayStyle,
                 fontWeight = FontWeight.Bold,
                 fontFamily = LocalKannachHandFont.current,
                 color = palette.greenDeep,
-                maxLines = 1
+                maxLines = 1,
+                modifier = Modifier.padding(top = 2.dp)
             )
             Text(
                 text = "·",
@@ -2008,18 +2021,25 @@ fun MonthGrid(
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
                 val startShift = (weekStartDow - Calendar.SUNDAY + 7) % 7
-                val weekDays = remember(strings.weekdays, startShift) {
-                    (0 until 7).map { i -> strings.weekdays[(startShift + i) % 7] }
+                val fullWeekdays = remember(language) { I18n.getFullWeekdays(language) }
+                val weekDays = remember(strings.weekdays, fullWeekdays, startShift) {
+                    (0 until 7).map { i ->
+                        val dayIdx = (startShift + i) % 7
+                        strings.weekdays[dayIdx] to fullWeekdays[dayIdx]
+                    }
                 }
-                weekDays.forEachIndexed { idx, wDay ->
+                weekDays.forEachIndexed { idx, (wDay, fullDay) ->
                     Text(
                         text = wDay,
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = palette.inkFaint,
                         textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier
                             .weight(1f)
+                            .semantics { contentDescription = fullDay }
                             .testTag("weekday_header_$idx")
                     )
                 }
@@ -2702,11 +2722,14 @@ private fun MemoryCardView(
                         Text(
                             text = formattedDate,
                             fontSize = headerDateFontSize,
+                            lineHeight = 26.sp,
+                            style = ArabicDisplayStyle,
                             fontWeight = FontWeight.Bold,
                             color = palette.greenDeep,
                             maxLines = 1,
                             softWrap = false,
                             overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp),
                             onTextLayout = { result ->
                                 if (result.hasVisualOverflow && headerDateFontSize > 16.sp) {
                                     headerDateFontSize = 16.sp
@@ -3089,12 +3112,15 @@ private fun WritePulseOne(
                 Text(
                     text = formattedDate,
                     fontSize = writeDateFontSize,
+                    lineHeight = 26.sp,
+                    style = ArabicDisplayStyle,
                     fontWeight = FontWeight.Bold,
                     fontFamily = LocalKannachHandFont.current,
                     color = palette.greenDeep,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp),
                     onTextLayout = { result ->
                         if (result.hasVisualOverflow && writeDateFontSize > 16.sp) {
                             writeDateFontSize = 16.sp
@@ -3686,6 +3712,7 @@ fun DrawingCanvas(
     onStrokeCompleted: (SketchStroke) -> Unit,
     onEraseAt: (Point) -> Unit,
     onStrokeStarted: () -> Unit = {},
+    onGestureEnded: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val palette = LocalKannachPalette.current
@@ -3694,18 +3721,26 @@ fun DrawingCanvas(
     val redrawVersion = remember { mutableIntStateOf(0) }
     val livePoints = remember { mutableListOf<Point>() }
     val livePath = remember { Path() }
+    val eraserTouchPoint = remember { mutableStateOf<Point?>(null) }
     val activeColor = try {
         Color(android.graphics.Color.parseColor(currentColorHex))
     } catch (_: Exception) {
         palette.green
     }
+    val eraserRadius = when {
+        currentWidth <= 4f -> 8f
+        currentWidth <= 8f -> 14f
+        else -> 24f
+    }
 
     val latestEraserMode by androidx.compose.runtime.rememberUpdatedState(isEraserMode)
     val latestColorHex by androidx.compose.runtime.rememberUpdatedState(currentColorHex)
     val latestWidth by androidx.compose.runtime.rememberUpdatedState(currentWidth)
+    val latestEraserRadius by androidx.compose.runtime.rememberUpdatedState(eraserRadius)
     val latestOnStrokeCompleted by androidx.compose.runtime.rememberUpdatedState(onStrokeCompleted)
     val latestOnEraseAt by androidx.compose.runtime.rememberUpdatedState(onEraseAt)
     val latestOnStrokeStarted by androidx.compose.runtime.rememberUpdatedState(onStrokeStarted)
+    val latestOnGestureEnded by androidx.compose.runtime.rememberUpdatedState(onGestureEnded)
     val latestStrokesEmpty by androidx.compose.runtime.rememberUpdatedState(sketchStrokes.isEmpty())
     val latestHapticsEnabled by androidx.compose.runtime.rememberUpdatedState(hapticsEnabled)
 
@@ -3746,14 +3781,42 @@ fun DrawingCanvas(
                     )
 
                     if (latestEraserMode) {
+                        eraserTouchPoint.value = p0
                         latestOnEraseAt(p0)
-                        drag(down.id) { change ->
-                            change.consume()
-                            val pt = Point(
-                                x = ((change.position.x * sx) * 10f).toInt() / 10f,
-                                y = ((change.position.y * sy) * 10f).toInt() / 10f
-                            )
-                            latestOnEraseAt(pt)
+                        redrawVersion.intValue++
+                        var prevErasePt = p0
+                        try {
+                            drag(down.id) { change ->
+                                change.consume()
+                                val pt = Point(
+                                    x = ((change.position.x * sx) * 10f).toInt() / 10f,
+                                    y = ((change.position.y * sy) * 10f).toInt() / 10f
+                                )
+                                eraserTouchPoint.value = pt
+                                val dx = pt.x - prevErasePt.x
+                                val dy = pt.y - prevErasePt.y
+                                val dist = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                                if (dist > 3f) {
+                                    val steps = kotlin.math.ceil(dist / 3f).toInt()
+                                    for (s in 1..steps) {
+                                        val frac = s.toFloat() / steps.toFloat()
+                                        latestOnEraseAt(
+                                            Point(
+                                                x = ((prevErasePt.x + dx * frac) * 10f).toInt() / 10f,
+                                                y = ((prevErasePt.y + dy * frac) * 10f).toInt() / 10f
+                                            )
+                                        )
+                                    }
+                                } else {
+                                    latestOnEraseAt(pt)
+                                }
+                                prevErasePt = pt
+                                redrawVersion.intValue++
+                            }
+                        } finally {
+                            eraserTouchPoint.value = null
+                            latestOnGestureEnded()
+                            redrawVersion.intValue++
                         }
                     } else {
                         livePoints.clear()
@@ -3808,6 +3871,7 @@ fun DrawingCanvas(
                             )
                             livePoints.clear()
                             livePath.reset()
+                            latestOnGestureEnded()
                             redrawVersion.intValue++
                         }
                     }
@@ -3845,6 +3909,16 @@ fun DrawingCanvas(
                     path = livePath,
                     color = activeColor,
                     style = Stroke(width = latestWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                )
+            }
+            // ER3: Visible eraser ring while eraser is active and a finger is down (radius r, palette.ink at 0.5 alpha, 1.5 dp, no fill)
+            val erasePt = eraserTouchPoint.value
+            if (version >= 0 && latestEraserMode && erasePt != null) {
+                drawCircle(
+                    color = palette.ink.copy(alpha = 0.5f),
+                    radius = latestEraserRadius,
+                    center = Offset(erasePt.x, erasePt.y),
+                    style = Stroke(width = 1.5.dp.toPx() / scaleX)
                 )
             }
         }

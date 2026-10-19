@@ -205,6 +205,7 @@ object I18n {
         val capsuleNotYetToast: PluralString,
         val capsuleDeleteTitle: String,
         val capsuleDeleteMsg: String,
+        val capsuleSalutation: String,
         val capsulePrefill: String,
         val capsuleWrittenStamp: String,
         val capsuleAddDoodle: String,
@@ -233,6 +234,7 @@ object I18n {
         val capsuleDraftContinue: String,
         val capsuleSealWarning: String,
         val capsuleSealNow: String,
+        val capsuleHoldToSeal: String,
         val capsuleSealNotYet: String,
         val langFollowSystem: String,
         val reminderDaysLabel: String,
@@ -448,6 +450,19 @@ object I18n {
         return if (isRtl(lang)) raw else raw.uppercase(locale)
     }
 
+    /**
+     * C3: Full weekday names (Sun…Sat) for accessibility contentDescription.
+     */
+    fun getFullWeekdays(lang: String): List<String> {
+        val normalized = if (lang == "system") resolveSystemLanguage() else normalizeCode(lang)
+        return when (normalized) {
+            "ar" -> listOf("الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت")
+            "fr" -> listOf("Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi")
+            "es" -> listOf("Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado")
+            else -> listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+        }
+    }
+
     fun formatMonthLabel(year: Int, month: Int, lang: String, useArabicIndic: Boolean = useArabicIndicNumerals): String {
         val strings = forLanguage(lang)
         val monthName = strings.months.getOrElse(month - 1) { "" }
@@ -531,6 +546,48 @@ object I18n {
             set(Calendar.DAY_OF_MONTH, parts[2])
         }
         return applyNumerals(SimpleDateFormat("d MMMM yyyy", localeFor(lang)).format(cal.time), lang)
+    }
+
+    /**
+     * LS4: Postmark top line ("20 OCT" / "٢٠ أكتوبر" in Arabic-Indic digits when that setting is on).
+     */
+    fun formatPostmarkDayMonth(
+        dateKey: String,
+        lang: String,
+        useArabicIndic: Boolean = useArabicIndicNumerals
+    ): String {
+        val parts = dateKey.split("-").mapNotNull { it.toIntOrNull() }
+        if (parts.size != 3) return applyNumerals(dateKey, lang, useArabicIndic)
+        val year = parts[0]
+        val month = parts[1]
+        val day = parts[2]
+        val dayStr = applyNumerals(day.toString(), lang, useArabicIndic)
+        return if (isRtl(lang)) {
+            val monthName = forLanguage(lang).months.getOrElse(month - 1) { "" }
+            "$dayStr $monthName"
+        } else {
+            val cal = Calendar.getInstance().apply {
+                set(Calendar.YEAR, year)
+                set(Calendar.MONTH, month - 1)
+                set(Calendar.DAY_OF_MONTH, day)
+            }
+            val locale = localeFor(lang)
+            val shortMonth = SimpleDateFormat("MMM", locale).format(cal.time).trimEnd('.').uppercase(locale)
+            "$dayStr $shortMonth"
+        }
+    }
+
+    /**
+     * LS4: Postmark bottom line (year in 9 sp, respecting Arabic-Indic digits setting).
+     */
+    fun formatPostmarkYear(
+        dateKey: String,
+        lang: String,
+        useArabicIndic: Boolean = useArabicIndicNumerals
+    ): String {
+        val parts = dateKey.split("-").mapNotNull { it.toIntOrNull() }
+        if (parts.isEmpty()) return ""
+        return formatYear(parts[0], lang, useArabicIndic)
     }
 
     /**

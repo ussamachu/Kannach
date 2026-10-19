@@ -569,6 +569,19 @@ val LocalKannachHandFont = staticCompositionLocalOf { KannachFonts.handAr }
 val LocalKannachUiFont = staticCompositionLocalOf { KannachUiFont }
 
 /**
+ * C1: Shared TextStyle for large Arabic display text (AppHeader month name,
+ * TodayPageCard day name, MonthPageCard month name, write-page date) so tall
+ * Playpen Sans Arabic ascenders/hamzas are never clipped.
+ */
+val ArabicDisplayStyle = TextStyle(
+    lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+        alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+        trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.None
+    ),
+    platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = true)
+)
+
+/**
  * Root theme composable for Kannach.
  * Handles dynamic RTL/LTR directionality, typography, and seasonal color palette updates.
  */

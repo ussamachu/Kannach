@@ -21,9 +21,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 enum class KannachIconType {
-    CHEV_L, CHEV_R, FLOWER, LEAF, X, HEART, CHECK, UNDO, TRASH, EDIT,
+    CHEV_L, CHEV_R, FLOWER, LEAF, X, HEART, CHECK, UNDO, REDO, TRASH, EDIT,
     GRID, SLIDERS, SPROUT, WINTER, SPRING, SUMMER, AUTUMN, SEAL,
-    SPARKLE, UPLOAD, BOUQUET, BRUSH, RIBBON, NOTEBOOK, ERASER
+    SPARKLE, UPLOAD, BOUQUET, BRUSH, RIBBON, NOTEBOOK, ERASER, MORE
 }
 
 /**
@@ -61,6 +61,7 @@ fun KannachIcon(
             KannachIconType.HEART -> drawHeart(scaleX, scaleY, effectiveTint, stroke, filled, fillColor)
             KannachIconType.CHECK -> drawCheck(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.UNDO -> drawUndo(scaleX, scaleY, effectiveTint, stroke)
+            KannachIconType.REDO -> drawRedo(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.TRASH -> drawTrash(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.EDIT -> drawEdit(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.GRID -> drawGrid(scaleX, scaleY, effectiveTint)
@@ -78,6 +79,7 @@ fun KannachIcon(
             KannachIconType.RIBBON -> drawRibbon(scaleX, scaleY, effectiveTint, stroke, filled, fillColor)
             KannachIconType.NOTEBOOK -> drawNotebook(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.ERASER -> drawEraser(scaleX, scaleY, effectiveTint, stroke)
+            KannachIconType.MORE -> drawMore(scaleX, scaleY, effectiveTint)
         }
     }
 }
@@ -298,5 +300,16 @@ private fun DrawScope.drawEraser(sx: Float, sy: Float, color: Color, stroke: Str
     drawPath(base, color, style = stroke)
 }
 
+private fun DrawScope.drawRedo(sx: Float, sy: Float, color: Color, stroke: Stroke) {
+    val p1 = parseSvg("M15.3 4.6l3.8 3.3-3.8 3.1", sx, sy)
+    val p2 = parseSvg("M18.8 7.8h-7.9c-3.3 0-5.7 2-5.7 4.9 0 3 2.4 5 5.7 5h3", sx, sy)
+    drawPath(p1, color, style = stroke)
+    drawPath(p2, color, style = stroke)
+}
 
-
+private fun DrawScope.drawMore(sx: Float, sy: Float, color: Color) {
+    val r = 1.6f * sx
+    drawCircle(color, r, Offset(12f * sx, 5.5f * sy))
+    drawCircle(color, r, Offset(12f * sx, 12f * sy))
+    drawCircle(color, r, Offset(12f * sx, 18.5f * sy))
+}

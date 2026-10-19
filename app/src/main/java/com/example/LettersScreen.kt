@@ -51,6 +51,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -67,28 +71,41 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -99,6 +116,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -236,71 +254,46 @@ private fun CapsuleShelfScreen(
                 }
             }
 
-            // CP1: Top paper card "Write a letter to future you" (tap -> Compose)
+            // LS1: Replace the big call-to-action card with a blank 3:2 letter sheet
             item(key = "capsule_compose_card", contentType = "compose_action") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 18.dp, vertical = 12.dp)
-                        .heightIn(min = 76.dp)
-                        .paperTilt(-0.4f)
+                        .aspectRatio(1.5f)
+                        .paperTilt(-1f)
                         .paperShadow(
                             shadowColor = palette.paperShadow,
                             shape = HandDrawnRadiusShape,
                             offsetY = 4.dp
                         )
                         .clip(HandDrawnRadiusShape)
-                        .background(palette.paperHi)
-                        .border(1.5.dp, palette.greenLine, HandDrawnRadiusShape)
-                        .dashedHandDrawnBorder(
-                            color = palette.greenLine.copy(alpha = 0.65f),
-                            shape = HandDrawnRadiusShape,
-                            strokeWidth = 1.2.dp,
-                            dashIntervals = floatArrayOf(8f, 6f),
-                            inset = 4.dp
+                        .paperBackground(palette.paperHi)
+                        .linedPaperBackground(
+                            lineColor = palette.line.copy(alpha = 0.65f),
+                            lineHeightDp = 28.dp
                         )
+                        .border(1.5.dp, palette.line, HandDrawnRadiusShape)
                         .clickable { viewModel.openCapsuleCompose() }
-                        .padding(horizontal = 18.dp, vertical = 16.dp)
+                        .padding(horizontal = 20.dp, vertical = 18.dp)
                         .testTag("capsule_compose_card")
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = strings.capsuleBtn,
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = LocalKannachHandFont.current,
-                                color = palette.greenDeep
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = strings.capsuleIntro,
-                                fontSize = 13.5.sp,
-                                lineHeight = 19.sp,
-                                color = palette.inkSoft
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(palette.greenSoft)
-                                .border(1.3.dp, palette.green, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            KannachIcon(
-                                icon = KannachIconType.SEAL,
-                                tint = palette.greenDeep,
-                                strokeWidthDp = 2.dp,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = strings.capsuleSalutation,
+                        fontSize = 20.sp,
+                        fontFamily = LocalKannachHandFont.current,
+                        color = palette.ink.copy(alpha = 0.55f),
+                        modifier = Modifier.align(Alignment.TopStart)
+                    )
+                    KannachIcon(
+                        icon = KannachIconType.EDIT,
+                        tint = palette.inkSoft,
+                        contentDescription = strings.capsuleBtn,
+                        strokeWidthDp = 1.8.dp,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .align(Alignment.BottomEnd)
+                    )
                 }
             }
 
@@ -345,10 +338,10 @@ private fun CapsuleShelfScreen(
                     }
                 }
             } else {
-                // Section 1: Waiting (locked)
+                // Section 1: Waiting (locked) — LS2..LS5
                 if (waitingCapsules.isNotEmpty()) {
                     item(key = "capsule_section_header_waiting", contentType = "section_header") {
-                        Box(modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 4.dp)) {
+                        Box(modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 8.dp)) {
                             ShelfSectionHeader(
                                 title = strings.capsuleSectionWaiting,
                                 count = waitingCapsules.size,
@@ -356,29 +349,37 @@ private fun CapsuleShelfScreen(
                             )
                         }
                     }
-                    items(
-                        items = waitingCapsules,
-                        key = { "waiting_${it.id}" },
-                        contentType = { "waiting_envelope" }
-                    ) { capsule ->
-                        val idx = waitingCapsules.indexOf(capsule)
-                        val longUnlockDate = I18n.formatLongDate(capsule.unlockDate, language)
-                        val daysLeft = I18n.daysUntilDateKey(capsule.unlockDate, todayIso)
-                        val subtitle = "${strings.capsuleLocked.replace("{d}", longUnlockDate)} · ${strings.capsuleCountdown.format(language, daysLeft)}"
+                    item(key = "waiting_envelopes_stack", contentType = "waiting_stack") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy((-10).dp)
+                        ) {
+                            waitingCapsules.forEachIndexed { idx, capsule ->
+                                val daysLeft = I18n.daysUntilDateKey(capsule.unlockDate, todayIso)
+                                val countdownSentence = strings.capsuleCountdown.format(language, daysLeft)
 
-                        Box(modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)) {
-                            EnvelopeCard(
-                                capsule = capsule,
-                                state = EnvelopeState.WAITING,
-                                statusText = subtitle,
-                                previewText = null,
-                                isHighlighted = highlightedId == capsule.id,
-                                reduceMotion = reduceMotion,
-                                tiltIndex = idx,
-                                deleteContentDescription = strings.delete,
-                                onTap = { viewModel.onLockedCapsuleTap(capsule) },
-                                onDelete = { viewModel.requestDeleteCapsule(capsule.id) }
-                            )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .zIndex((waitingCapsules.size - idx).toFloat())
+                                ) {
+                                    EnvelopeCard(
+                                        capsule = capsule,
+                                        state = EnvelopeState.WAITING,
+                                        statusText = countdownSentence,
+                                        previewText = null,
+                                        isHighlighted = highlightedId == capsule.id,
+                                        reduceMotion = reduceMotion,
+                                        tiltIndex = idx,
+                                        language = language,
+                                        deleteContentDescription = strings.delete,
+                                        onTap = { viewModel.onLockedCapsuleTap(capsule) },
+                                        onDelete = { viewModel.requestDeleteCapsule(capsule.id) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -386,7 +387,7 @@ private fun CapsuleShelfScreen(
                 // Section 2: Ready (due, with seal-crack glow)
                 if (readyCapsules.isNotEmpty()) {
                     item(key = "capsule_section_header_ready", contentType = "section_header") {
-                        Box(modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 4.dp)) {
+                        Box(modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 8.dp)) {
                             ShelfSectionHeader(
                                 title = strings.capsuleSectionReady,
                                 count = readyCapsules.size,
@@ -394,25 +395,34 @@ private fun CapsuleShelfScreen(
                             )
                         }
                     }
-                    items(
-                        items = readyCapsules,
-                        key = { "ready_${it.id}" },
-                        contentType = { "ready_envelope" }
-                    ) { capsule ->
-                        val idx = readyCapsules.indexOf(capsule)
-                        Box(modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)) {
-                            EnvelopeCard(
-                                capsule = capsule,
-                                state = EnvelopeState.READY,
-                                statusText = strings.capsuleReady,
-                                previewText = null,
-                                isHighlighted = highlightedId == capsule.id,
-                                reduceMotion = reduceMotion,
-                                tiltIndex = idx + 3,
-                                deleteContentDescription = strings.delete,
-                                onTap = { viewModel.openReadyCapsule(capsule) },
-                                onDelete = { viewModel.requestDeleteCapsule(capsule.id) }
-                            )
+                    item(key = "ready_envelopes_stack", contentType = "ready_stack") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy((-10).dp)
+                        ) {
+                            readyCapsules.forEachIndexed { idx, capsule ->
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .zIndex((readyCapsules.size - idx).toFloat())
+                                ) {
+                                    EnvelopeCard(
+                                        capsule = capsule,
+                                        state = EnvelopeState.READY,
+                                        statusText = strings.capsuleReady,
+                                        previewText = null,
+                                        isHighlighted = highlightedId == capsule.id,
+                                        reduceMotion = reduceMotion,
+                                        tiltIndex = idx,
+                                        language = language,
+                                        deleteContentDescription = strings.delete,
+                                        onTap = { viewModel.openReadyCapsule(capsule) },
+                                        onDelete = { viewModel.requestDeleteCapsule(capsule.id) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -452,7 +462,8 @@ private fun CapsuleShelfScreen(
                                 previewText = capsule.text.lineSequence().firstOrNull { it.isNotBlank() },
                                 isHighlighted = false,
                                 reduceMotion = reduceMotion,
-                                tiltIndex = idx + 6,
+                                tiltIndex = idx,
+                                language = language,
                                 deleteContentDescription = strings.delete,
                                 onTap = { viewModel.openArchivedCapsule(capsule) },
                                 onDelete = { viewModel.requestDeleteCapsule(capsule.id) }
@@ -508,9 +519,18 @@ private enum class EnvelopeState {
     WAITING, READY, OPENED
 }
 
+private val EnvelopeRectShape = HandDrawnShape(
+    radiusTopLeft = 4f,
+    radiusTopRight = 6f,
+    radiusBottomRight = 5f,
+    radiusBottomLeft = 4f,
+    altWobble = true
+)
+
 /**
- * CP1, CP2, CP3: Hand-drawn paper Envelope Card with envelope flap lines, wax seal icon
- * (with seal-crack glow when READY), 1s highlight when newly sealed, and long-press / button delete.
+ * LS2–LS5: 16:10 hand-drawn rectangle envelope, V flap of two dashed ink lines from top corners
+ * to center, alternating tilt (-1.2° / +1.0°), 28 dp green wax seal with sprout icon on flap tip,
+ * 46 dp rotated (-8°) dashed postmark at top-end, and 16 sp hand countdown line at bottom-start.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -522,6 +542,7 @@ private fun EnvelopeCard(
     isHighlighted: Boolean,
     reduceMotion: Boolean,
     tiltIndex: Int,
+    language: String,
     deleteContentDescription: String,
     onTap: () -> Unit,
     onDelete: () -> Unit
@@ -537,7 +558,7 @@ private fun EnvelopeCard(
     val targetBorder = when {
         isHighlighted -> palette.greenDeep
         state == EnvelopeState.READY -> palette.green
-        else -> palette.line
+        else -> palette.ink.copy(alpha = 0.32f)
     }
 
     val bgColor by animateColorAsState(
@@ -551,183 +572,253 @@ private fun EnvelopeCard(
         label = "envelopeBorder"
     )
 
-    // Seal-crack glow animation for READY state (CP1)
-    val infiniteTransition = rememberInfiniteTransition(label = "readySealGlow")
-    val glowPulse by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = if (state == EnvelopeState.READY && !reduceMotion) 0.85f else 0.35f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1600, easing = KannachMotion.Breathe),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "sealGlowAlpha"
-    )
+    // LS2: Alternating tilt of -1.2° / +1.0°
+    val tiltAngle = if (tiltIndex % 2 == 0) -1.2f else 1.0f
+
+    val postmarkDayMonth = remember(capsule.unlockDate, language, I18n.useArabicIndicNumerals) {
+        I18n.formatPostmarkDayMonth(capsule.unlockDate, language)
+    }
+    val postmarkYear = remember(capsule.unlockDate, language, I18n.useArabicIndicNumerals) {
+        I18n.formatPostmarkYear(capsule.unlockDate, language)
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 68.dp)
-            .paperTilt(tiltIndex)
+            .aspectRatio(1.6f)
+            .paperTilt(tiltAngle)
             .paperShadow(
                 shadowColor = palette.paperShadow,
-                shape = HandDrawnRadiusShape,
+                shape = EnvelopeRectShape,
                 offsetY = 3.dp
             )
-            .clip(HandDrawnRadiusShape)
-            .background(bgColor)
+            .clip(EnvelopeRectShape)
+            .paperBackground(bgColor)
             .border(
-                width = if (isHighlighted || state == EnvelopeState.READY) 1.8.dp else 1.5.dp,
+                width = if (isHighlighted || state == EnvelopeState.READY) 1.8.dp else 1.4.dp,
                 color = borderColor,
-                shape = HandDrawnRadiusShape
+                shape = EnvelopeRectShape
             )
             .drawBehind {
-                // Subtle triangular envelope flap lines across the top
+                // LS2: Flap drawn as a V of two dashed ink lines from the top corners to the center
                 val flapPath = Path().apply {
                     moveTo(0f, 0f)
-                    lineTo(size.width * 0.5f, size.height * 0.42f)
+                    lineTo(size.width * 0.5f, size.height * 0.5f)
                     lineTo(size.width, 0f)
                 }
                 drawPath(
                     path = flapPath,
-                    color = palette.line.copy(alpha = 0.55f),
-                    style = Stroke(width = 1.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    color = palette.ink.copy(alpha = 0.38f),
+                    style = Stroke(
+                        width = 1.3.dp.toPx(),
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 7f), 0f)
+                    )
                 )
             }
             .combinedClickable(
                 onClick = onTap,
                 onLongClick = onDelete
             )
-            .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp)
+            .padding(14.dp)
             .testTag("capsule_card_${capsule.id}")
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        // LS4: Postmark at top-end corner (46 dp circle, dashed ring, rotated -8°)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(46.dp)
+                .rotate(-8f)
+                .drawBehind {
+                    drawCircle(
+                        color = palette.inkSoft.copy(alpha = 0.65f),
+                        radius = size.minDimension * 0.5f - 1.dp.toPx(),
+                        style = Stroke(
+                            width = 1.1.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
+                        )
+                    )
+                },
+            contentAlignment = Alignment.Center
         ) {
-            // Wax seal icon with seal-crack glow for READY
-            Box(
-                modifier = Modifier.size(42.dp),
-                contentAlignment = Alignment.Center
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                if (state == EnvelopeState.READY) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawCircle(
-                            color = palette.orange.copy(alpha = glowPulse * 0.45f),
-                            radius = size.minDimension * 0.5f
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when (state) {
-                                EnvelopeState.READY -> palette.red.copy(alpha = 0.18f)
-                                EnvelopeState.WAITING -> palette.paperLo
-                                EnvelopeState.OPENED -> palette.paper
-                            }
-                        )
-                        .border(
-                            width = 1.2.dp,
-                            color = when (state) {
-                                EnvelopeState.READY -> palette.red
-                                EnvelopeState.WAITING -> palette.greenLine
-                                EnvelopeState.OPENED -> palette.line
-                            },
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    KannachIcon(
-                        icon = KannachIconType.SEAL,
-                        tint = when (state) {
-                            EnvelopeState.READY -> palette.red
-                            EnvelopeState.WAITING -> palette.greenDeep
-                            EnvelopeState.OPENED -> palette.inkFaint
-                        },
-                        strokeWidthDp = 1.8.dp,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    // Crack line across the wax seal when READY (CP1)
-                    if (state == EnvelopeState.READY) {
-                        Canvas(modifier = Modifier.size(18.dp)) {
-                            val crack = Path().apply {
-                                moveTo(size.width * 0.35f, size.height * 0.15f)
-                                lineTo(size.width * 0.55f, size.height * 0.48f)
-                                lineTo(size.width * 0.42f, size.height * 0.62f)
-                                lineTo(size.width * 0.65f, size.height * 0.88f)
-                            }
-                            drawPath(
-                                path = crack,
-                                color = palette.paperHi,
-                                style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = statusText,
-                    fontSize = 14.5.sp,
-                    fontWeight = if (state == EnvelopeState.READY) FontWeight.Bold else FontWeight.SemiBold,
-                    color = if (state == EnvelopeState.READY) palette.greenDeep else palette.ink,
-                    modifier = Modifier.testTag("capsule_status_${capsule.id}")
+                    text = postmarkDayMonth,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = palette.inkSoft,
+                    maxLines = 1,
+                    softWrap = false
                 )
-                if (!previewText.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = previewText,
-                        fontSize = 15.sp,
-                        fontFamily = LocalKannachHandFont.current,
-                        color = palette.inkSoft,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                Text(
+                    text = postmarkYear,
+                    fontSize = 9.sp,
+                    color = palette.inkSoft,
+                    maxLines = 1,
+                    softWrap = false
+                )
             }
+        }
 
-            // Quiet 48dp delete icon button (CP3)
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier
-                    .size(48.dp)
-                    .testTag("capsule_delete_${capsule.id}")
-            ) {
-                KannachIcon(
-                    icon = KannachIconType.TRASH,
-                    tint = palette.inkFaint,
-                    contentDescription = deleteContentDescription,
-                    modifier = Modifier.size(18.dp)
+        // LS3: Wax seal (28 dp palette.green circle with sprout icon in palette.onGreen on flap tip, thin darker ring)
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(palette.green)
+                .border(1.2.dp, palette.greenDeep, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            KannachIcon(
+                icon = KannachIconType.SPROUT,
+                tint = palette.onGreen,
+                strokeWidthDp = 1.8.dp,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
+        // LS5: Countdown line at bottom-start (hand font 16 sp, maxLines = 1, lineHeight = 1.3 * fontSize)
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(end = 44.dp)
+        ) {
+            if (!previewText.isNullOrBlank()) {
+                Text(
+                    text = previewText,
+                    fontSize = 15.sp,
+                    fontFamily = LocalKannachHandFont.current,
+                    color = palette.inkSoft,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(2.dp))
             }
+            Text(
+                text = statusText,
+                fontSize = 16.sp,
+                lineHeight = (16f * 1.3f).sp,
+                fontFamily = LocalKannachHandFont.current,
+                color = if (state == EnvelopeState.READY) palette.greenDeep else palette.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("capsule_status_${capsule.id}")
+            )
+        }
+
+        // Quiet 48dp delete icon button at bottom-end
+        IconButton(
+            onClick = onDelete,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(48.dp)
+                .offset(x = 8.dp, y = 8.dp)
+                .testTag("capsule_delete_${capsule.id}")
+        ) {
+            KannachIcon(
+                icon = KannachIconType.TRASH,
+                tint = palette.inkFaint,
+                contentDescription = deleteContentDescription,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
 
 /**
- * Phase 5 — Letters compose (LC1–LC5):
- * LC1 — Order of the page, top to bottom:
- *   1. Top bar: back, title `capsuleComposeTitle`, and a quiet draft status (`capsuleDraftSaved` / `capsuleDraftSaving`).
- *   2. Letter header on paper: "To: me" line (`capsuleToMe`) and today's date, formatted in the app language.
- *   3. When to open — segmented row of quick choices: Tomorrow · One week · One month · Six months · One year · Pick a date.
- *      Below it, one plain sentence with the result: "Opens on Sunday, 18 October 2027" (localized, with the weekday).
- *      If the picked date is not in the future, show the sentence in `palette.danger` and block sealing.
- *   4. Optional title (single line, hint `capsuleTitleHint`).
- *   5. Body: large lined paper, hand font, 20 sp, line height 36 sp, `linedPaperBackground` line spacing equal to 36 sp.
- *      Minimum height 220 dp, grows with text.
- *   6. Optional attachments row (existing "add drawing" action).
- *   7. Sticky footer above the keyboard (`imePadding()`): primary Seal button (green, 52 dp).
- *      While disabled, a one-line helper explains the missing piece ("Write something first" / "Choose when it opens").
- * LC2 — Draft safety: 800 ms debounced autosave to `capsule_draft` in SharedPreferences; back sheet with Keep draft · Discard · Continue writing; sealing clears draft.
- * LC3 — Seal confirmation: one-step confirm sheet with envelope preview (title + opens-on sentence), `capsuleSealWarning`, and "Seal" / "Not yet".
- * LC4 — Accessibility: Targets ≥ 48 dp; quick-choice chips have `selected` semantics; every input has a TalkBack label; font scale 1.3 without clipping.
- * LC5 — Performance: Body field holds text in its own state and hoists only on 800 ms debounce.
+ * LC7: Scalloped postage-stamp shape (64×76 dp) with perforated edges drawn via a scalloped Path.
+ */
+private fun buildScallopedStampPath(size: Size, density: Density): Path {
+    val w = size.width
+    val h = size.height
+    val r = with(density) { 3.2.dp.toPx() }
+    val step = r * 3.1f
+
+    return Path().apply {
+        moveTo(0f, 0f)
+
+        // Top edge (left -> right)
+        val topCount = ((w - step) / step).toInt().coerceAtLeast(2)
+        val topSpan = w / topCount
+        for (i in 0 until topCount) {
+            val cx = (i + 0.5f) * topSpan
+            lineTo(cx - r, 0f)
+            arcTo(
+                rect = Rect(cx - r, -r, cx + r, r),
+                startAngleDegrees = 180f,
+                sweepAngleDegrees = -180f,
+                forceMoveTo = false
+            )
+        }
+        lineTo(w, 0f)
+
+        // Right edge (top -> bottom)
+        val sideCount = ((h - step) / step).toInt().coerceAtLeast(3)
+        val sideSpan = h / sideCount
+        for (i in 0 until sideCount) {
+            val cy = (i + 0.5f) * sideSpan
+            lineTo(w, cy - r)
+            arcTo(
+                rect = Rect(w - r, cy - r, w + r, cy + r),
+                startAngleDegrees = 270f,
+                sweepAngleDegrees = -180f,
+                forceMoveTo = false
+            )
+        }
+        lineTo(w, h)
+
+        // Bottom edge (right -> left)
+        for (i in topCount - 1 downTo 0) {
+            val cx = (i + 0.5f) * topSpan
+            lineTo(cx + r, h)
+            arcTo(
+                rect = Rect(cx - r, h - r, cx + r, h + r),
+                startAngleDegrees = 0f,
+                sweepAngleDegrees = -180f,
+                forceMoveTo = false
+            )
+        }
+        lineTo(0f, h)
+
+        // Left edge (bottom -> top)
+        for (i in sideCount - 1 downTo 0) {
+            val cy = (i + 0.5f) * sideSpan
+            lineTo(0f, cy + r)
+            arcTo(
+                rect = Rect(-r, cy - r, r, cy + r),
+                startAngleDegrees = 90f,
+                sweepAngleDegrees = -180f,
+                forceMoveTo = false
+            )
+        }
+        lineTo(0f, 0f)
+        close()
+    }
+}
+
+private val PostageStampShape: Shape = object : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline = Outline.Generic(buildScallopedStampPath(size, density))
+}
+
+/**
+ * Phase 5 & v5.2 §2.2 — Letters compose (LC1–LC9):
+ * - LC6: One sheet of lined paper (`linedPaperBackground`, line spacing = 36 sp) filling the width with a 12 dp margin:
+ *   1. Non-editable first line in hand font: salutation from LS1 (`capsuleSalutation`).
+ *   2. Editable body below it, 20 sp hand font, 36 sp line height, local state + 800 ms debounce (LC5).
+ *   3. Non-editable last line at bottom-end: `— {today’s date}` in the app language.
+ *   4. Title field removed; envelope title is derived from the first 28 characters of the body.
+ * - LC7: "When should it find you?" as 6 postage-stamp chips (perforated scalloped Path, 64×76 dp)
+ *   with a rotated postmark ink ring over the selected stamp, plus the plain `opensOnSentence` below.
+ * - LC8: Hold-to-seal button inside the LC3 confirm sheet.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -740,6 +831,7 @@ private fun CapsuleComposeScreen(
     val isRtl = I18n.isRtl(language)
     val context = LocalContext.current
     val reduceMotion = rememberReduceMotion()
+    val density = LocalDensity.current
 
     val sessionId by viewModel.capsuleComposeSessionId.collectAsState()
     val initialTitle by viewModel.capsuleTitleText.collectAsState()
@@ -859,54 +951,45 @@ private fun CapsuleComposeScreen(
                 }
             }
 
-            // Scrollable middle area containing LC1 items 2, 3, 4, 5, 6
+            // Scrollable middle area containing LC6 letter sheet, LC7 stamps, and optional doodle
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .padding(vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // LC1.2: Letter header on paper: "To: me" line (`capsuleToMe`) and today's date, formatted in the app language
-                Row(
+                // LC6: One sheet of lined paper (`linedPaperBackground`, line spacing = 36 sp)
+                // filling the width with a 12 dp margin.
+                CapsuleLetterSheet(
+                    sessionId = sessionId,
+                    salutation = strings.capsuleSalutation,
+                    initialBody = initialBody,
+                    placeholder = strings.capsulePlaceholder,
+                    talkBackLabel = strings.capsuleWriteLabel,
+                    todaySignature = "— $todayFormatted",
+                    palette = palette,
+                    onBodyChanged = { viewModel.onCapsuleBodyInputChanged(it) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(HandDrawnRadiusAltShape)
-                        .background(palette.paperHi)
-                        .border(1.2.dp, palette.line, HandDrawnRadiusAltShape)
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                        .testTag("capsule_letter_header"),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = strings.capsuleToMe,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = LocalKannachHandFont.current,
-                        color = palette.greenDeep
-                    )
-                    Text(
-                        text = todayFormatted,
-                        fontSize = 14.sp,
-                        fontFamily = LocalKannachHandFont.current,
-                        color = palette.inkSoft,
-                        modifier = Modifier.testTag("capsule_written_stamp")
-                    )
-                }
+                        .padding(horizontal = 12.dp)
+                )
 
-                // LC1.3: When to open — segmented row of quick choices:
-                // Tomorrow · One week · One month · Six months · One year · Pick a date
+                // LC7: "When should it find you?" as six 64×76 dp postage-stamp chips
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = strings.capsuleDateLabel,
-                        fontSize = 15.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = palette.greenDeep
+                        fontFamily = LocalKannachHandFont.current,
+                        color = palette.greenDeep,
+                        modifier = Modifier.padding(horizontal = 4.dp)
                     )
 
                     val presets = listOf(
@@ -917,100 +1000,58 @@ private fun CapsuleComposeScreen(
                         CapsulePreset.YEAR_1 to strings.capsulePreset1y
                     )
 
-                    FlowRow(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(HandDrawnRadiusShape)
-                            .background(palette.paperLo.copy(alpha = 0.55f))
-                            .border(1.2.dp, palette.line, HandDrawnRadiusShape)
-                            .padding(6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                            .horizontalScroll(rememberScrollState())
+                            .padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         presets.forEach { (preset, label) ->
                             val isSelected = selectedPreset == preset
-                            Box(
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .clip(HandDrawnRadiusAltShape)
-                                    .background(if (isSelected) palette.greenSoft else palette.paperHi)
-                                    .border(
-                                        width = if (isSelected) 1.6.dp else 1.dp,
-                                        color = if (isSelected) palette.greenDeep else palette.line,
-                                        shape = HandDrawnRadiusAltShape
-                                    )
-                                    .semantics(mergeDescendants = true) {
-                                        selected = isSelected
-                                        role = Role.Tab
-                                        contentDescription = label
-                                    }
-                                    .clickable { viewModel.selectCapsulePreset(preset) }
-                                    .padding(horizontal = 12.dp, vertical = 10.dp)
-                                    .testTag("capsule_preset_${preset.name.lowercase(Locale.ROOT)}"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 13.5.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) palette.greenDeep else palette.ink
-                                )
-                            }
-                        }
-
-                        // "Pick a date" quick choice chip
-                        val isCustom = selectedPreset == CapsulePreset.CUSTOM
-                        Box(
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .clip(HandDrawnRadiusAltShape)
-                                .background(if (isCustom) palette.greenSoft else palette.paperHi)
-                                .border(
-                                    width = if (isCustom) 1.6.dp else 1.dp,
-                                    color = if (isCustom) palette.greenDeep else palette.line,
-                                    shape = HandDrawnRadiusAltShape
-                                )
-                                .semantics(mergeDescendants = true) {
-                                    selected = isCustom
-                                    role = Role.Tab
-                                    contentDescription = strings.capsulePickDate
-                                }
-                                .clickable {
-                                    val defaultCal = Calendar.getInstance().apply {
-                                        add(Calendar.DAY_OF_YEAR, 1)
-                                    }
-                                    val parts = unlockDate.split("-").mapNotNull { it.toIntOrNull() }
-                                    val initYear = parts.getOrNull(0) ?: defaultCal.get(Calendar.YEAR)
-                                    val initMonth = (parts.getOrNull(1) ?: (defaultCal.get(Calendar.MONTH) + 1)) - 1
-                                    val initDay = parts.getOrNull(2) ?: defaultCal.get(Calendar.DAY_OF_MONTH)
-
-                                    DatePickerDialog(
-                                        context,
-                                        { _, y, m, d ->
-                                            viewModel.setCustomCapsuleDate(
-                                                String.format(Locale.US, "%04d-%02d-%02d", y, m + 1, d)
-                                            )
-                                        },
-                                        initYear,
-                                        initMonth,
-                                        initDay
-                                    ).show()
-                                }
-                                .padding(horizontal = 12.dp, vertical = 10.dp)
-                                .testTag("capsule_preset_custom"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = strings.capsulePickDate,
-                                fontSize = 13.5.sp,
-                                fontWeight = if (isCustom) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isCustom) palette.greenDeep else palette.ink
+                            PostageStampChip(
+                                label = label,
+                                isSelected = isSelected,
+                                palette = palette,
+                                density = density,
+                                onClick = { viewModel.selectCapsulePreset(preset) },
+                                modifier = Modifier.testTag("capsule_preset_${preset.name.lowercase(Locale.ROOT)}")
                             )
                         }
+
+                        val isCustom = selectedPreset == CapsulePreset.CUSTOM
+                        PostageStampChip(
+                            label = strings.capsulePickDate,
+                            isSelected = isCustom,
+                            palette = palette,
+                            density = density,
+                            onClick = {
+                                val defaultCal = Calendar.getInstance().apply {
+                                    add(Calendar.DAY_OF_YEAR, 1)
+                                }
+                                val parts = unlockDate.split("-").mapNotNull { it.toIntOrNull() }
+                                val initYear = parts.getOrNull(0) ?: defaultCal.get(Calendar.YEAR)
+                                val initMonth = (parts.getOrNull(1) ?: (defaultCal.get(Calendar.MONTH) + 1)) - 1
+                                val initDay = parts.getOrNull(2) ?: defaultCal.get(Calendar.DAY_OF_MONTH)
+
+                                DatePickerDialog(
+                                    context,
+                                    { _, y, m, d ->
+                                        viewModel.setCustomCapsuleDate(
+                                            String.format(Locale.US, "%04d-%02d-%02d", y, m + 1, d)
+                                        )
+                                    },
+                                    initYear,
+                                    initMonth,
+                                    initDay
+                                ).show()
+                            },
+                            modifier = Modifier.testTag("capsule_preset_custom")
+                        )
                     }
 
-                    // LC1.3: One plain sentence with the result: "Opens on Sunday, 18 October 2027"
-                    // If the picked date is not in the future, show the sentence in `palette.danger` and block sealing.
+                    // LC1.3 & LC7: Plain sentence with the result below the stamps row
                     Text(
                         text = opensOnSentence,
                         fontSize = 15.5.sp,
@@ -1024,29 +1065,12 @@ private fun CapsuleComposeScreen(
                     )
                 }
 
-                // LC1.4: Optional title (single line, hint `capsuleTitleHint`)
-                CapsuleTitleInputField(
-                    sessionId = sessionId,
-                    initialTitle = initialTitle,
-                    hint = strings.capsuleTitleHint,
-                    palette = palette,
-                    onTitleChanged = { viewModel.onCapsuleTitleInputChanged(it) }
-                )
-
-                // LC1.5 & LC5: Body: large lined paper, hand font, 20 sp, line height 36 sp,
-                // linedPaperBackground line spacing equal to 36 sp, minimum height 220 dp, grows with text.
-                // Holds text in its own local state and hoists only on 800 ms debounce.
-                CapsuleBodyPaperField(
-                    sessionId = sessionId,
-                    initialBody = initialBody,
-                    placeholder = strings.capsulePlaceholder,
-                    talkBackLabel = strings.capsuleWriteLabel,
-                    palette = palette,
-                    onBodyChanged = { viewModel.onCapsuleBodyInputChanged(it) }
-                )
-
                 // LC1.6: Optional attachments row (existing "add drawing" action)
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1393,8 +1417,8 @@ private fun CapsuleComposeScreen(
             }
         }
 
-        // LC3: Seal Confirmation Sheet: envelope preview (title + opens-on sentence),
-        // `capsuleSealWarning`, and "Seal" / "Not yet".
+        // LC3 & LC8: Seal Confirmation Sheet: envelope preview (first 28 chars of body + opens-on sentence),
+        // `capsuleSealWarning`, "Not yet", and press-and-hold "Hold to seal" button.
         AnimatedVisibility(
             visible = isSealSheetOpen,
             enter = fadeIn(tween(if (reduceMotion) 0 else KannachMotion.SOFT)) +
@@ -1424,7 +1448,7 @@ private fun CapsuleComposeScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Envelope preview card (title + opens-on sentence)
+                    // Envelope preview card (first 28 chars of body + opens-on sentence + green sprout wax seal)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1441,8 +1465,13 @@ private fun CapsuleComposeScreen(
                                 }
                                 drawPath(
                                     path = flapPath,
-                                    color = palette.line.copy(alpha = 0.6f),
-                                    style = Stroke(width = 1.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                    color = palette.ink.copy(alpha = 0.45f),
+                                    style = Stroke(
+                                        width = 1.2.dp.toPx(),
+                                        cap = StrokeCap.Round,
+                                        join = StrokeJoin.Round,
+                                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f)
+                                    )
                                 )
                             }
                             .padding(horizontal = 16.dp, vertical = 14.dp)
@@ -1455,20 +1484,22 @@ private fun CapsuleComposeScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(32.dp)
                                     .clip(CircleShape)
-                                    .background(palette.red.copy(alpha = 0.16f))
-                                    .border(1.4.dp, palette.red, CircleShape),
+                                    .background(palette.green)
+                                    .border(1.5.dp, palette.greenDeep, CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 KannachIcon(
-                                    icon = KannachIconType.SEAL,
-                                    tint = palette.red,
-                                    modifier = Modifier.size(20.dp)
+                                    icon = KannachIconType.SPROUT,
+                                    tint = palette.onGreen,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                             Column(modifier = Modifier.weight(1f)) {
-                                val previewTitle = initialTitle.trim().ifEmpty { strings.capsuleToMe }
+                                val previewTitle = initialTitle.trim()
+                                    .ifEmpty { initialBody.replace("\n", " ").trim().take(28) }
+                                    .ifEmpty { strings.capsuleSalutation }
                                 Text(
                                     text = previewTitle,
                                     fontSize = 17.sp,
@@ -1502,7 +1533,8 @@ private fun CapsuleComposeScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         // "Not yet"
                         Box(
@@ -1526,54 +1558,35 @@ private fun CapsuleComposeScreen(
                             )
                         }
 
-                        // "Seal"
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                                .clip(HandDrawnRadiusShape)
-                                .background(palette.green)
-                                .border(1.5.dp, palette.greenDeep, HandDrawnRadiusShape)
-                                .clickable {
-                                    viewModel.confirmSealCapsule(
-                                        onConfirmedPermissionCheck = {
-                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                                !viewModel.repository.isNotifPermissionAsked()
-                                            ) {
-                                                viewModel.repository.markNotifPermissionAsked()
-                                                val granted = ContextCompat.checkSelfPermission(
-                                                    context,
-                                                    Manifest.permission.POST_NOTIFICATIONS
-                                                ) == PackageManager.PERMISSION_GRANTED
-                                                if (!granted) {
-                                                    try {
-                                                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                                    } catch (_: Exception) {}
-                                                }
+                        // LC8: Press-and-hold "Hold to seal" button
+                        HoldToSealButton(
+                            label = strings.capsuleHoldToSeal,
+                            palette = palette,
+                            reduceMotion = reduceMotion,
+                            onHoldConfirmed = {
+                                viewModel.confirmSealCapsule(
+                                    onConfirmedPermissionCheck = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                            !viewModel.repository.isNotifPermissionAsked()
+                                        ) {
+                                            viewModel.repository.markNotifPermissionAsked()
+                                            val granted = ContextCompat.checkSelfPermission(
+                                                context,
+                                                Manifest.permission.POST_NOTIFICATIONS
+                                            ) == PackageManager.PERMISSION_GRANTED
+                                            if (!granted) {
+                                                try {
+                                                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                                } catch (_: Exception) {}
                                             }
                                         }
-                                    )
-                                }
-                                .padding(vertical = 12.dp, horizontal = 12.dp)
-                                .testTag("capsule_seal_confirm_btn"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                KannachIcon(
-                                    icon = KannachIconType.SEAL,
-                                    tint = palette.onGreen,
-                                    modifier = Modifier.size(18.dp)
+                                    }
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = strings.capsuleSealNow,
-                                    fontSize = 15.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = LocalKannachHandFont.current,
-                                    color = palette.onGreen
-                                )
-                            }
-                        }
+                            },
+                            modifier = Modifier
+                                .weight(1.25f)
+                                .testTag("capsule_seal_confirm_btn")
+                        )
                     }
                 }
             }
@@ -1582,128 +1595,279 @@ private fun CapsuleComposeScreen(
 }
 
 /**
- * LC1.4, LC4 & LC5: Single-line optional title field holding its own local state
- * so typing does not recompose the parent screen.
+ * LC7: Postage-stamp chip (64×76 dp, perforated scalloped Path, rotated postmark ink ring when selected).
  */
 @Composable
-private fun CapsuleTitleInputField(
-    sessionId: Int,
-    initialTitle: String,
-    hint: String,
+private fun PostageStampChip(
+    label: String,
+    isSelected: Boolean,
     palette: KannachPalette,
-    onTitleChanged: (String) -> Unit
+    density: Density,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    var localTitle by remember(sessionId) { mutableStateOf(initialTitle) }
-
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(HandDrawnRadiusAltShape)
-            .background(palette.paperHi)
-            .border(1.3.dp, palette.line, HandDrawnRadiusAltShape)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        if (localTitle.isEmpty()) {
-            Text(
-                text = hint,
-                fontSize = 18.sp,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.inkFaint,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+        modifier = modifier
+            .size(width = 64.dp, height = 76.dp)
+            .paperShadow(
+                shadowColor = palette.paperShadow,
+                shape = PostageStampShape,
+                offsetY = if (isSelected) 3.dp else 1.5.dp
             )
-        }
-        BasicTextField(
-            value = localTitle,
-            onValueChange = { newVal ->
-                val singleLineVal = newVal.replace("\n", " ")
-                localTitle = singleLineVal
-                onTitleChanged(singleLineVal)
-            },
-            singleLine = true,
-            textStyle = TextStyle(
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.ink
-            ),
-            cursorBrush = SolidColor(palette.greenDeep),
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics {
-                    contentDescription = hint
+            .clip(PostageStampShape)
+            .background(if (isSelected) palette.greenSoft else palette.paperHi)
+            .drawWithContent {
+                val stampPath = buildScallopedStampPath(size, density)
+                drawPath(
+                    path = stampPath,
+                    color = if (isSelected) palette.greenDeep else palette.line,
+                    style = Stroke(
+                        width = (if (isSelected) 1.6.dp else 1.1.dp).toPx(),
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round
+                    )
+                )
+                drawContent()
+                if (isSelected) {
+                    // Rotated postmark ink ring over the selected stamp
+                    withTransform({
+                        rotate(degrees = -12f, pivot = center)
+                    }) {
+                        val ringRadius = size.minDimension * 0.40f
+                        drawCircle(
+                            color = palette.greenDeep.copy(alpha = 0.72f),
+                            radius = ringRadius,
+                            center = center,
+                            style = Stroke(
+                                width = 1.5.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 5f), 0f)
+                            )
+                        )
+                        drawCircle(
+                            color = palette.greenDeep.copy(alpha = 0.38f),
+                            radius = ringRadius * 0.80f,
+                            center = center,
+                            style = Stroke(width = 0.9.dp.toPx())
+                        )
+                    }
                 }
-                .testTag("capsule_title_input")
+            }
+            .semantics(mergeDescendants = true) {
+                selected = isSelected
+                role = Role.Tab
+                contentDescription = label
+            }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.5.sp,
+            lineHeight = 15.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            fontFamily = LocalKannachHandFont.current,
+            color = if (isSelected) palette.greenDeep else palette.ink,
+            textAlign = TextAlign.Center,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
 
 /**
- * LC1.5, LC4 & LC5: Large lined paper body field:
- * - Hand font, 20 sp, line height exactly 36 sp
- * - `linedPaperBackground` line spacing equal to 36 sp so text sits on the lines
- * - Minimum height 220 dp, grows with text
- * - Holds text in its own state (`localBody`) so key presses never recompose the whole screen
+ * LC8: Press-and-hold green seal button inside the confirm sheet.
+ * Fills progressively while held (~650 ms) and triggers `onHoldConfirmed` when full.
  */
 @Composable
-private fun CapsuleBodyPaperField(
+private fun HoldToSealButton(
+    label: String,
+    palette: KannachPalette,
+    reduceMotion: Boolean,
+    onHoldConfirmed: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    val holdProgress = remember { Animatable(0f) }
+
+    Box(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clip(HandDrawnRadiusShape)
+            .background(palette.green)
+            .drawWithContent {
+                val p = holdProgress.value.coerceIn(0f, 1f)
+                if (p > 0f) {
+                    drawRect(
+                        color = palette.greenDeep.copy(alpha = 0.42f),
+                        topLeft = Offset.Zero,
+                        size = Size(size.width * p, size.height)
+                    )
+                }
+                drawContent()
+            }
+            .border(1.6.dp, palette.greenDeep, HandDrawnRadiusShape)
+            .semantics(mergeDescendants = true) {
+                contentDescription = label
+                role = Role.Button
+                onClick(label = label) {
+                    onHoldConfirmed()
+                    true
+                }
+            }
+            .pointerInput(reduceMotion) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    if (reduceMotion) {
+                        val up = waitForUpOrCancellation()
+                        if (up != null) {
+                            onHoldConfirmed()
+                        }
+                    } else {
+                        var completed = false
+                        val holdJob = scope.launch {
+                            holdProgress.snapTo(0f)
+                            holdProgress.animateTo(
+                                targetValue = 1f,
+                                animationSpec = tween(durationMillis = 650)
+                            )
+                            completed = true
+                            onHoldConfirmed()
+                        }
+                        waitForUpOrCancellation()
+                        if (!completed) {
+                            holdJob.cancel()
+                            scope.launch {
+                                holdProgress.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = tween(durationMillis = 180)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(vertical = 12.dp, horizontal = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            KannachIcon(
+                icon = KannachIconType.SPROUT,
+                tint = palette.onGreen,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label,
+                fontSize = 15.5.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = LocalKannachHandFont.current,
+                color = palette.onGreen,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
+ * LC6 (1–4) & LC5: Single sheet of lined letter paper:
+ * 1. Lined paper (`linedPaperBackground`, line spacing = text line height 36 sp) filling the width with a 12 dp margin.
+ * 2. First line, non-editable, hand font: salutation from LS1 (`capsuleSalutation`).
+ * 3. Body below it, editable, 20 sp hand font, 36 sp line height, local state + 800 ms debounce.
+ * 4. Last line, non-editable, bottom-end: `— {today’s date}` in the app language.
+ */
+@Composable
+private fun CapsuleLetterSheet(
     sessionId: Int,
+    salutation: String,
     initialBody: String,
     placeholder: String,
     talkBackLabel: String,
+    todaySignature: String,
     palette: KannachPalette,
-    onBodyChanged: (String) -> Unit
+    onBodyChanged: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var localBody by remember(sessionId) { mutableStateOf(initialBody) }
     val density = LocalDensity.current
     val lineSpacingDp = with(density) { 36.sp.toDp() }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 220.dp)
+    Column(
+        modifier = modifier
             .paperShadow(
                 shadowColor = palette.paperShadow,
                 shape = HandDrawnRadiusShape,
                 offsetY = 4.dp
             )
             .clip(HandDrawnRadiusShape)
-            .background(palette.paperHi)
+            .paperBackground(palette.paperHi)
             .border(1.5.dp, palette.line, HandDrawnRadiusShape)
             .linedPaperBackground(palette.line, lineSpacingDp)
-            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .testTag("capsule_letter_header")
     ) {
-        if (localBody.isEmpty()) {
-            Text(
-                text = placeholder,
-                fontSize = 20.sp,
-                lineHeight = 36.sp,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.inkFaint
-            )
-        }
-        BasicTextField(
-            value = localBody,
-            onValueChange = { newVal ->
-                localBody = newVal
-                onBodyChanged(newVal)
-            },
-            textStyle = TextStyle(
-                fontSize = 20.sp,
-                lineHeight = 36.sp,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.ink
-            ),
-            cursorBrush = SolidColor(palette.greenDeep),
+        // LC6.2: First line, non-editable, hand font: the salutation from LS1
+        Text(
+            text = salutation,
+            fontSize = 20.sp,
+            lineHeight = 36.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = LocalKannachHandFont.current,
+            color = palette.greenDeep,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        // LC6.3: Body below it, editable, 20 sp hand font, 36 sp line height
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 212.dp)
-                .semantics {
-                    contentDescription = talkBackLabel
-                }
-                .testTag("capsule_compose_input")
+                .heightIn(min = 216.dp)
+        ) {
+            if (localBody.isEmpty()) {
+                Text(
+                    text = placeholder,
+                    fontSize = 20.sp,
+                    lineHeight = 36.sp,
+                    fontFamily = LocalKannachHandFont.current,
+                    color = palette.inkFaint
+                )
+            }
+            BasicTextField(
+                value = localBody,
+                onValueChange = { newVal ->
+                    localBody = newVal
+                    onBodyChanged(newVal)
+                },
+                textStyle = TextStyle(
+                    fontSize = 20.sp,
+                    lineHeight = 36.sp,
+                    fontFamily = LocalKannachHandFont.current,
+                    color = palette.ink
+                ),
+                cursorBrush = SolidColor(palette.greenDeep),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 216.dp)
+                    .semantics {
+                        contentDescription = talkBackLabel
+                    }
+                    .testTag("capsule_compose_input")
+            )
+        }
+
+        // LC6.4: Last line, non-editable, bottom-end: `— {today’s date}` in the app language
+        Text(
+            text = todaySignature,
+            fontSize = 16.sp,
+            lineHeight = 36.sp,
+            fontFamily = LocalKannachHandFont.current,
+            color = palette.inkSoft,
+            textAlign = TextAlign.End,
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.End)
+                .testTag("capsule_written_stamp")
         )
     }
 }
@@ -2005,12 +2169,12 @@ fun SealingCeremonyOverlay(
                     .scale(sealScale)
                     .size(54.dp)
                     .clip(CircleShape)
-                    .background(palette.red)
-                    .border(2.dp, palette.dangerBorder, CircleShape),
+                    .background(palette.green)
+                    .border(2.dp, palette.greenDeep, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 KannachIcon(
-                    icon = KannachIconType.SEAL,
+                    icon = KannachIconType.SPROUT,
                     tint = palette.onGreen,
                     strokeWidthDp = 2.dp,
                     modifier = Modifier.size(28.dp)

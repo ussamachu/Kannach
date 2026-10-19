@@ -162,11 +162,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var initialSnapshot: String = ""
 
-    // --- Sketchpad State (SK1–SK8) ---
+    // --- Sketchpad State (SK1–SK8 & ER1–ER5 & TR1–TR3) ---
     private val _sketchStrokes = MutableStateFlow<List<SketchStroke>>(emptyList())
     val sketchStrokes: StateFlow<List<SketchStroke>> = _sketchStrokes.asStateFlow()
 
     private val _sketchUndoStack = mutableListOf<List<SketchStroke>>()
+    private val _sketchRedoStack = mutableListOf<List<SketchStroke>>()
+    private var eraseGestureUndoPushed = false
+
+    private val _canUndoSketch = MutableStateFlow(false)
+    val canUndoSketch: StateFlow<Boolean> = _canUndoSketch.asStateFlow()
+
+    private val _canRedoSketch = MutableStateFlow(false)
+    val canRedoSketch: StateFlow<Boolean> = _canRedoSketch.asStateFlow()
 
     private val _sketchColor = MutableStateFlow(DEFAULT_GREEN_HEX)
     val sketchColor: StateFlow<String> = _sketchColor.asStateFlow()
@@ -1123,9 +1131,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun requestSealCapsule() {
         val strings = I18n.forLanguage(language.value)
         val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        _capsuleTitleText.value = liveCapsuleTitle
-        _capsuleDraftText.value = liveCapsuleBody
         val text = liveCapsuleBody.trim()
+        val derivedTitle = text.replace("\n", " ").trim().take(28)
+        _capsuleTitleText.value = derivedTitle
+        _capsuleDraftText.value = liveCapsuleBody
         val unlockDate = _capsuleUnlockDate.value
 
         if (text.isBlank()) {
@@ -1156,8 +1165,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun sealDraftCapsuleWithCeremony() {
-        val title = liveCapsuleTitle.trim()
         val text = liveCapsuleBody.trim()
+        val title = text.replace("\n", " ").trim().take(28)
         val unlockDate = _capsuleUnlockDate.value
         val strokes = _capsuleDoodleStrokes.value
         val color = _capsuleDoodleColor.value
@@ -1206,12 +1215,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             emptyList()
         }
+        val finalTitle = title.trim().ifEmpty {
+            text.replace("\n", " ").trim().take(28)
+        }
         val capsule = repository.addCapsule(
             text = text.trim(),
             unlockDate = unlockDate,
             strokes = normalizedStrokes,
             color = color,
-            title = title.trim()
+            title = finalTitle
         )
         NotificationHelper.scheduleCapsuleNotification(getApplication(), capsule)
         checkReadyCapsule()
@@ -1240,7 +1252,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectTab(Tab.PAGE)
     }
 
+    private fun syncSketchUndoRedoState() {
+        _canUndoSketch.value = _sketchUndoStack.isNotEmpty() || _sketchStrokes.value.isNotEmpty()
+        _canRedoSketch.value = _sketchRedoStack.isNotEmpty()
+    }
+
+    fun getSketchEraserRadius(brushWidth: Float = _sketchBrushWidth.value): Float = when {
+        brushWidth <= 4f -> 8f
+        brushWidth <= 8f -> 14f
+        else -> 24f
+    }
+
+    private fun pointToSegmentDistSq(p: Point, a: Point, b: Point): Double {
+        val abx = (b.x - a.x).toDouble()
+        val aby = (b.y - a.y).toDouble()
+        val apx = (p.x - a.x).toDouble()
+        val apy = (p.y - a.y).toDouble()
+        val lenSq = abx * abx + aby * aby
+        if (lenSq <= 1e-6) return apx * apx + apy * apy
+        val t = ((apx * abx + apy * aby) / lenSq).coerceIn(0.0, 1.0)
+        val cx = a.x + t * abx
+        val cy = a.y + t * aby
+        val dx = p.x - cx
+        val dy = p.y - cy
+        return dx * dx + dy * dy
+    }
+
     fun onSketchStrokeStarted() {
+        eraseGestureUndoPushed = false
         if (!_sketchEraserMode.value) {
             _sketchIntroDismissed.value = true
             if (_sketchClearUndoVisible.value) {
@@ -1250,10 +1289,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun onSketchGestureEnded() {
+        eraseGestureUndoPushed = false
+    }
+
     fun addSketchStroke(stroke: SketchStroke) {
         if (stroke.points.isNotEmpty()) {
+            eraseGestureUndoPushed = false
             _sketchUndoStack.add(_sketchStrokes.value)
+            _sketchRedoStack.clear()
             _sketchStrokes.value = _sketchStrokes.value + listOf(stroke)
+            syncSketchUndoRedoState()
             _sketchIntroDismissed.value = true
             if (_sketchClearUndoVisible.value) {
                 clearUndoJob?.cancel()
@@ -1275,35 +1321,155 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * SK3 & JD3: Eraser mode removes a stroke when a touch point comes within 14 canvas units
-     * of any of its points. One undo step restores it. No haptics while drawing/erasing.
+     * ER1–ER5: Partial erase splitting affected strokes at points/segments within radius r
+     * (Small 8, Medium 14, Large 24; segments densified every 3 units before testing).
+     * Pushes one undo snapshot at the first erased point of a gesture.
      */
     fun eraseSketchAt(pt: Point) {
         val current = _sketchStrokes.value
         if (current.isEmpty()) return
 
-        val remaining = current.filterNot { stroke ->
-            stroke.points.any { p ->
-                Math.hypot((p.x - pt.x).toDouble(), (p.y - pt.y).toDouble()) <= 14.0
+        val r = getSketchEraserRadius().toDouble()
+        val rSq = r * r
+
+        // ER5: Quick check so we make no list copies if no stroke is touched
+        val anyHit = current.any { stroke ->
+            val pts = stroke.points
+            pts.any { p ->
+                val dx = (p.x - pt.x).toDouble()
+                val dy = (p.y - pt.y).toDouble()
+                dx * dx + dy * dy <= rSq
+            } || (0 until pts.lastIndex).any { i ->
+                pointToSegmentDistSq(pt, pts[i], pts[i + 1]) <= rSq
             }
         }
-        if (remaining.size != current.size) {
+        if (!anyHit) return
+
+        // ER2: Push one undo snapshot at the first erased point of a gesture
+        if (!eraseGestureUndoPushed) {
             _sketchUndoStack.add(current)
-            _sketchStrokes.value = remaining
+            eraseGestureUndoPushed = true
+            _sketchRedoStack.clear()
         }
+
+        val updated = ArrayList<SketchStroke>(current.size + 2)
+        for (stroke in current) {
+            val pts = stroke.points
+            val strokeHit = pts.any { p ->
+                val dx = (p.x - pt.x).toDouble()
+                val dy = (p.y - pt.y).toDouble()
+                dx * dx + dy * dy <= rSq
+            } || (0 until pts.lastIndex).any { i ->
+                pointToSegmentDistSq(pt, pts[i], pts[i + 1]) <= rSq
+            }
+
+            if (!strokeHit) {
+                // ER5: Reuse unaffected stroke without copying
+                updated.add(stroke)
+                continue
+            }
+
+            // ER1: Insert intermediate points every 3 units before testing so fast moves do not skip
+            val dense = ArrayList<Point>(pts.size * 2)
+            for (i in pts.indices) {
+                val a = pts[i]
+                dense.add(a)
+                if (i < pts.lastIndex) {
+                    val b = pts[i + 1]
+                    val dx = b.x - a.x
+                    val dy = b.y - a.y
+                    val dist = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                    if (dist > 3f) {
+                        val steps = kotlin.math.ceil(dist / 3f).toInt()
+                        for (s in 1 until steps) {
+                            val frac = s.toFloat() / steps.toFloat()
+                            dense.add(
+                                Point(
+                                    x = ((a.x + dx * frac) * 10f).toInt() / 10f,
+                                    y = ((a.y + dy * frac) * 10f).toInt() / 10f
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Mark every stroke point whose distance is <= r, and every point on a segment whose closest distance is <= r
+            val marked = BooleanArray(dense.size)
+            for (i in dense.indices) {
+                val p = dense[i]
+                val dx = (p.x - pt.x).toDouble()
+                val dy = (p.y - pt.y).toDouble()
+                if (dx * dx + dy * dy <= rSq) {
+                    marked[i] = true
+                }
+            }
+            for (i in 0 until dense.lastIndex) {
+                if ((!marked[i] || !marked[i + 1]) && pointToSegmentDistSq(pt, dense[i], dense[i + 1]) <= rSq) {
+                    marked[i] = true
+                    marked[i + 1] = true
+                }
+            }
+
+            // Split affected stroke at marked points into contiguous runs of length >= 2 (drop 1-point runs)
+            var runStart = -1
+            for (i in dense.indices) {
+                if (!marked[i]) {
+                    if (runStart == -1) runStart = i
+                } else if (runStart != -1) {
+                    if (i - runStart >= 2) {
+                        updated.add(
+                            SketchStroke(
+                                points = dense.subList(runStart, i).toList(),
+                                colorHex = stroke.colorHex,
+                                width = stroke.width
+                            )
+                        )
+                    }
+                    runStart = -1
+                }
+            }
+            if (runStart != -1 && dense.size - runStart >= 2) {
+                updated.add(
+                    SketchStroke(
+                        points = dense.subList(runStart, dense.size).toList(),
+                        colorHex = stroke.colorHex,
+                        width = stroke.width
+                    )
+                )
+            }
+        }
+
+        _sketchStrokes.value = updated
+        syncSketchUndoRedoState()
     }
 
     fun undoSketchStroke() {
+        eraseGestureUndoPushed = false
         if (_sketchClearUndoVisible.value) {
             clearUndoJob?.cancel()
             _sketchClearUndoVisible.value = false
         }
         if (_sketchUndoStack.isNotEmpty()) {
             vibrate(6)
+            _sketchRedoStack.add(_sketchStrokes.value)
             _sketchStrokes.value = _sketchUndoStack.removeAt(_sketchUndoStack.lastIndex)
+            syncSketchUndoRedoState()
         } else if (_sketchStrokes.value.isNotEmpty()) {
             vibrate(6)
+            _sketchRedoStack.add(_sketchStrokes.value)
             _sketchStrokes.value = _sketchStrokes.value.dropLast(1)
+            syncSketchUndoRedoState()
+        }
+    }
+
+    fun redoSketchStroke() {
+        eraseGestureUndoPushed = false
+        if (_sketchRedoStack.isNotEmpty()) {
+            vibrate(6)
+            _sketchUndoStack += _sketchStrokes.value
+            _sketchStrokes.value = _sketchRedoStack.removeAt(_sketchRedoStack.lastIndex)
+            syncSketchUndoRedoState()
         }
     }
 
@@ -1312,10 +1478,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * slides in; an Undo action appears for 5 s.
      */
     fun clearSketchStrokes() {
+        eraseGestureUndoPushed = false
         if (_sketchStrokes.value.isNotEmpty()) {
             vibrate(6)
             _sketchUndoStack.add(_sketchStrokes.value)
+            _sketchRedoStack.clear()
             _sketchStrokes.value = emptyList()
+            syncSketchUndoRedoState()
             _sketchPageTurnCount.value = _sketchPageTurnCount.value + 1
             _sketchClearUndoVisible.value = true
             clearUndoJob?.cancel()
@@ -1331,10 +1500,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * JD3: Selecting a swatch shows its mood name as a 1-line label above the tray for 1.2 s, then fades.
+     * JD3 & ER4: Selecting a swatch returns to pen mode and shows its mood name as a 1-line label
+     * above the tray for 1.2 s, then fades.
      */
     fun setSketchColor(hex: String) {
         vibrate(5)
+        eraseGestureUndoPushed = false
         _sketchColor.value = hex
         _sketchEraserMode.value = false
         _sketchMoodLabelVisible.value = true
@@ -1345,19 +1516,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * ER1 & ER4: The three size dots set both pen width and eraser radius (Small 8, Medium 14, Large 24).
+     * Selecting a size dot keeps the current mode (pen or eraser).
+     */
     fun setSketchBrushWidth(width: Float) {
         vibrate(5)
         _sketchBrushWidth.value = width
-        _sketchEraserMode.value = false
     }
 
     fun toggleSketchEraser() {
         vibrate(5)
+        eraseGestureUndoPushed = false
         _sketchEraserMode.value = !_sketchEraserMode.value
     }
 
     fun setSketchEraserMode(enabled: Boolean) {
         vibrate(5)
+        eraseGestureUndoPushed = false
         _sketchEraserMode.value = enabled
     }
 
