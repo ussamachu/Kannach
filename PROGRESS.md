@@ -974,3 +974,5 @@ RP6 (Release Plan §6 Storage safety — before change: JSON parse exceptions in
 RP7 (Release Plan §7 Letters shelf defects T13 + LS7 envelope delete bottom sheet) — done — app/src/main/java/com/example/LettersScreen.kt, app/src/main/java/com/example/I18nAr.kt
 RP8 (Release Plan §8 Predictive back & notification pools verification) — done — app/src/main/java/com/example/NotificationHelper.kt, app/src/main/java/com/example/MainActivity.kt
 RP9 (Release Plan §9 Version 1.0.0 & metadata verification) — done — app/build.gradle.kts
+F1 (Final Fixes §1 Cap corrupt-data copies to 3 newest & deduplicate identical rawJson) — done — app/src/main/java/com/example/ModelsAndStorage.kt
+F3 (Final Fixes §3 Remove AI Studio template leftovers & unused fonts) — done — build.gradle.kts, gradle.properties, .env.example, app/src/main/res/font/aref_ruqaa.ttf, app/src/main/res/font/marhey.ttf

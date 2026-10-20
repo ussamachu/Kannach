@@ -221,6 +221,24 @@ class KannachRepository(private val context: Context) {
 
     private val corruptKeys = mutableSetOf<String>()
 
+    private fun recordCorruptCopy(key: String, rawJson: String) {
+        val prefix = "${key}_corrupt_"
+        val existing = prefs.all.keys
+            .filter { it.startsWith("${key}_corrupt_") }
+            .sortedBy { it.removePrefix(prefix).toLongOrNull() ?: 0L }
+        val hasIdentical = existing.any { prefs.getString(it, null) == rawJson }
+        val editor = prefs.edit()
+        val allCorruptKeys = if (!hasIdentical) {
+            val corruptKey = "${key}_corrupt_${System.currentTimeMillis()}"
+            editor.putString(corruptKey, rawJson)
+            existing + corruptKey
+        } else {
+            existing
+        }
+        allCorruptKeys.filter { it.startsWith("${key}_corrupt_") && it !in allCorruptKeys.takeLast(3) }.forEach { editor.remove(it) }
+        editor.apply()
+    }
+
     private inline fun <reified T> loadJsonSafely(key: String, defaultValue: T): T {
         val rawJson = prefs.getString(key, null) ?: return defaultValue
         return try {
@@ -228,8 +246,7 @@ class KannachRepository(private val context: Context) {
             corruptKeys.remove(key)
             decoded
         } catch (_: Exception) {
-            val corruptKey = "${key}_corrupt_${System.currentTimeMillis()}"
-            prefs.edit().putString(corruptKey, rawJson).apply()
+            recordCorruptCopy(key, rawJson)
             corruptKeys.add(key)
             defaultValue
         }
