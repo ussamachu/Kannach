@@ -34,8 +34,12 @@ class KannachAlarmReceiver : BroadcastReceiver() {
             if (repo.getUserSettings().copyReminder == "monthly") {
                 NotificationHelper.scheduleMonthlyCopyReminder(context)
             }
-            repo.getCapsules().filter { !it.opened }.forEach { capsule ->
-                NotificationHelper.scheduleCapsuleNotification(context, capsule)
+            if (ENABLE_LETTERS) {
+                repo.getCapsules().filter { !it.opened }.forEach { capsule ->
+                    NotificationHelper.scheduleCapsuleNotification(context, capsule)
+                }
+            } else {
+                NotificationHelper.cancelAllCapsuleNotifications(context, repo.getCapsules())
             }
             return
         }
@@ -100,6 +104,7 @@ class KannachAlarmReceiver : BroadcastReceiver() {
             }
 
             TYPE_CAPSULE -> {
+                if (!ENABLE_LETTERS) return
                 val capsuleTitle = strings.capsuleTitle
                 val capsuleSub = strings.capsuleReadyBanner
 
@@ -414,6 +419,7 @@ object NotificationHelper {
      * CP9 & RB1: Schedules a local notification for [capsule] at 09:00 AM on its [TimeCapsule.unlockDate].
      */
     fun scheduleCapsuleNotification(context: Context, capsule: TimeCapsule) {
+        if (!ENABLE_LETTERS) return
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val parts = capsule.unlockDate.split("-").mapNotNull { it.toIntOrNull() }
         if (parts.size != 3) return
@@ -471,6 +477,13 @@ object NotificationHelper {
             alarmManager.cancel(pendingIntent)
             pendingIntent.cancel()
         } catch (_: Exception) {}
+    }
+
+    /**
+     * LF3: Cancels all existing capsule alarms on startup when ENABLE_LETTERS is false.
+     */
+    fun cancelAllCapsuleNotifications(context: Context, capsules: List<TimeCapsule>) {
+        capsules.forEach { cancelCapsuleNotification(context, it.id) }
     }
 
     /**

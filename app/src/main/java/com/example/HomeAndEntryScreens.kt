@@ -666,19 +666,21 @@ fun KannachDock(
                             .testTag("dock_tab_garden")
                     )
 
-                    // 3. Letters (Time Capsules)
-                    PaperDockSlot(
-                        icon = KannachIconType.SEAL,
-                        label = strings.dockLetters,
-                        selected = currentTab == Tab.LETTERS,
-                        hasBadge = readyCapsule != null,
-                        reduceMotion = reduceMotion,
-                        enabled = dockState == DockState.EXPANDED,
-                        onClick = { viewModel.selectTab(Tab.LETTERS) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("dock_tab_letters")
-                    )
+                    // 3. Letters (Time Capsules) — gated by ENABLE_LETTERS (LF2 & LF5)
+                    if (ENABLE_LETTERS) {
+                        PaperDockSlot(
+                            icon = KannachIconType.SEAL,
+                            label = strings.dockLetters,
+                            selected = currentTab == Tab.LETTERS,
+                            hasBadge = readyCapsule != null,
+                            reduceMotion = reduceMotion,
+                            enabled = dockState == DockState.EXPANDED,
+                            onClick = { viewModel.selectTab(Tab.LETTERS) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("dock_tab_letters")
+                        )
+                    }
 
                     // 4. Draw (Sketchpad)
                     PaperDockSlot(
@@ -935,632 +937,162 @@ private fun PaperDockSlot(
  * Dashed banner component (used for On This Day & Capsule Ready).
  */
 /**
- * Helper to compute the time-of-day / status greeting line (moved from AppHeader into TodayPageCard per HM2).
+ * HR2: Today row (current month, today visible).
+ * Single row above the dock, full width minus 16 dp margins, minimum height 92 dp:
+ * - Surface: paperBackground + paperShadow + dashed stitch border used by the dock; HandDrawnRadiusShape; no tilt.
+ * - Start: 76 dp square frame with hand-drawn rounded border holding today's doodle (GlyphView, 6 dp inner padding)
+ *   or, when empty, a dashed circle with the static sprout icon in palette.inkSoft.
+ * - Column (weight 1):
+ *   - Line 1: weekday and date in the app language, hand font 13 sp, palette.inkSoft, maxLines = 1.
+ *   - Line 2 (written): first line of the entry text, hand font 17 sp, palette.ink, maxLines = 2, ellipsis
+ *     (or greetDone if the entry has a doodle but no text).
+ *   - Line 2 (empty): strings.todayRowEmpty, hand font 17 sp.
+ * - Whole row is one tap target: empty -> viewModel.openSheet(todayKey); written -> open today's memory card.
  */
 @Composable
-fun rememberHomeGreetingText(
-    entries: Map<String, DayEntry>,
-    todayKey: String,
-    language: String,
-    strings: Strings
-): String {
-    val hasTodayEntry = entries[todayKey] != null
-    val isWelcomeBack = remember(entries, todayKey) {
-        if (entries.isEmpty()) return@remember false
-        val writtenDates = entries.keys.filter { it < todayKey }.sortedDescending()
-        if (writtenDates.isEmpty()) return@remember false
-        val lastDate = writtenDates.first()
-        try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-            val dLast = sdf.parse(lastDate)?.time ?: return@remember false
-            val dToday = sdf.parse(todayKey)?.time ?: return@remember false
-            val diffDays = (dToday - dLast) / (1000 * 60 * 60 * 24)
-            diffDays >= 7
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    return remember(hasTodayEntry, isWelcomeBack, language) {
-        if (hasTodayEntry) {
-            strings.greetDone
-        } else if (isWelcomeBack) {
-            strings.greetBack
-        } else {
-            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-            when (hour) {
-                in 5..11 -> strings.greetMorning
-                in 12..16 -> strings.greetDay
-                in 17..21 -> strings.greetEvening
-                else -> strings.greetNight
-            }
-        }
-    }
-}
-
-/**
- * Shared tear-off desk-calendar page surface for HM2 (TodayPageCard) and HM3 (MonthPageCard).
- * - Top edge: torn zig-zag path in palette.line; two small punched holes at the top (circles, palette.paperLo).
- * - Tilt: paperTilt(-0.5f); shadow: paperShadow.
- */
-@Composable
-private fun TearOffPageSurface(
-    modifier: Modifier = Modifier,
-    showPunchedHoles: Boolean = true,
-    onClick: (() -> Unit)? = null,
-    content: @Composable BoxScope.() -> Unit
-) {
-    val palette = LocalKannachPalette.current
-    val clickModifier = if (onClick != null) {
-        Modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            onClick = onClick
-        )
-    } else {
-        Modifier
-    }
-
-    Box(
-        modifier = modifier
-            .paperTilt(-0.5f)
-            .paperShadow(
-                shadowColor = palette.paperShadow,
-                shape = TearOffPageShape,
-                offsetY = 4.dp
-            )
-            .clip(TearOffPageShape)
-            .background(palette.paperHi)
-            .then(clickModifier)
-            .drawBehind {
-                val w = size.width
-                val h = size.height
-                if (w <= 0f || h <= 0f) return@drawBehind
-
-                // Subtle side & bottom border in greenLine
-                val outline = TearOffPageShape.createOutline(size, layoutDirection, this)
-                if (outline is Outline.Generic) {
-                    drawPath(
-                        path = outline.path,
-                        color = palette.greenLine.copy(alpha = 0.85f),
-                        style = Stroke(width = 1.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                    )
-                }
-
-                // HM2 & TC3: Top and bottom torn zig-zag paths in palette.line
-                val zigStep = 8.dp.toPx().coerceAtLeast(4f)
-                val zigDepth = 4.dp.toPx().coerceAtMost(h * 0.1f)
-                val teethCount = (w / zigStep).toInt().coerceAtLeast(2)
-                val actualStep = w / teethCount
-                val zigPath = Path().apply {
-                    moveTo(0f, zigDepth)
-                    for (i in 0 until teethCount) {
-                        lineTo((i + 0.5f) * actualStep, 0f)
-                        lineTo((i + 1) * actualStep, zigDepth)
-                    }
-                    moveTo(0f, h - zigDepth)
-                    for (i in 0 until teethCount) {
-                        lineTo((i + 0.5f) * actualStep, h)
-                        lineTo((i + 1) * actualStep, h - zigDepth)
-                    }
-                }
-                drawPath(
-                    path = zigPath,
-                    color = palette.line,
-                    style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                )
-
-                // HM2: Two small punched holes at the top (circles, palette.paperLo)
-                if (showPunchedHoles) {
-                    val holeY = 13.dp.toPx()
-                    val holeRadius = 4.5.dp.toPx()
-                    val holeOffset = 34.dp.toPx()
-                    val cx = w / 2f
-                    for (hx in listOf(cx - holeOffset, cx + holeOffset)) {
-                        drawCircle(
-                            color = palette.paperLo,
-                            radius = holeRadius,
-                            center = Offset(hx, holeY)
-                        )
-                        drawCircle(
-                            color = palette.line,
-                            radius = holeRadius,
-                            center = Offset(hx, holeY),
-                            style = Stroke(width = 1.dp.toPx())
-                        )
-                    }
-                }
-            },
-        content = content
-    )
-}
-
-/**
- * HM2 & TC1–TC5: TodayPageCard (current month).
- * Constraint-driven tiers based on the card's own available height via BoxWithConstraints:
- * - Full (h >= 230.dp): Current layout (weekday, 72 sp day number, month+year, greeting, ruled area with 112 dp doodle + up to 3 lines of text).
- * - Compact (150.dp <= h < 230.dp): Day number 48 sp; weekday and month/year on one line beside it; doodle 72 dp; greeting hidden; ruled area shows 2 lines of text max.
- * - Mini (h < 150.dp): One row: day number 40 sp at the start, then the doodle (56 dp) or sprout icon, then one line of text (maxLines = 1, ellipsis). No ruled lines, no greeting, no month line.
- * - TC2: Nothing may exceed the card. No child uses a fixed height larger than the tier allows. The ruled area uses weight(1f) with heightIn(min = 0.dp).
- */
-@Composable
-fun TodayPageCard(
+fun TodayRow(
     viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalKannachPalette.current
     val language by viewModel.language.collectAsState()
     val userSettings by viewModel.userSettings.collectAsState()
-    val isRtl = I18n.isRtl(language)
     val strings = I18n.forLanguage(language)
     val entries by viewModel.entries.collectAsState()
-    val density = LocalDensity.current
 
     val todayKey = viewModel.getTodayKey()
     val todayEntry = entries[todayKey]
-    val greetingText = rememberHomeGreetingText(entries, todayKey, language, strings)
 
     val cal = remember(todayKey) { Calendar.getInstance() }
     val nowYear = cal.get(Calendar.YEAR)
     val nowMonth = cal.get(Calendar.MONTH) + 1
     val nowDay = cal.get(Calendar.DAY_OF_MONTH)
 
-    val weekdayName = remember(nowYear, nowMonth, nowDay, language) {
-        I18n.formatWeekdayName(nowYear, nowMonth, nowDay, language)
-    }
-    val dayNumberStr = remember(nowDay, language, userSettings.useArabicIndicNumerals) {
-        I18n.formatYear(nowDay, language, userSettings.useArabicIndicNumerals)
-    }
-    val monthYearStr = remember(nowYear, nowMonth, language, userSettings.useArabicIndicNumerals) {
-        I18n.formatMonthLabel(nowYear, nowMonth, language, userSettings.useArabicIndicNumerals)
+    val dateLine = remember(nowYear, nowMonth, nowDay, language, userSettings.useArabicIndicNumerals) {
+        I18n.formatTodayRowDate(nowYear, nowMonth, nowDay, language, userSettings.useArabicIndicNumerals)
     }
 
-    val tightTextStyle = remember {
-        TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-    }
-
-    TearOffPageSurface(
-        modifier = modifier.fillMaxSize(),
-        showPunchedHoles = true,
-        onClick = {
-            viewModel.vibrate(8)
-            viewModel.openSheet(todayKey)
-        }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 92.dp)
+            .paperShadow(
+                shadowColor = palette.paperShadow,
+                shape = HandDrawnRadiusShape,
+                offsetY = 4.dp
+            )
+            .clip(HandDrawnRadiusShape)
+            .paperBackground(palette.paperHi)
+            .border(1.5.dp, palette.greenLine, HandDrawnRadiusShape)
+            .dashedHandDrawnBorder(
+                color = palette.greenLine.copy(alpha = 0.7f),
+                shape = HandDrawnRadiusShape,
+                strokeWidth = 1.2.dp,
+                dashIntervals = floatArrayOf(8f, 6f),
+                inset = 4.dp
+            )
+            .clickable {
+                viewModel.vibrate(8)
+                viewModel.openSheet(todayKey)
+            }
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .testTag("today_row"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxSize()
+        // Start: 76 dp square frame with hand-drawn rounded border
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .clip(HandDrawnRadiusAltShape)
+                .background(palette.paper)
+                .border(1.2.dp, palette.line, HandDrawnRadiusAltShape)
+                .padding(6.dp)
+                .testTag("today_row_frame"),
+            contentAlignment = Alignment.Center
         ) {
-            val cardHeight = maxHeight
-            val tier = when {
-                cardHeight >= 230.dp -> 2 // Full
-                cardHeight >= 150.dp -> 1 // Compact
-                else -> 0                 // Mini
-            }
-
-            if (tier == 0) {
-                // Mini tier (h < 150.dp): One row: day number 40 sp at the start,
-                // then the doodle (56 dp) or sprout icon, then one line of text (maxLines = 1, ellipsis).
-                // No ruled lines, no greeting, no month line.
-                val miniDoodleSize = (cardHeight - 20.dp).coerceIn(24.dp, 56.dp)
-                Row(
+            if (todayEntry != null && todayEntry.strokes.isNotEmpty()) {
+                val doodleColor = try {
+                    Color(android.graphics.Color.parseColor(todayEntry.color))
+                } catch (_: Exception) {
+                    palette.green
+                }
+                GlyphView(
+                    strokes = todayEntry.strokes,
+                    color = doodleColor,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .testTag("today_page_mini_row"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = dayNumberStr,
-                        fontSize = 40.sp,
-                        lineHeight = 40.sp,
-                        style = tightTextStyle,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = LocalKannachHandFont.current,
-                        color = palette.greenDeep,
-                        maxLines = 1,
-                        modifier = Modifier.testTag("today_page_huge_day")
-                    )
-
-                    if (todayEntry == null) {
-                        KannachIcon(
-                            icon = KannachIconType.SPROUT,
-                            tint = palette.green,
-                            strokeWidthDp = 2.dp,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .testTag("today_page_sprout")
-                        )
-                        Text(
-                            text = strings.todayCardEmpty,
-                            fontSize = 15.sp,
-                            lineHeight = 18.sp,
-                            style = tightTextStyle,
-                            fontFamily = LocalKannachHandFont.current,
-                            color = palette.inkSoft,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("today_page_empty_text")
-                        )
-                    } else {
-                        val doodleColor = try {
-                            Color(android.graphics.Color.parseColor(todayEntry.color))
-                        } catch (_: Exception) {
-                            palette.green
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(miniDoodleSize)
-                                .paperTilt(-2.2f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            GlyphView(
-                                strokes = todayEntry.strokes,
-                                color = doodleColor,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .testTag("today_page_doodle")
-                            )
-                        }
-                        val displayText = todayEntry.text.trim().ifBlank { strings.drawLabel }
-                        Text(
-                            text = displayText,
-                            fontSize = 15.sp,
-                            lineHeight = 18.sp,
-                            style = tightTextStyle,
-                            fontFamily = LocalKannachHandFont.current,
-                            color = palette.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("today_page_written_text")
-                        )
-                    }
-                }
-            } else if (tier == 1) {
-                // Compact tier (150.dp <= h < 230.dp):
-                // Day number 48 sp; weekday and month/year on ONE line beside it;
-                // doodle 72 dp; greeting hidden; ruled area shows 2 lines of text max.
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = 14.dp, bottom = 6.dp)
-                        .testTag("today_page_compact_col"),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)
-                    ) {
-                        Text(
-                            text = dayNumberStr,
-                            fontSize = 48.sp,
-                            lineHeight = 48.sp,
-                            style = tightTextStyle,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = LocalKannachHandFont.current,
-                            color = palette.greenDeep,
-                            maxLines = 1,
-                            modifier = Modifier.testTag("today_page_huge_day")
-                        )
-                        Text(
-                            text = "$weekdayName · $monthYearStr",
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
-                            style = ArabicDisplayStyle,
-                            fontWeight = FontWeight.Medium,
-                            fontFamily = LocalKannachUiFont.current,
-                            color = palette.inkSoft,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .weight(1f, fill = false)
-                                .padding(top = 2.dp)
-                                .testTag("today_page_compact_date_line")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // TC2: Ruled area uses weight(1f) with heightIn(min = 0.dp)
-                    BoxWithConstraints(
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 0.dp)
-                            .fillMaxWidth()
-                            .linedPaperBackground(
-                                lineColor = palette.line.copy(alpha = 0.7f),
-                                lineHeightDp = 24.dp
-                            )
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val ruledInnerH = maxHeight
-                        if (todayEntry == null) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    KannachIcon(
-                                        icon = KannachIconType.SPROUT,
-                                        tint = palette.green,
-                                        strokeWidthDp = 2.dp,
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .testTag("today_page_sprout")
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = strings.todayCardEmpty,
-                                        fontSize = 14.sp,
-                                        lineHeight = 18.sp,
-                                        style = tightTextStyle,
-                                        fontFamily = LocalKannachHandFont.current,
-                                        color = palette.inkSoft,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.testTag("today_page_empty_text")
-                                    )
-                                }
-                                if (ruledInnerH >= 36.dp) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .width(120.dp)
-                                            .height(1.dp)
-                                            .background(palette.line)
-                                    )
-                                }
-                            }
-                        } else {
-                            val doodleColor = try {
-                                Color(android.graphics.Color.parseColor(todayEntry.color))
-                            } catch (_: Exception) {
-                                palette.green
-                            }
-                            val compactDoodleSize = (ruledInnerH - 6.dp).coerceIn(28.dp, 72.dp)
-                            val lineHeightDp = with(density) { 19.sp.toDp() }
-                            val allowedLines = ((ruledInnerH - 4.dp) / lineHeightDp).toInt().coerceIn(1, 2)
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(compactDoodleSize)
-                                        .paperTilt(-2.2f),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    GlyphView(
-                                        strokes = todayEntry.strokes,
-                                        color = doodleColor,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .testTag("today_page_doodle")
-                                    )
-                                }
-
-                                val displayText = todayEntry.text.trim().ifBlank { strings.drawLabel }
-                                Text(
-                                    text = displayText,
-                                    fontSize = 14.sp,
-                                    lineHeight = 19.sp,
-                                    style = tightTextStyle,
-                                    fontFamily = LocalKannachHandFont.current,
-                                    color = palette.ink,
-                                    maxLines = allowedLines,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("today_page_written_text")
-                                )
-                            }
-                        }
-                    }
-                }
+                        .testTag("today_row_doodle")
+                )
             } else {
-                // Full tier (h >= 230.dp): Current layout
-                val topPad = if (cardHeight < 260.dp) 14.dp else 20.dp
-                val midGap = if (cardHeight < 260.dp) 4.dp else 8.dp
-                Column(
+                // Empty: dashed circle with static sprout icon in palette.inkSoft (no pulse)
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = topPad, bottom = 6.dp)
-                        .testTag("today_page_full_col"),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .size(48.dp)
+                        .dashedHandDrawnBorder(
+                            color = palette.line,
+                            shape = CircleShape,
+                            strokeWidth = 1.2.dp,
+                            dashIntervals = floatArrayOf(6f, 5f)
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Upper half: Desk-calendar header (weekday, 72sp day number, month+year, greeting)
-                    Column(
+                    KannachIcon(
+                        icon = KannachIconType.SPROUT,
+                        tint = palette.inkSoft,
+                        strokeWidthDp = 1.8.dp,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = weekdayName,
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
-                            style = ArabicDisplayStyle,
-                            fontWeight = FontWeight.Medium,
-                            fontFamily = LocalKannachUiFont.current,
-                            letterSpacing = if (isRtl) 0.sp else 1.6.sp,
-                            color = palette.inkSoft,
-                            maxLines = 1,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-
-                        Text(
-                            text = dayNumberStr,
-                            fontSize = 72.sp,
-                            lineHeight = 72.sp,
-                            style = tightTextStyle,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = LocalKannachHandFont.current,
-                            color = palette.greenDeep,
-                            maxLines = 1,
-                            modifier = Modifier.testTag("today_page_huge_day")
-                        )
-
-                        Text(
-                            text = monthYearStr,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            style = ArabicDisplayStyle,
-                            fontWeight = FontWeight.Medium,
-                            fontFamily = LocalKannachUiFont.current,
-                            color = palette.inkSoft,
-                            maxLines = 1
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        Text(
-                            text = greetingText,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                            style = ArabicDisplayStyle,
-                            fontFamily = LocalKannachHandFont.current,
-                            color = palette.inkFaint,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.testTag("today_page_greeting")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(midGap))
-
-                    // Lower half: Ruled paper (linedPaperBackground), weight(1f) + heightIn(min = 0.dp) (TC2)
-                    BoxWithConstraints(
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 0.dp)
-                            .fillMaxWidth()
-                            .linedPaperBackground(
-                                lineColor = palette.line.copy(alpha = 0.7f),
-                                lineHeightDp = 26.dp
-                            )
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val ruledInnerH = maxHeight
-                        if (todayEntry == null) {
-                            // Today empty: faint placeholder line + sprout + todayCardEmpty
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    KannachIcon(
-                                        icon = KannachIconType.SPROUT,
-                                        tint = palette.green,
-                                        strokeWidthDp = 2.dp,
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .testTag("today_page_sprout")
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = strings.todayCardEmpty,
-                                        fontSize = 15.sp,
-                                        lineHeight = 18.sp,
-                                        style = tightTextStyle,
-                                        fontFamily = LocalKannachHandFont.current,
-                                        color = palette.inkSoft,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.testTag("today_page_empty_text")
-                                    )
-                                }
-                                if (ruledInnerH >= 36.dp) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .width(120.dp)
-                                            .height(1.dp)
-                                            .background(palette.line)
-                                    )
-                                }
-                            }
-                        } else {
-                            // Today written: doodle (up to 112 dp, never exceeding ruledInnerH) beside up to 3 lines of text
-                            val doodleColor = try {
-                                Color(android.graphics.Color.parseColor(todayEntry.color))
-                            } catch (_: Exception) {
-                                palette.green
-                            }
-                            val fullDoodleSize = (ruledInnerH - 6.dp).coerceIn(28.dp, 112.dp)
-                            val lineHeightDp = with(density) { 21.sp.toDp() }
-                            val allowedLines = ((ruledInnerH - 4.dp) / lineHeightDp).toInt().coerceIn(1, 3)
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(14.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(fullDoodleSize)
-                                        .paperTilt(-2.2f),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    GlyphView(
-                                        strokes = todayEntry.strokes,
-                                        color = doodleColor,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .testTag("today_page_doodle")
-                                    )
-                                }
-
-                                val displayText = todayEntry.text.trim().ifBlank { strings.drawLabel }
-                                Text(
-                                    text = displayText,
-                                    fontSize = 15.sp,
-                                    lineHeight = 21.sp,
-                                    style = tightTextStyle,
-                                    fontFamily = LocalKannachHandFont.current,
-                                    color = palette.ink,
-                                    maxLines = allowedLines,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("today_page_written_text")
-                                )
-                            }
-                        }
-                    }
+                            .size(22.dp)
+                            .testTag("today_row_sprout")
+                    )
                 }
             }
+        }
+
+        // Column (weight 1): Line 1 = weekday · day month (13 sp); Line 2 = text / greetDone / todayRowEmpty (17 sp)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = dateLine,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                fontFamily = LocalKannachHandFont.current,
+                color = palette.inkSoft,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("today_row_date")
+            )
+
+            val secondLineText = if (todayEntry != null) {
+                val firstLine = todayEntry.text.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
+                if (!firstLine.isNullOrBlank()) firstLine else strings.greetDone
+            } else {
+                strings.todayRowEmpty
+            }
+
+            Text(
+                text = secondLineText,
+                fontSize = 17.sp,
+                lineHeight = 22.sp,
+                fontFamily = LocalKannachHandFont.current,
+                color = palette.ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("today_row_text")
+            )
         }
     }
 }
 
 /**
- * HM3: MonthPageCard (past month).
- * Same tear-off shape: big month name, a sentence (monthRecapPlanted / monthRecapQuiet),
- * and a strip of up to 5 doodles (favorites first, then newest), 56 dp each with small rotations;
- * with zero entries, a faint dotted circle instead of the strip.
+ * HR5: Month row (past or future month).
+ * Same size and surface as TodayRow: start frame shows the season icon;
+ * line 1 = month and year; line 2 = monthRecap* sentence. Tap does nothing.
  */
 @Composable
-fun MonthPageCard(
+fun MonthRow(
     viewModel: MainViewModel,
     currentYear: Int,
     currentMonth: Int,
@@ -1568,219 +1100,100 @@ fun MonthPageCard(
 ) {
     val palette = LocalKannachPalette.current
     val language by viewModel.language.collectAsState()
+    val userSettings by viewModel.userSettings.collectAsState()
     val strings = I18n.forLanguage(language)
     val entries by viewModel.entries.collectAsState()
 
     val monthPrefix = remember(currentYear, currentMonth) {
         String.format(Locale.US, "%04d-%02d", currentYear, currentMonth)
     }
-    val monthEntries = remember(entries, monthPrefix) {
-        entries.entries
-            .filter { it.key.startsWith(monthPrefix) }
-            .sortedWith(
-                compareByDescending<Map.Entry<String, DayEntry>> { it.value.fav }
-                    .thenByDescending { it.key }
-            )
+    val monthEntriesCount = remember(entries, monthPrefix) {
+        entries.keys.count { it.startsWith(monthPrefix) }
     }
-    val monthEntriesCount = monthEntries.size
-    val topDoodles = remember(monthEntries) { monthEntries.take(5) }
     val monthName = strings.months.getOrElse(currentMonth - 1) { "" }
-
+    val monthYearLine = remember(currentYear, currentMonth, language, userSettings.useArabicIndicNumerals) {
+        I18n.formatMonthLabel(currentYear, currentMonth, language, userSettings.useArabicIndicNumerals)
+    }
     val recapText = if (monthEntriesCount > 0) {
         strings.monthRecapPlanted.format(language, monthEntriesCount, "month" to monthName)
     } else {
         strings.monthRecapQuiet
     }
 
-    TearOffPageSurface(
-        modifier = modifier.fillMaxSize(),
-        showPunchedHoles = true
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 24.dp, bottom = 12.dp, start = 16.dp, end = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = monthName,
-                    fontSize = 36.sp,
-                    lineHeight = 48.sp,
-                    style = ArabicDisplayStyle,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = LocalKannachHandFont.current,
-                    color = palette.greenDeep,
-                    maxLines = 1,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                Text(
-                    text = I18n.formatYear(currentYear, language),
-                    fontSize = 13.sp,
-                    fontFamily = LocalKannachUiFont.current,
-                    color = palette.inkSoft
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = recapText,
-                    fontSize = 15.sp,
-                    fontFamily = LocalKannachHandFont.current,
-                    color = palette.inkSoft,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            // Strip of up to 5 doodles (56 dp each with small rotations) or faint dotted circle when 0 entries
-            if (topDoodles.isNotEmpty()) {
-                val rotations = floatArrayOf(-3.5f, 2.5f, -2.0f, 3.0f, -1.5f)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    topDoodles.forEachIndexed { idx, (dateKey, dayEntry) ->
-                        val doodleColor = try {
-                            Color(android.graphics.Color.parseColor(dayEntry.color))
-                        } catch (_: Exception) {
-                            palette.green
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .rotate(rotations[idx % rotations.size])
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    viewModel.vibrate(6)
-                                    viewModel.openSheet(dateKey)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            GlyphView(
-                                strokes = dayEntry.strokes,
-                                color = doodleColor,
-                                modifier = Modifier.size(50.dp)
-                            )
-                        }
-                    }
-                }
-            } else {
-                Canvas(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .testTag("month_page_empty_circle")
-                ) {
-                    drawCircle(
-                        color = palette.inkFaint.copy(alpha = 0.45f),
-                        radius = size.minDimension / 2f - 2.dp.toPx(),
-                        style = Stroke(
-                            width = 1.5.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f),
-                            cap = StrokeCap.Round
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * HM4: Short screens compact 64 dp single-line strip (date + greeting).
- * Shown when remaining height < 160 dp so the page never scrolls.
- */
-@Composable
-fun CompactPageStrip(
-    viewModel: MainViewModel,
-    currentYear: Int,
-    currentMonth: Int,
-    modifier: Modifier = Modifier
-) {
-    val palette = LocalKannachPalette.current
-    val language by viewModel.language.collectAsState()
-    val userSettings by viewModel.userSettings.collectAsState()
-    val strings = I18n.forLanguage(language)
-    val entries by viewModel.entries.collectAsState()
-
-    val todayKey = viewModel.getTodayKey()
-    val greetingText = rememberHomeGreetingText(entries, todayKey, language, strings)
-
-    val cal = remember(todayKey) { Calendar.getInstance() }
-    val nowYear = cal.get(Calendar.YEAR)
-    val nowMonth = cal.get(Calendar.MONTH) + 1
-    val nowDay = cal.get(Calendar.DAY_OF_MONTH)
-    val isCurrentMonth = currentYear == nowYear && currentMonth == nowMonth
-
-    val monthName = strings.months.getOrElse(currentMonth - 1) { "" }
-    val leadText = if (isCurrentMonth) {
-        "${I18n.formatYear(nowDay, language, userSettings.useArabicIndicNumerals)} $monthName"
-    } else {
-        monthName
-    }
-    val trailText = if (isCurrentMonth) {
-        greetingText
-    } else {
-        val monthPrefix = String.format(Locale.US, "%04d-%02d", currentYear, currentMonth)
-        val count = entries.keys.count { it.startsWith(monthPrefix) }
-        if (count > 0) {
-            strings.monthRecapPlanted.format(language, count, "month" to monthName)
-        } else {
-            strings.monthRecapQuiet
-        }
+    val season = I18n.seasonOf(currentMonth)
+    val seasonIcon = when (season) {
+        "winter" -> KannachIconType.WINTER
+        "spring" -> KannachIconType.SPRING
+        "summer" -> KannachIconType.SUMMER
+        else -> KannachIconType.AUTUMN
     }
 
-    TearOffPageSurface(
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp),
-        showPunchedHoles = false,
-        onClick = if (isCurrentMonth) {
-            {
-                viewModel.vibrate(8)
-                viewModel.openSheet(todayKey)
-            }
-        } else null
+            .heightIn(min = 92.dp)
+            .paperShadow(
+                shadowColor = palette.paperShadow,
+                shape = HandDrawnRadiusShape,
+                offsetY = 4.dp
+            )
+            .clip(HandDrawnRadiusShape)
+            .paperBackground(palette.paperHi)
+            .border(1.5.dp, palette.greenLine, HandDrawnRadiusShape)
+            .dashedHandDrawnBorder(
+                color = palette.greenLine.copy(alpha = 0.7f),
+                shape = HandDrawnRadiusShape,
+                strokeWidth = 1.2.dp,
+                dashIntervals = floatArrayOf(8f, 6f),
+                inset = 4.dp
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .testTag("month_row"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .size(76.dp)
+                .clip(HandDrawnRadiusAltShape)
+                .background(palette.paper)
+                .border(1.2.dp, palette.line, HandDrawnRadiusAltShape)
+                .padding(6.dp)
+                .testTag("month_row_frame"),
+            contentAlignment = Alignment.Center
         ) {
             KannachIcon(
-                icon = KannachIconType.SPROUT,
-                tint = palette.green,
+                icon = seasonIcon,
+                tint = palette.greenDeep,
                 strokeWidthDp = 1.8.dp,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(28.dp)
             )
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             Text(
-                text = leadText,
-                fontSize = 18.sp,
-                lineHeight = 26.sp,
-                style = ArabicDisplayStyle,
-                fontWeight = FontWeight.Bold,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.greenDeep,
-                maxLines = 1,
-                modifier = Modifier.padding(top = 2.dp)
-            )
-            Text(
-                text = "·",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = palette.inkFaint
-            )
-            Text(
-                text = trailText,
-                fontSize = 14.sp,
+                text = monthYearLine,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
                 fontFamily = LocalKannachHandFont.current,
                 color = palette.inkSoft,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.testTag("month_row_date")
+            )
+
+            Text(
+                text = recapText,
+                fontSize = 17.sp,
+                lineHeight = 22.sp,
+                fontFamily = LocalKannachHandFont.current,
+                color = palette.ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("month_row_recap")
             )
         }
     }
@@ -1805,7 +1218,7 @@ fun FoldedPaperCorner(
     val reduceMotion = rememberReduceMotion()
 
     val activeItem = when {
-        readyCapsule != null -> "capsule"
+        ENABLE_LETTERS && readyCapsule != null -> "capsule"
         onThisDayHit != null -> "onThisDay"
         else -> null
     } ?: return
@@ -1907,9 +1320,10 @@ fun FoldedPaperCorner(
 }
 
 /**
- * 4. MonthGrid:
- * 7-column calendar grid displaying days with organic rotation, pulsing ring for today,
- * connecting chain lines between consecutive filled days, and horizontal month swiping.
+ * 4. MonthGrid (HR1–HR5):
+ * Weekday row, then rows that share the available height (Modifier.weight(1f) per row inside a column
+ * that fills the space between the weekday row and the Today/Month row).
+ * Cell height = clamp(rowShare, 0.9 * cellWidth, 1.35 * cellWidth), centered vertically when shorter.
  */
 @Composable
 fun MonthGrid(
@@ -1928,12 +1342,6 @@ fun MonthGrid(
 
     val todayKey = viewModel.getTodayKey()
 
-    val daysInMonth = remember(currentYear, currentMonth) {
-        val cal = Calendar.getInstance()
-        cal.set(currentYear, currentMonth - 1, 1)
-        cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-    }
-
     // H5 & H9 & PF1: Slow, calm breathing animation for today (3200ms Breathe curve)
     // todayScale is read only inside today's DayCell graphicsLayer lambda so other cells and the grid never recompose.
     val hasTodayEntry = entries[todayKey] != null
@@ -1951,43 +1359,11 @@ fun MonthGrid(
     val userSettings by viewModel.userSettings.collectAsState()
     val weekStartDow = userSettings.effectiveWeekStart(language)
 
-    val firstDayOfWeekOffset = remember(currentYear, currentMonth, weekStartDow) {
-        val cal = Calendar.getInstance()
-        cal.set(currentYear, currentMonth - 1, 1)
-        (cal.get(Calendar.DAY_OF_WEEK) - weekStartDow + 7) % 7
-    }
-
     // Gesture detection for horizontal month swiping
     var totalDragX by remember { mutableStateOf(0f) }
+    val dockInset = LocalDockInset.current
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val totalHeight = maxHeight
-        val totalWidth = maxWidth
-        val dockInset = LocalDockInset.current
-
-        // TC4: Grid yields before the card clips.
-        // If the card's available height is below the Full threshold (230.dp),
-        // MonthGrid lowers the cell height ratio from 0.9f down to a floor of 0.78f to give the card room.
-        val totalCellsForCurrent = firstDayOfWeekOffset + daysInMonth
-        val numWeeksForCurrent = ((totalCellsForCurrent + 6) / 7).coerceAtLeast(4)
-        val gridAvailableWidth = (totalWidth - 24.dp).coerceAtLeast(140.dp)
-        val singleCellWidth = ((gridAvailableWidth - 36.dp) / 7f).coerceAtLeast(20.dp)
-        val nonGridOverhead = 4.dp + 28.dp + 8.dp + dockInset + ((numWeeksForCurrent - 1) * 4).dp
-        val maxGridHeightForFullCard = totalHeight - nonGridOverhead - 230.dp
-        val baseCellHeight = singleCellWidth / 0.9f
-        val desiredCellHeight = maxGridHeightForFullCard / numWeeksForCurrent
-        val cellRatioFloor = 0.78f
-        val defaultCellRatio = 0.9f
-        val yieldedRatio = if (desiredCellHeight >= baseCellHeight) {
-            defaultCellRatio
-        } else {
-            val scale = (desiredCellHeight / baseCellHeight).coerceIn(cellRatioFloor / defaultCellRatio, 1f)
-            (defaultCellRatio * scale).coerceIn(cellRatioFloor, defaultCellRatio)
-        }
-        // Compose aspectRatio is width / height; scaling height by (yieldedRatio / defaultCellRatio) increases width/height
-        val effectiveComposeAspectRatio = defaultCellRatio * (defaultCellRatio / yieldedRatio)
-
-        // HM1 & TC3: MonthGrid is a non-scrolling Column using LocalDockInset as bottom padding
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -2006,17 +1382,14 @@ fun MonthGrid(
                         }
                     )
                 }
-                .padding(horizontal = 12.dp)
-                .padding(top = 4.dp)
-                .padding(bottom = dockInset),
+                .padding(top = 4.dp, bottom = dockInset),
             verticalArrangement = Arrangement.Top
         ) {
-
             // Weekdays Row (ordered starting from weekStartDow)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
                     .testTag("month_weekday_row"),
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
@@ -2045,110 +1418,138 @@ fun MonthGrid(
                 }
             }
 
-            // 7-Column Grid of Month Days with Page Flip (D3, H8) & DL1–DL4
+            // HR3: Space between weekday row and Today/Month row
             val density = LocalDensity.current
             val reduceMotion = rememberReduceMotion()
             val pageSlideDistance = remember(density) { with(density) { 24.dp.roundToPx() } }
 
-            AnimatedContent(
-                targetState = Pair(currentYear, currentMonth),
-                transitionSpec = {
-                    if (reduceMotion) {
-                        fadeIn(animationSpec = tween(KannachMotion.INSTANT)) togetherWith
-                            fadeOut(animationSpec = tween(KannachMotion.INSTANT))
-                    } else {
-                        val isForward = (targetState.first * 12 + targetState.second) > (initialState.first * 12 + initialState.second)
-                        val sign = if (isForward) {
-                            if (isRtl) -1 else 1
+            BoxWithConstraints(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                val availWidth = maxWidth
+                val availHeight = maxHeight
+                val cellWidth = ((availWidth - 36.dp) / 7f).coerceAtLeast(20.dp)
+
+                AnimatedContent(
+                    targetState = Pair(currentYear, currentMonth),
+                    transitionSpec = {
+                        if (reduceMotion) {
+                            fadeIn(animationSpec = tween(KannachMotion.INSTANT)) togetherWith
+                                fadeOut(animationSpec = tween(KannachMotion.INSTANT))
                         } else {
-                            if (isRtl) 1 else -1
-                        }
-                        val enterOffsetX = pageSlideDistance * sign
-                        val exitOffsetX = -pageSlideDistance * sign
+                            val isForward = (targetState.first * 12 + targetState.second) > (initialState.first * 12 + initialState.second)
+                            val sign = if (isForward) {
+                                if (isRtl) -1 else 1
+                            } else {
+                                if (isRtl) 1 else -1
+                            }
+                            val enterOffsetX = pageSlideDistance * sign
+                            val exitOffsetX = -pageSlideDistance * sign
 
-                        (slideInHorizontally(
-                            animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle),
-                            initialOffsetX = { enterOffsetX }
-                        ) + fadeIn(
-                            animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
-                        )).togetherWith(
-                            slideOutHorizontally(
+                            (slideInHorizontally(
                                 animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle),
-                                targetOffsetX = { exitOffsetX }
-                            ) + fadeOut(
+                                initialOffsetX = { enterOffsetX }
+                            ) + fadeIn(
                                 animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                            )).togetherWith(
+                                slideOutHorizontally(
+                                    animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle),
+                                    targetOffsetX = { exitOffsetX }
+                                ) + fadeOut(
+                                    animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                                )
                             )
-                        )
+                        }
+                    },
+                    label = "MonthPageFlip"
+                ) { (targetYear, targetMonth) ->
+                    val daysInThisMonth = remember(targetYear, targetMonth) {
+                        val cal = Calendar.getInstance()
+                        cal.set(targetYear, targetMonth - 1, 1)
+                        cal.getActualMaximum(Calendar.DAY_OF_MONTH)
                     }
-                },
-                label = "MonthPageFlip"
-            ) { (targetYear, targetMonth) ->
-                val daysInThisMonth = remember(targetYear, targetMonth) {
-                    val cal = Calendar.getInstance()
-                    cal.set(targetYear, targetMonth - 1, 1)
-                    cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-                }
-                val firstDayOffset = remember(targetYear, targetMonth, weekStartDow) {
-                    val cal = Calendar.getInstance()
-                    cal.set(targetYear, targetMonth - 1, 1)
-                    (cal.get(Calendar.DAY_OF_WEEK) - weekStartDow + 7) % 7
-                }
+                    val firstDayOffset = remember(targetYear, targetMonth, weekStartDow) {
+                        val cal = Calendar.getInstance()
+                        cal.set(targetYear, targetMonth - 1, 1)
+                        (cal.get(Calendar.DAY_OF_WEEK) - weekStartDow + 7) % 7
+                    }
 
-                val totalCells = firstDayOffset + daysInThisMonth
-                val numWeeks = (totalCells + 6) / 7
+                    val totalCells = firstDayOffset + daysInThisMonth
+                    val numWeeks = ((totalCells + 6) / 7).coerceAtLeast(4)
+                    val totalRowGaps = ((numWeeks - 1) * 4).dp
+                    val rowShare = ((availHeight - totalRowGaps) / numWeeks).coerceAtLeast(20.dp)
+                    val minCellH = cellWidth * 0.9f
+                    val maxCellH = cellWidth * 1.35f
+                    val cellHeight = rowShare.coerceIn(minCellH, maxCellH.coerceAtLeast(minCellH))
+                    val gridBlockHeight = (cellHeight * numWeeks + totalRowGaps).coerceAtMost(availHeight.coerceAtLeast(minCellH * numWeeks + totalRowGaps))
 
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    for (weekIndex in 0 until numWeeks) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(gridBlockHeight),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            for (col in 0 until 7) {
-                                val cellIndex = weekIndex * 7 + col
-                                if (cellIndex < firstDayOffset || (cellIndex - firstDayOffset) >= daysInThisMonth) {
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .aspectRatio(effectiveComposeAspectRatio)
-                                    )
-                                } else {
-                                    val day = cellIndex - firstDayOffset + 1
-                                    val dateKey = String.format(java.util.Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
-                                    val isToday = dateKey == todayKey
-                                    val isFuture = dateKey > todayKey
-                                    val entry = entries[dateKey]
+                            for (weekIndex in 0 until numWeeks) {
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    for (col in 0 until 7) {
+                                        val cellIndex = weekIndex * 7 + col
+                                        if (cellIndex < firstDayOffset || (cellIndex - firstDayOffset) >= daysInThisMonth) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxHeight()
+                                            )
+                                        } else {
+                                            val day = cellIndex - firstDayOffset + 1
+                                            val dateKey = String.format(java.util.Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                                            val isToday = dateKey == todayKey
+                                            val isFuture = dateKey > todayKey
+                                            val entry = entries[dateKey]
 
-                                    val rot = when {
-                                        day % 3 == 0 -> -2.5f
-                                        day % 4 == 0 -> 2f
-                                        day % 5 == 0 -> -1.5f
-                                        day % 7 == 0 -> 2f
-                                        else -> 0f
+                                            val rot = when {
+                                                day % 3 == 0 -> -2.5f
+                                                day % 4 == 0 -> 2f
+                                                day % 5 == 0 -> -1.5f
+                                                day % 7 == 0 -> 2f
+                                                else -> 0f
+                                            }
+
+                                            val isDimmed = entry != null && filter == "fav" && !entry.fav
+
+                                            DayCell(
+                                                viewModel = viewModel,
+                                                day = day,
+                                                dateKey = dateKey,
+                                                entry = entry,
+                                                isToday = isToday,
+                                                isFuture = isFuture,
+                                                isDimmed = isDimmed,
+                                                rotation = rot,
+                                                todayScale = if (isToday) todayScaleAnim else null,
+                                                onClick = { viewModel.openSheet(dateKey) },
+                                                onFutureClick = {
+                                                    viewModel.vibrate(10)
+                                                    viewModel.showToast(strings.notYet)
+                                                },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxHeight()
+                                            )
+                                        }
                                     }
-
-                                    val isDimmed = entry != null && filter == "fav" && !entry.fav
-
-                                    DayCell(
-                                        viewModel = viewModel,
-                                        day = day,
-                                        dateKey = dateKey,
-                                        entry = entry,
-                                        isToday = isToday,
-                                        isFuture = isFuture,
-                                        isDimmed = isDimmed,
-                                        rotation = rot,
-                                        todayScale = if (isToday) todayScaleAnim else null,
-                                        cellAspectRatio = effectiveComposeAspectRatio,
-                                        onClick = { viewModel.openSheet(dateKey) },
-                                        onFutureClick = {
-                                            viewModel.vibrate(10)
-                                            viewModel.showToast(strings.notYet)
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
                                 }
                             }
                         }
@@ -2158,32 +1559,23 @@ fun MonthGrid(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // TC1–TC5: Tear-off day/month page owning all remaining height (weight(1f), heightIn(min = 0.dp))
+            // HR2 & HR5: Today row (current month) or Month row (other months), 16 dp horizontal margins, bottom edge at LocalDockInset
             val nowCal = remember { Calendar.getInstance() }
             val isCurrentMonth = currentYear == nowCal.get(Calendar.YEAR) &&
                     currentMonth == (nowCal.get(Calendar.MONTH) + 1)
 
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 0.dp)
                     .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
             ) {
                 if (isCurrentMonth) {
-                    TodayPageCard(
-                        viewModel = viewModel,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .testTag("home_page_card")
-                    )
+                    TodayRow(viewModel = viewModel)
                 } else {
-                    MonthPageCard(
+                    MonthRow(
                         viewModel = viewModel,
                         currentYear = currentYear,
-                        currentMonth = currentMonth,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .testTag("home_page_card")
+                        currentMonth = currentMonth
                     )
                 }
             }
@@ -2272,7 +1664,7 @@ private fun PetalBurst(
 }
 
 /**
- * Single day cell in the month calendar (DL1–DL4):
+ * Single day cell in the month calendar (DL1–DL4 & HR3):
  * - DL1: No ground lines or per-day connecting lines.
  * - DL2: Each written/today cell is a Column with a 14 dp reserved band at the top holding the day number
  *        (10 sp, palette.ink at 0.6 alpha, start-aligned), then the doodle area filling the rest
@@ -2291,7 +1683,6 @@ private fun DayCell(
     isDimmed: Boolean,
     rotation: Float,
     todayScale: State<Float>? = null,
-    cellAspectRatio: Float,
     onClick: () -> Unit,
     onFutureClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -2332,7 +1723,6 @@ private fun DayCell(
 
     Box(
         modifier = modifier
-            .aspectRatio(cellAspectRatio)
             .offset { IntOffset(wobbleX.value.dp.roundToPx(), 0) }
             .clip(cellShape)
             .onGloballyPositioned { coords ->

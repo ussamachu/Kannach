@@ -125,6 +125,7 @@ val EN: Strings = Strings(
     greetNight = "Night stillness.. a quiet line.",
     greetDone = "Today is planted.",
     greetBack = "Welcome back to your notebook.",
+    todayRowEmpty = "What’s today’s mark?",
     onboardingBeat1 = "Kannach is a quiet paper diary.",
     onboardingBeat1Sub = "An intimate space for your days and thoughts, without noise.",
     onboardingBeat2 = "A small mark for every day",

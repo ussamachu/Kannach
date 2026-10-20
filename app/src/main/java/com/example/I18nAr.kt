@@ -136,6 +136,7 @@ val AR: Strings = Strings(
     greetNight = "سكون الليل.. وقت هادئ للأثر.",
     greetDone = "غُرس اليوم.",
     greetBack = "أهلاً بعودتك.. الدفتر بانتظارك.",
+    todayRowEmpty = "ما أثر اليوم؟",
     onboardingBeat1 = "كُنَّاش دفتر ورقي هادئ.",
     onboardingBeat1Sub = "مساحة حميمة تسكن فيها أيامك وخواطرك دون ضجيج.",
     onboardingBeat2 = "أثر مرسوم لكل يوم",

@@ -157,6 +157,7 @@ object I18n {
         val greetNight: String,
         val greetDone: String,
         val greetBack: String,
+        val todayRowEmpty: String,
         val onboardingBeat1: String,
         val onboardingBeat1Sub: String,
         val onboardingBeat2: String,
@@ -467,6 +468,38 @@ object I18n {
         val strings = forLanguage(lang)
         val monthName = strings.months.getOrElse(month - 1) { "" }
         return "$monthName ${formatYear(year, lang, useArabicIndic)}"
+    }
+
+    /**
+     * HR2: Formats weekday and date for the Today row on Home:
+     * e.g., `Tue · 20 Oct` / `الثلاثاء · 20 أكتوبر` (respecting Arabic-Indic numerals setting).
+     */
+    fun formatTodayRowDate(
+        year: Int,
+        month: Int,
+        day: Int,
+        lang: String,
+        useArabicIndic: Boolean = useArabicIndicNumerals
+    ): String {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, month - 1)
+            set(Calendar.DAY_OF_MONTH, day)
+        }
+        val dayStr = applyNumerals(day.toString(), lang, useArabicIndic)
+        return if (isRtl(lang)) {
+            val dowIdx = (cal.get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY + 7) % 7
+            val weekday = getFullWeekdays(lang).getOrElse(dowIdx) { "" }
+            val monthName = forLanguage(lang).months.getOrElse(month - 1) { "" }
+            "$weekday · $dayStr $monthName"
+        } else {
+            val locale = localeFor(lang)
+            val shortWeekday = SimpleDateFormat("EEE", locale).format(cal.time).trimEnd('.')
+                .replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
+            val shortMonth = SimpleDateFormat("MMM", locale).format(cal.time).trimEnd('.')
+                .replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
+            "$shortWeekday · $dayStr $shortMonth"
+        }
     }
 
     fun formatDateTitle(dateKey: String, lang: String): String {

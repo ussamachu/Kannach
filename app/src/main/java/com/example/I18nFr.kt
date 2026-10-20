@@ -125,6 +125,7 @@ val FR: Strings = Strings(
     greetNight = "Calme du soir sur le papier.",
     greetDone = "Aujourd’hui est planté.",
     greetBack = "Bon retour dans le carnet.",
+    todayRowEmpty = "Quelle est la trace du jour ?",
     onboardingBeat1 = "Kannach est un carnet de papier paisible.",
     onboardingBeat1Sub = "Un espace intime pour les jours et les pensées, sans bruit.",
     onboardingBeat2 = "Une petite trace pour chaque jour",

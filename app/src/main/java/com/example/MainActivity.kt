@@ -234,15 +234,22 @@ fun KannachApp(viewModel: MainViewModel) {
                         }
                     }
                     Tab.LETTERS -> {
-                        KannachTheme(
-                            language = language,
-                            month = nowMonth,
-                            seasonOverride = userSettings.seasonOverride,
-                            reduceMotionOverride = userSettings.reduceMotion == "on",
-                            hapticsEnabled = userSettings.hapticsEnabled,
-                            handwritingSp = userSettings.handwritingSp
-                        ) {
-                            TimeCapsuleScreen(viewModel = viewModel)
+                        if (ENABLE_LETTERS) {
+                            KannachTheme(
+                                language = language,
+                                month = nowMonth,
+                                seasonOverride = userSettings.seasonOverride,
+                                reduceMotionOverride = userSettings.reduceMotion == "on",
+                                hapticsEnabled = userSettings.hapticsEnabled,
+                                handwritingSp = userSettings.handwritingSp
+                            ) {
+                                TimeCapsuleScreen(viewModel = viewModel)
+                            }
+                        } else {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                AppHeader(viewModel = viewModel)
+                                MonthGrid(viewModel = viewModel, modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                     Tab.DRAW -> {
@@ -260,12 +267,12 @@ fun KannachApp(viewModel: MainViewModel) {
                 }
             }
 
-            // NV3: Paper Dock stays mounted on all four tabs, above their content.
+            // NV3: Paper Dock stays mounted on all active tabs, above their content.
             // Hidden (slide down + fade, SOFT) while write/memory overlay, Settings, Year Wrap,
             // export sheet, letter compose/opened/ceremony, onboarding, splash, or keyboard (IME) is visible.
             val isDockVisible = !showSplash && !isFirstRun && activeSheetDate == null &&
                     !isSettingsOpen && !isWrapOpen && !isExportSheetOpen &&
-                    !isCapsuleComposeOpen && openedCapsuleView == null && !isSealingCeremonyActive &&
+                    (!ENABLE_LETTERS || (!isCapsuleComposeOpen && openedCapsuleView == null && !isSealingCeremonyActive)) &&
                     confirmDialog == null && !isImeVisible
 
             AnimatedVisibility(
@@ -335,11 +342,13 @@ fun KannachApp(viewModel: MainViewModel) {
                 // Planting Ceremony Overlay (W3)
                 PlantingCeremonyOverlay(viewModel = viewModel)
 
-                // Opened Letter View Overlay (CP8)
-                OpenedCapsuleOverlay(viewModel = viewModel)
+                if (ENABLE_LETTERS) {
+                    // Opened Letter View Overlay (CP8)
+                    OpenedCapsuleOverlay(viewModel = viewModel)
 
-                // Sealing Ceremony Overlay (CP7 / C2)
-                SealingCeremonyOverlay(viewModel = viewModel)
+                    // Sealing Ceremony Overlay (CP7 / C2)
+                    SealingCeremonyOverlay(viewModel = viewModel)
+                }
 
                 // Confirm & Toast Modals
                 ConfirmDialogOverlay(viewModel = viewModel)

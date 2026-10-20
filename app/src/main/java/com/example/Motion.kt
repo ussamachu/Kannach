@@ -22,6 +22,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 
 /**
+ * LF1: Feature flag to hide Letters (Time Capsules) while keeping code and data intact.
+ */
+const val ENABLE_LETTERS = false
+
+/**
  * Authentic motion constants and easing curves for Kannach (كُنَّاش).
  * Follows the emotional UX specification §4.
  */

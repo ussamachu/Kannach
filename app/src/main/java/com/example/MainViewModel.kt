@@ -303,7 +303,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         checkOnThisDay()
-        checkReadyCapsule()
+        if (ENABLE_LETTERS) {
+            checkReadyCapsule()
+        } else {
+            NotificationHelper.cancelAllCapsuleNotifications(getApplication(), repository.getCapsules())
+        }
         pickNextSketchWhisper()
         if (reminder.value.enabled) {
             NotificationHelper.scheduleDailyReminder(getApplication(), reminder.value.time)
@@ -705,6 +709,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun checkReadyCapsule() {
+        if (!ENABLE_LETTERS) {
+            _readyCapsule.value = null
+            return
+        }
         val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val ready = capsules.value.firstOrNull { !it.opened && it.unlockDate <= todayIso }
         _readyCapsule.value = ready
@@ -741,6 +749,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // --- Tabs, Gallery & Wrap (NV1, NV2) ---
 
     fun selectTab(tab: Tab) {
+        if (tab == Tab.LETTERS && !ENABLE_LETTERS) return
         if (_currentTab.value != tab) {
             vibrate(6)
             if (tab == Tab.DRAW) {
@@ -1225,8 +1234,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             color = color,
             title = finalTitle
         )
-        NotificationHelper.scheduleCapsuleNotification(getApplication(), capsule)
-        checkReadyCapsule()
+        if (ENABLE_LETTERS) {
+            NotificationHelper.scheduleCapsuleNotification(getApplication(), capsule)
+            checkReadyCapsule()
+        }
         vibrate(14)
         showToast(strings.capsuleSavedToast)
         return capsule
