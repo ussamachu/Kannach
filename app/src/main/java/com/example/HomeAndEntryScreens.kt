@@ -38,6 +38,7 @@ import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.BoxScope
@@ -363,16 +364,7 @@ fun AppHeader(
 
     val currentYear by viewModel.currentYear.collectAsState()
     val currentMonth by viewModel.currentMonth.collectAsState()
-    val entries by viewModel.entries.collectAsState()
     val filter by viewModel.gridFilter.collectAsState()
-
-    val season = I18n.seasonOf(currentMonth)
-    val seasonIcon = when (season) {
-        "winter" -> KannachIconType.WINTER
-        "spring" -> KannachIconType.SPRING
-        "summer" -> KannachIconType.SUMMER
-        else -> KannachIconType.AUTUMN
-    }
 
     val isAtMinYear = currentYear <= viewModel.getMinYear() && currentMonth <= 1
     val calendar = Calendar.getInstance()
@@ -386,10 +378,12 @@ fun AppHeader(
             .statusBarsPadding()
             .paperBackground(palette.paper)
             .wavyHeaderDivider(palette.greenLine, waveHeightDp = 6.dp)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .heightIn(max = 64.dp)
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // NV7 & HX1: One row: leading 48 dp Settings button, centered title block, trailing 48 dp heart toggle
+        // H3: Leading 48 dp Settings button, start-aligned Month + Year hero, side-by-side 40 dp arrows, trailing 48 dp heart toggle
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -410,30 +404,17 @@ fun AppHeader(
                 )
             }
 
-            // Centered Title Block: ‹ button (48dp), Column(Month, Season+Year), › button (48dp)
+            // Start-aligned Month + Year hero and end-aligned side-by-side month arrows
             Row(
                 modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.Center,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Month Stepper: Prev Arrow (48.dp touch target)
-                IconButton(
-                    onClick = { viewModel.shiftMonth(-1) },
-                    enabled = !isAtMinYear,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    KannachIcon(
-                        icon = if (isRtl) KannachIconType.CHEV_R else KannachIconType.CHEV_L,
-                        tint = if (isAtMinYear) palette.inkFaint.copy(alpha = 0.35f) else palette.ink,
-                        contentDescription = strings.prevMonth,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-
-                // Month Name & Year (Month on line 1, Season icon + Year on line 2, never same line)
+                // Month Name & Year on the same line, start-aligned
                 // C1: No ancestor may use clipToBounds(), clip() or graphicsLayer { clip = true }.
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .clickable(
@@ -449,8 +430,8 @@ fun AppHeader(
                     val monthName = strings.months.getOrElse(currentMonth - 1) { "" }
                     Text(
                         text = monthName,
-                        fontSize = 26.sp,
-                        lineHeight = 36.sp,
+                        fontSize = 34.sp,
+                        lineHeight = 42.sp,
                         style = ArabicDisplayStyle,
                         fontWeight = FontWeight.Bold,
                         fontFamily = LocalKannachHandFont.current,
@@ -458,42 +439,48 @@ fun AppHeader(
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.weight(1f, fill = false)
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        KannachIcon(
-                            icon = seasonIcon,
-                            tint = palette.greenDeep,
-                            strokeWidthDp = 1.6.dp,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = I18n.formatYear(currentYear, language),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = palette.greenDeep,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
+                    Text(
+                        text = I18n.formatYear(currentYear, language),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = palette.inkSoft,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
                 }
 
-                // Month Stepper: Next Arrow (48.dp touch target)
-                IconButton(
-                    onClick = { viewModel.shiftMonth(1) },
-                    enabled = !isAtMaxYear,
-                    modifier = Modifier.size(48.dp)
+                // Month Stepper: Side-by-side Prev & Next small ghost buttons (40.dp each, 20.dp icon)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    KannachIcon(
-                        icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
-                        tint = if (isAtMaxYear) palette.inkFaint.copy(alpha = 0.35f) else palette.ink,
-                        contentDescription = strings.nextMonth,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    IconButton(
+                        onClick = { viewModel.shiftMonth(-1) },
+                        enabled = !isAtMinYear,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        KannachIcon(
+                            icon = if (isRtl) KannachIconType.CHEV_R else KannachIconType.CHEV_L,
+                            tint = if (isAtMinYear) palette.inkFaint.copy(alpha = 0.35f) else palette.inkSoft,
+                            contentDescription = strings.prevMonth,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { viewModel.shiftMonth(1) },
+                        enabled = !isAtMaxYear,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        KannachIcon(
+                            icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
+                            tint = if (isAtMaxYear) palette.inkFaint.copy(alpha = 0.35f) else palette.inkSoft,
+                            contentDescription = strings.nextMonth,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
@@ -510,7 +497,7 @@ fun AppHeader(
             ) {
                 KannachIcon(
                     icon = KannachIconType.HEART,
-                    tint = if (isFavActive) palette.red else palette.inkFaint,
+                    tint = if (isFavActive) palette.red else palette.inkSoft,
                     filled = isFavActive,
                     fillColor = palette.red.copy(alpha = 0.35f),
                     contentDescription = strings.favorites,
@@ -603,7 +590,7 @@ fun KannachDock(
             if (showExpandedDock) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .wrapContentWidth()
                     .graphicsLayer {
                         val p = dockProgress.value.coerceIn(0f, 1f)
                         alpha = p
@@ -615,11 +602,10 @@ fun KannachDock(
                     .testTag("kannach_dock"),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // NV5: Stitched Paper Pill (4 equal tab slots)
+                // NV5 & H5: Stitched Paper Pill
                 Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .height(64.dp)
+                        .height(58.dp)
                         .paperTilt(-0.4f)
                         .paperShadow(
                             shadowColor = palette.paperShadow,
@@ -636,7 +622,7 @@ fun KannachDock(
                             dashIntervals = floatArrayOf(8f, 6f),
                             inset = 4.dp
                         )
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -649,7 +635,7 @@ fun KannachDock(
                         enabled = dockState == DockState.EXPANDED,
                         onClick = { viewModel.selectTab(Tab.PAGE) },
                         modifier = Modifier
-                            .weight(1f)
+                            .width(if (ENABLE_LETTERS) 64.dp else 76.dp)
                             .testTag("dock_tab_page")
                     )
 
@@ -662,7 +648,7 @@ fun KannachDock(
                         enabled = dockState == DockState.EXPANDED,
                         onClick = { viewModel.selectTab(Tab.GARDEN) },
                         modifier = Modifier
-                            .weight(1f)
+                            .width(if (ENABLE_LETTERS) 64.dp else 76.dp)
                             .testTag("dock_tab_garden")
                     )
 
@@ -677,7 +663,7 @@ fun KannachDock(
                             enabled = dockState == DockState.EXPANDED,
                             onClick = { viewModel.selectTab(Tab.LETTERS) },
                             modifier = Modifier
-                                .weight(1f)
+                                .width(if (ENABLE_LETTERS) 64.dp else 76.dp)
                                 .testTag("dock_tab_letters")
                         )
                     }
@@ -694,17 +680,17 @@ fun KannachDock(
                             onCollapseDock()
                         },
                         modifier = Modifier
-                            .weight(1f)
+                            .width(if (ENABLE_LETTERS) 64.dp else 76.dp)
                             .testTag("dock_tab_draw")
                     )
                 }
 
                 Spacer(modifier = Modifier.width(10.dp))
 
-                // NV6b & DK3: Detached Plant button inside the expanded dock only (64 dp circle, stitched inner ring inset 5 dp)
+                // NV6b & DK3 & H5: Detached Plant button inside the expanded dock only (58 dp circle, stitched inner ring inset 5 dp)
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(58.dp)
                         .paperShadow(
                             shadowColor = palette.paperShadow,
                             shape = CircleShape,
@@ -956,6 +942,7 @@ fun TodayRow(
 ) {
     val palette = LocalKannachPalette.current
     val language by viewModel.language.collectAsState()
+    val isRtl = I18n.isRtl(language)
     val userSettings by viewModel.userSettings.collectAsState()
     val strings = I18n.forLanguage(language)
     val entries by viewModel.entries.collectAsState()
@@ -972,71 +959,53 @@ fun TodayRow(
         I18n.formatTodayRowDate(nowYear, nowMonth, nowDay, language, userSettings.useArabicIndicNumerals)
     }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 92.dp)
-            .paperShadow(
-                shadowColor = palette.paperShadow,
-                shape = HandDrawnRadiusShape,
-                offsetY = 4.dp
-            )
-            .clip(HandDrawnRadiusShape)
-            .paperBackground(palette.paperHi)
-            .border(1.5.dp, palette.greenLine, HandDrawnRadiusShape)
-            .dashedHandDrawnBorder(
-                color = palette.greenLine.copy(alpha = 0.7f),
-                shape = HandDrawnRadiusShape,
-                strokeWidth = 1.2.dp,
-                dashIntervals = floatArrayOf(8f, 6f),
-                inset = 4.dp
-            )
-            .clickable {
-                viewModel.vibrate(8)
-                viewModel.openSheet(todayKey)
-            }
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .testTag("today_row"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Start: 76 dp square frame with hand-drawn rounded border
+    Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
-                .size(76.dp)
-                .clip(HandDrawnRadiusAltShape)
-                .background(palette.paper)
-                .border(1.2.dp, palette.line, HandDrawnRadiusAltShape)
-                .padding(6.dp)
-                .testTag("today_row_frame"),
-            contentAlignment = Alignment.Center
-        ) {
-            if (todayEntry != null && todayEntry.strokes.isNotEmpty()) {
-                val doodleColor = try {
-                    Color(android.graphics.Color.parseColor(todayEntry.color))
-                } catch (_: Exception) {
-                    palette.green
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .height(1.dp)
+                .background(palette.line)
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 72.dp)
+                .clickable {
+                    viewModel.vibrate(8)
+                    viewModel.openSheet(todayKey)
                 }
-                GlyphView(
-                    strokes = todayEntry.strokes,
-                    color = doodleColor,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .testTag("today_row_doodle")
-                )
-            } else {
-                // Empty: dashed circle with static sprout icon in palette.inkSoft (no pulse)
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .dashedHandDrawnBorder(
-                            color = palette.line,
-                            shape = CircleShape,
-                            strokeWidth = 1.2.dp,
-                            dashIntervals = floatArrayOf(6f, 5f)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
+                .padding(top = 12.dp)
+                .testTag("today_row"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Start: 64 dp square frame with hand-drawn rounded border (the only framed element)
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(HandDrawnRadiusAltShape)
+                    .background(palette.paper)
+                    .border(1.2.dp, palette.line, HandDrawnRadiusAltShape)
+                    .padding(5.dp)
+                    .testTag("today_row_frame"),
+                contentAlignment = Alignment.Center
+            ) {
+                if (todayEntry != null && todayEntry.strokes.isNotEmpty()) {
+                    val doodleColor = try {
+                        Color(android.graphics.Color.parseColor(todayEntry.color))
+                    } catch (_: Exception) {
+                        palette.green
+                    }
+                    GlyphView(
+                        strokes = todayEntry.strokes,
+                        color = doodleColor,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("today_row_doodle")
+                    )
+                } else {
                     KannachIcon(
                         icon = KannachIconType.SPROUT,
                         tint = palette.inkSoft,
@@ -1047,49 +1016,55 @@ fun TodayRow(
                     )
                 }
             }
-        }
 
-        // Column (weight 1): Line 1 = weekday · day month (13 sp); Line 2 = text / greetDone / todayRowEmpty (17 sp)
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = dateLine,
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.inkSoft,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("today_row_date")
-            )
+            // Column (weight 1): Line 1 = weekday · day month (13 sp); Line 2 = text / greetDone / todayRowEmpty (18 sp / 24 sp)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = dateLine,
+                    fontSize = 13.sp,
+                    lineHeight = 17.sp,
+                    fontFamily = LocalKannachHandFont.current,
+                    color = palette.inkSoft,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("today_row_date")
+                )
 
-            val secondLineText = if (todayEntry != null) {
-                val firstLine = todayEntry.text.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
-                if (!firstLine.isNullOrBlank()) firstLine else strings.greetDone
-            } else {
-                strings.todayRowEmpty
+                val secondLineText = if (todayEntry != null) {
+                    val firstLine = todayEntry.text.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
+                    if (!firstLine.isNullOrBlank()) firstLine else strings.greetDone
+                } else {
+                    strings.todayRowEmpty
+                }
+
+                Text(
+                    text = secondLineText,
+                    fontSize = 18.sp,
+                    lineHeight = 24.sp,
+                    fontFamily = LocalKannachHandFont.current,
+                    color = palette.ink,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("today_row_text")
+                )
             }
 
-            Text(
-                text = secondLineText,
-                fontSize = 17.sp,
-                lineHeight = 22.sp,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.ink,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("today_row_text")
+            KannachIcon(
+                icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
+                tint = palette.inkFaint,
+                modifier = Modifier.size(18.dp)
             )
         }
     }
 }
 
 /**
- * HR5: Month row (past or future month).
- * Same size and surface as TodayRow: start frame shows the season icon;
- * line 1 = month and year; line 2 = monthRecap* sentence. Tap does nothing.
+ * HR5 & H4: Month row (past or future month).
+ * Flat strip matching TodayRow: 1 dp top hairline, 64 dp start frame with season icon,
+ * line 1 = month and year (13 sp); line 2 = monthRecap* sentence (18 sp / 24 sp). Tap does nothing.
  */
 @Composable
 fun MonthRow(
@@ -1128,73 +1103,68 @@ fun MonthRow(
         else -> KannachIconType.AUTUMN
     }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 92.dp)
-            .paperShadow(
-                shadowColor = palette.paperShadow,
-                shape = HandDrawnRadiusShape,
-                offsetY = 4.dp
-            )
-            .clip(HandDrawnRadiusShape)
-            .paperBackground(palette.paperHi)
-            .border(1.5.dp, palette.greenLine, HandDrawnRadiusShape)
-            .dashedHandDrawnBorder(
-                color = palette.greenLine.copy(alpha = 0.7f),
-                shape = HandDrawnRadiusShape,
-                strokeWidth = 1.2.dp,
-                dashIntervals = floatArrayOf(8f, 6f),
-                inset = 4.dp
-            )
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .testTag("month_row"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
-                .size(76.dp)
-                .clip(HandDrawnRadiusAltShape)
-                .background(palette.paper)
-                .border(1.2.dp, palette.line, HandDrawnRadiusAltShape)
-                .padding(6.dp)
-                .testTag("month_row_frame"),
-            contentAlignment = Alignment.Center
-        ) {
-            KannachIcon(
-                icon = seasonIcon,
-                tint = palette.greenDeep,
-                strokeWidthDp = 1.8.dp,
-                modifier = Modifier.size(28.dp)
-            )
-        }
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .height(1.dp)
+                .background(palette.line)
+        )
 
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 72.dp)
+                .padding(top = 12.dp)
+                .testTag("month_row"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = monthYearLine,
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.inkSoft,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("month_row_date")
-            )
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(HandDrawnRadiusAltShape)
+                    .background(palette.paper)
+                    .border(1.2.dp, palette.line, HandDrawnRadiusAltShape)
+                    .padding(5.dp)
+                    .testTag("month_row_frame"),
+                contentAlignment = Alignment.Center
+            ) {
+                KannachIcon(
+                    icon = seasonIcon,
+                    tint = palette.greenDeep,
+                    strokeWidthDp = 1.8.dp,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
 
-            Text(
-                text = recapText,
-                fontSize = 17.sp,
-                lineHeight = 22.sp,
-                fontFamily = LocalKannachHandFont.current,
-                color = palette.ink,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("month_row_recap")
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = monthYearLine,
+                    fontSize = 13.sp,
+                    lineHeight = 17.sp,
+                    fontFamily = LocalKannachHandFont.current,
+                    color = palette.inkSoft,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("month_row_date")
+                )
+
+                Text(
+                    text = recapText,
+                    fontSize = 18.sp,
+                    lineHeight = 24.sp,
+                    fontFamily = LocalKannachHandFont.current,
+                    color = palette.ink,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("month_row_recap")
+                )
+            }
         }
     }
 }
@@ -1404,9 +1374,9 @@ fun MonthGrid(
                 weekDays.forEachIndexed { idx, (wDay, fullDay) ->
                     Text(
                         text = wDay,
-                        fontSize = 11.5.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = palette.inkFaint,
+                        color = palette.inkSoft,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         softWrap = false,
@@ -1418,6 +1388,15 @@ fun MonthGrid(
                 }
             }
 
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .height(1.dp)
+                    .background(palette.line)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
             // HR3: Space between weekday row and Today/Month row
             val density = LocalDensity.current
             val reduceMotion = rememberReduceMotion()
@@ -1428,10 +1407,9 @@ fun MonthGrid(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.TopCenter
             ) {
                 val availWidth = maxWidth
-                val availHeight = maxHeight
                 val cellWidth = ((availWidth - 36.dp) / 7f).coerceAtLeast(20.dp)
 
                 AnimatedContent(
@@ -1480,22 +1458,19 @@ fun MonthGrid(
 
                     val totalCells = firstDayOffset + daysInThisMonth
                     val numWeeks = ((totalCells + 6) / 7).coerceAtLeast(4)
-                    val totalRowGaps = ((numWeeks - 1) * 4).dp
-                    val rowShare = ((availHeight - totalRowGaps) / numWeeks).coerceAtLeast(20.dp)
-                    val minCellH = cellWidth * 0.9f
-                    val maxCellH = cellWidth * 1.35f
-                    val cellHeight = rowShare.coerceIn(minCellH, maxCellH.coerceAtLeast(minCellH))
-                    val gridBlockHeight = (cellHeight * numWeeks + totalRowGaps).coerceAtMost(availHeight.coerceAtLeast(minCellH * numWeeks + totalRowGaps))
+                    val totalRowGaps = ((numWeeks - 1) * 6).dp
+                    val cellHeight = cellWidth * 1.12f
+                    val gridBlockHeight = cellHeight * numWeeks + totalRowGaps
 
                     Box(
                         modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.TopCenter
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(gridBlockHeight),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             for (weekIndex in 0 until numWeeks) {
                                 Row(
@@ -1667,9 +1642,9 @@ private fun PetalBurst(
  * Single day cell in the month calendar (DL1–DL4 & HR3):
  * - DL1: No ground lines or per-day connecting lines.
  * - DL2: Each written/today cell is a Column with a 14 dp reserved band at the top holding the day number
- *        (10 sp, palette.ink at 0.6 alpha, start-aligned), then the doodle area filling the rest
- *        (GlyphView with fillMaxSize() and 2 dp padding). No overlay, no negative offsets.
- * - DL3: Empty day keeps the HX5 stack: number and 5 dp dot centered together, one stack. Future days at 0.35 alpha.
+ *        (10 sp, palette.ink at 0.55 alpha, start-aligned), then the doodle area filling the rest
+ *        (GlyphView with fillMaxSize() and 1 dp padding). No overlay, no negative offsets.
+ * - DL3: Empty day shows only the number centered (13.sp, FontWeight.Medium, palette.ink at 0.62f past / 0.28f future).
  * - DL4: Today keeps its border and the breathing sprout (only when today is empty). Today's number is palette.green, 11 sp, semi-bold.
  */
 @Composable
@@ -1728,15 +1703,7 @@ private fun DayCell(
             .onGloballyPositioned { coords ->
                 viewModel.registerCellBounds(dateKey, coords.positionInRoot(), coords.size)
             }
-            .then(
-                if (isToday) {
-                    Modifier
-                        .background(palette.paperHi.copy(alpha = 0.5f))
-                        .border(1.2.dp, palette.green, cellShape)
-                } else {
-                    Modifier.background(Color.Transparent)
-                }
-            )
+            .background(Color.Transparent)
             .clickable {
                 if (isFuture) {
                     coroutineScope.launch {
@@ -1753,33 +1720,51 @@ private fun DayCell(
             .testTag("day_cell_$dateKey")
     ) {
         if (entry != null && !isFuture) {
-            // DL2 & DL4: Column with 14 dp band at the top holding the day number, then doodle area filling the rest
+            // DL2 & H2: Column with top band (16.dp for today pill, 14.dp otherwise) holding the day number, then doodle area filling the rest
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(14.dp)
+                        .height(if (isToday) 16.dp else 14.dp)
                         .padding(start = 3.dp, end = 2.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
-                    Text(
-                        text = dayStr,
-                        fontSize = if (isToday) 11.sp else 10.sp,
-                        lineHeight = if (isToday) 11.sp else 10.sp,
-                        style = tightNumberStyle,
-                        fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Medium,
-                        color = if (isToday) palette.green else palette.ink.copy(alpha = 0.6f),
-                        maxLines = 1
-                    )
+                    if (isToday) {
+                        Box(
+                            modifier = Modifier
+                                .background(palette.green, CircleShape)
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = dayStr,
+                                fontSize = 11.sp,
+                                lineHeight = 11.sp,
+                                style = tightNumberStyle,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.paperHi,
+                                maxLines = 1
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = dayStr,
+                            fontSize = 10.sp,
+                            lineHeight = 10.sp,
+                            style = tightNumberStyle,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.ink.copy(alpha = 0.55f),
+                            maxLines = 1
+                        )
+                    }
                 }
 
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(2.dp),
+                        .padding(1.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     val glyphColor = try {
@@ -1806,26 +1791,32 @@ private fun DayCell(
                 }
             }
         } else if (isToday) {
-            // DL4: Today unwritten: 14 dp top band with Today's number (palette.green, 11 sp, semi-bold) + breathing sprout below
+            // H2: Today unwritten: 16 dp top band with Today's number in solid green pill + breathing sprout below
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(14.dp)
+                        .height(16.dp)
                         .padding(start = 3.dp, end = 2.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
-                    Text(
-                        text = dayStr,
-                        fontSize = 11.sp,
-                        lineHeight = 11.sp,
-                        style = tightNumberStyle,
-                        fontWeight = FontWeight.SemiBold,
-                        color = palette.green,
-                        maxLines = 1
-                    )
+                    Box(
+                        modifier = Modifier
+                            .background(palette.green, CircleShape)
+                            .padding(horizontal = 6.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = dayStr,
+                            fontSize = 11.sp,
+                            lineHeight = 11.sp,
+                            style = tightNumberStyle,
+                            fontWeight = FontWeight.Bold,
+                            color = palette.paperHi,
+                            maxLines = 1
+                        )
+                    }
                 }
 
                 Box(
@@ -1849,26 +1840,18 @@ private fun DayCell(
                 }
             }
         } else {
-            // DL3: Empty (past or future) day = number and 5 dp dot centered together, one stack. Future days at 0.35 alpha.
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(if (isFuture) 0.35f else 0.7f)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
             ) {
                 Text(
                     text = dayStr,
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
+                    style = tightNumberStyle,
                     fontWeight = FontWeight.Medium,
-                    color = palette.inkFaint
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .size(5.dp)
-                        .clip(CircleShape)
-                        .background(palette.dot)
+                    color = palette.ink.copy(alpha = if (isFuture) 0.28f else 0.62f),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
                 )
             }
         }
