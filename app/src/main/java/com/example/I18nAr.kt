@@ -218,7 +218,7 @@ val AR: Strings = Strings(
         other = "ليس بعد — بقي {n} يوم"
     ),
     capsuleDeleteTitle = "تمزيق هذه الرسالة؟",
-    capsuleDeleteMsg = "ستُحذف هذه الرسالة نهائياً.",
+    capsuleDeleteMsg = "ستُحذف هذه الرسالة نهائيًا.",
     capsuleSalutation = "إلى نفسي، لاحقًا،",
     capsulePrefill = "إلى نفسي في الغد،",
     capsuleWrittenStamp = "كُتبت في {d}",

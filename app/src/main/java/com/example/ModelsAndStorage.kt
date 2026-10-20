@@ -219,6 +219,37 @@ class KannachRepository(private val context: Context) {
     private val _languageFlow = MutableStateFlow(detectInitialLanguage())
     val languageFlow: StateFlow<String> = _languageFlow.asStateFlow()
 
+    private val corruptKeys = mutableSetOf<String>()
+
+    private inline fun <reified T> loadJsonSafely(key: String, defaultValue: T): T {
+        val rawJson = prefs.getString(key, null) ?: return defaultValue
+        return try {
+            val decoded = json.decodeFromString<T>(rawJson)
+            corruptKeys.remove(key)
+            decoded
+        } catch (_: Exception) {
+            val corruptKey = "${key}_corrupt_${System.currentTimeMillis()}"
+            prefs.edit().putString(corruptKey, rawJson).apply()
+            corruptKeys.add(key)
+            defaultValue
+        }
+    }
+
+    private fun saveJsonSafely(key: String, rawJson: String, userInitiated: Boolean = true) {
+        if (key in corruptKeys && !userInitiated) {
+            return
+        }
+        val editor = prefs.edit()
+        val previous = prefs.getString(key, null)
+        if (previous != null && key !in corruptKeys) {
+            editor.putString("${key}_last_good", previous)
+        } else if (prefs.getString("${key}_last_good", null) == null) {
+            editor.putString("${key}_last_good", rawJson)
+        }
+        editor.putString(key, rawJson).apply()
+        corruptKeys.remove(key)
+    }
+
     init {
         val choice = loadLanguageChoice()
         _languageChoiceFlow.value = choice
@@ -230,9 +261,11 @@ class KannachRepository(private val context: Context) {
         I18n.useArabicIndicNumerals = loadedSettings.useArabicIndicNumerals
 
         val rawEntries = loadRawEntries()
-        val migratedEntries = migrate(rawEntries)
+        val migratedEntries = if (KEY_ENTRIES in corruptKeys) rawEntries else migrate(rawEntries)
         _entriesFlow.value = migratedEntries
-        persistEntries(migratedEntries)
+        if (KEY_ENTRIES !in corruptKeys && migratedEntries !== rawEntries) {
+            persistEntries(migratedEntries, userInitiated = false)
+        }
 
         _draftsFlow.value = loadRawDrafts()
         _capsulesFlow.value = loadRawCapsules()
@@ -290,18 +323,13 @@ class KannachRepository(private val context: Context) {
     // --- User Settings (kannach.settings.v1) ---
 
     private fun loadRawUserSettings(): UserSettings {
-        val rawJson = prefs.getString(KEY_USER_SETTINGS, null) ?: return UserSettings()
-        return try {
-            val decoded = json.decodeFromString<UserSettings>(rawJson)
-            val validDays = decoded.reminderDays.filter { it in 1..7 }.toSet()
-            decoded.copy(
-                reminderDays = if (validDays.isEmpty()) setOf(1, 2, 3, 4, 5, 6, 7) else validDays,
-                reduceMotion = "system",
-                hapticsEnabled = true
-            )
-        } catch (_: Exception) {
-            UserSettings()
-        }
+        val decoded = loadJsonSafely(KEY_USER_SETTINGS, UserSettings())
+        val validDays = decoded.reminderDays.filter { it in 1..7 }.toSet()
+        return decoded.copy(
+            reminderDays = if (validDays.isEmpty()) setOf(1, 2, 3, 4, 5, 6, 7) else validDays,
+            reduceMotion = "system",
+            hapticsEnabled = true
+        )
     }
 
     fun getUserSettings(): UserSettings = _userSettingsFlow.value
@@ -311,7 +339,7 @@ class KannachRepository(private val context: Context) {
         I18n.useArabicIndicNumerals = settings.useArabicIndicNumerals
         try {
             val rawJson = json.encodeToString(settings)
-            prefs.edit().putString(KEY_USER_SETTINGS, rawJson).apply()
+            saveJsonSafely(KEY_USER_SETTINGS, rawJson, userInitiated = true)
         } catch (_: Exception) {}
     }
 
@@ -350,18 +378,13 @@ class KannachRepository(private val context: Context) {
     // --- Day Entries CRUD ---
 
     private fun loadRawEntries(): Map<String, DayEntry> {
-        val rawJson = prefs.getString(KEY_ENTRIES, null) ?: return emptyMap()
-        return try {
-            json.decodeFromString<Map<String, DayEntry>>(rawJson)
-        } catch (e: Exception) {
-            emptyMap()
-        }
+        return loadJsonSafely(KEY_ENTRIES, emptyMap())
     }
 
-    private fun persistEntries(map: Map<String, DayEntry>) {
+    private fun persistEntries(map: Map<String, DayEntry>, userInitiated: Boolean = true) {
         try {
             val rawJson = json.encodeToString(map)
-            prefs.edit().putString(KEY_ENTRIES, rawJson).apply()
+            saveJsonSafely(KEY_ENTRIES, rawJson, userInitiated = userInitiated)
         } catch (e: Exception) {
             // Keep in-memory state intact even if persistence fails
         }
@@ -375,32 +398,27 @@ class KannachRepository(private val context: Context) {
         val current = _entriesFlow.value.toMutableMap()
         current[dateKey] = entry
         _entriesFlow.value = current
-        persistEntries(current)
+        persistEntries(current, userInitiated = true)
     }
 
     fun deleteEntry(dateKey: String) {
         val current = _entriesFlow.value.toMutableMap()
         if (current.remove(dateKey) != null) {
             _entriesFlow.value = current
-            persistEntries(current)
+            persistEntries(current, userInitiated = true)
         }
     }
 
     // --- Drafts CRUD (W4) ---
 
     private fun loadRawDrafts(): Map<String, EntryDraft> {
-        val rawJson = prefs.getString(KEY_DRAFTS, null) ?: return emptyMap()
-        return try {
-            json.decodeFromString<Map<String, EntryDraft>>(rawJson)
-        } catch (_: Exception) {
-            emptyMap()
-        }
+        return loadJsonSafely(KEY_DRAFTS, emptyMap())
     }
 
-    private fun persistDrafts(map: Map<String, EntryDraft>) {
+    private fun persistDrafts(map: Map<String, EntryDraft>, userInitiated: Boolean = true) {
         try {
             val rawJson = json.encodeToString(map)
-            prefs.edit().putString(KEY_DRAFTS, rawJson).apply()
+            saveJsonSafely(KEY_DRAFTS, rawJson, userInitiated = userInitiated)
         } catch (_: Exception) {}
     }
 
@@ -410,14 +428,14 @@ class KannachRepository(private val context: Context) {
         val current = _draftsFlow.value.toMutableMap()
         current[dateKey] = draft
         _draftsFlow.value = current
-        persistDrafts(current)
+        persistDrafts(current, userInitiated = true)
     }
 
     fun clearDraft(dateKey: String) {
         val current = _draftsFlow.value.toMutableMap()
         if (current.remove(dateKey) != null) {
             _draftsFlow.value = current
-            persistDrafts(current)
+            persistDrafts(current, userInitiated = true)
         }
     }
 
@@ -426,18 +444,13 @@ class KannachRepository(private val context: Context) {
     // --- Time Capsules CRUD ---
 
     private fun loadRawCapsules(): List<TimeCapsule> {
-        val rawJson = prefs.getString(KEY_CAPSULES, null) ?: return emptyList()
-        return try {
-            json.decodeFromString<List<TimeCapsule>>(rawJson)
-        } catch (e: Exception) {
-            emptyList()
-        }
+        return loadJsonSafely(KEY_CAPSULES, emptyList())
     }
 
-    private fun persistCapsules(list: List<TimeCapsule>) {
+    private fun persistCapsules(list: List<TimeCapsule>, userInitiated: Boolean = true) {
         try {
             val rawJson = json.encodeToString(list)
-            prefs.edit().putString(KEY_CAPSULES, rawJson).apply()
+            saveJsonSafely(KEY_CAPSULES, rawJson, userInitiated = userInitiated)
         } catch (e: Exception) {
             // Error handling
         }
@@ -448,22 +461,18 @@ class KannachRepository(private val context: Context) {
     // --- Capsule Draft CRUD (LC2: SharedPreferences key `capsule_draft`) ---
 
     fun getCapsuleDraft(): CapsuleDraft? {
-        val rawJson = prefs.getString(KEY_CAPSULE_DRAFT, null) ?: return null
-        return try {
-            json.decodeFromString<CapsuleDraft>(rawJson)
-        } catch (_: Exception) {
-            null
-        }
+        return loadJsonSafely<CapsuleDraft?>(KEY_CAPSULE_DRAFT, null)
     }
 
     fun saveCapsuleDraft(draft: CapsuleDraft) {
         try {
             val rawJson = json.encodeToString(draft)
-            prefs.edit().putString(KEY_CAPSULE_DRAFT, rawJson).apply()
+            saveJsonSafely(KEY_CAPSULE_DRAFT, rawJson, userInitiated = true)
         } catch (_: Exception) {}
     }
 
     fun clearCapsuleDraft() {
+        corruptKeys.remove(KEY_CAPSULE_DRAFT)
         prefs.edit().remove(KEY_CAPSULE_DRAFT).apply()
     }
 
@@ -492,7 +501,7 @@ class KannachRepository(private val context: Context) {
         val current = _capsulesFlow.value.toMutableList()
         current.add(capsule)
         _capsulesFlow.value = current
-        persistCapsules(current)
+        persistCapsules(current, userInitiated = true)
         return capsule
     }
 
@@ -511,7 +520,7 @@ class KannachRepository(private val context: Context) {
             }
         }
         _capsulesFlow.value = current
-        persistCapsules(current)
+        persistCapsules(current, userInitiated = true)
         return openedCapsule
     }
 
@@ -519,7 +528,7 @@ class KannachRepository(private val context: Context) {
         val current = _capsulesFlow.value.filterNot { it.id == capsuleId }
         if (current.size != _capsulesFlow.value.size) {
             _capsulesFlow.value = current
-            persistCapsules(current)
+            persistCapsules(current, userInitiated = true)
         }
     }
 
@@ -534,12 +543,7 @@ class KannachRepository(private val context: Context) {
     // --- Daily Reminder Config ---
 
     private fun loadRawReminder(): ReminderConfig {
-        val rawJson = prefs.getString(KEY_REMINDER, null) ?: return ReminderConfig()
-        return try {
-            json.decodeFromString<ReminderConfig>(rawJson)
-        } catch (e: Exception) {
-            ReminderConfig()
-        }
+        return loadJsonSafely(KEY_REMINDER, ReminderConfig())
     }
 
     fun getReminder(): ReminderConfig = _reminderFlow.value
@@ -548,7 +552,7 @@ class KannachRepository(private val context: Context) {
         _reminderFlow.value = config
         try {
             val rawJson = json.encodeToString(config)
-            prefs.edit().putString(KEY_REMINDER, rawJson).apply()
+            saveJsonSafely(KEY_REMINDER, rawJson, userInitiated = true)
         } catch (e: Exception) {
             // Error handling
         }

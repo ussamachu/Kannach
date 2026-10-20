@@ -26,7 +26,7 @@ class KannachAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val repo = KannachRepository(context)
 
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
             val reminder = repo.getReminder()
             if (reminder.enabled) {
                 NotificationHelper.scheduleDailyReminder(context, reminder.time)

@@ -965,3 +965,12 @@ T1/T2 (v5.2 C1, C2, C3) — done — ThemeAndShapes.kt, HomeAndEntryScreens.kt, 
 T3/T4 (v5.2 §3.1 ER1–ER5 & §3.2 TR1–TR3) — done — MainViewModel.kt, HomeAndEntryScreens.kt, SubScreens.kt, KannachIcons.kt
 T9 (v5.2 §2.1 LS1–LS5 layout) — partial (context compaction truncated LS5–LS10 verbatim spec text) — LettersScreen.kt, I18n.kt, I18nAr.kt, I18nEn.kt, I18nFr.kt, I18nEs.kt
 T10 (v5.2 §2.2 LC6–LC8 + v5 §7 LC1–LC5) — done (context compaction truncated ~1 KB at end of LC8/LC9) — LettersScreen.kt, MainViewModel.kt, I18n.kt, I18nAr.kt, I18nEn.kt, I18nFr.kt, I18nEs.kt
+RP1 (Release Plan §1 Application ID = com.ossamah.kannach) — done — app/build.gradle.kts
+RP2 (Release Plan §2 Remove unused template libraries) — done — app/build.gradle.kts
+RP3 (Release Plan §3 Shrink release build + ProGuard rules) — done — app/build.gradle.kts, app/proguard-rules.pro
+RP4 (Release Plan §4 Reminders after reboot / package replaced) — done — app/src/main/AndroidManifest.xml, app/src/main/java/com/example/NotificationHelper.kt
+RP5 (Release Plan §5 Explicit backup & data extraction rules) — done — app/src/main/res/xml/backup_rules.xml, app/src/main/res/xml/data_extraction_rules.xml
+RP6 (Release Plan §6 Storage safety — before change: JSON parse exceptions in loadRawEntries/loadRawCapsules/loadRawDrafts/loadRawUserSettings/loadRawReminder/getCapsuleDraft silently returned empty defaults without copying the raw string or keeping a last_good copy, and Repository init unconditionally called persistEntries(migratedEntries) on launch which immediately overwrote corrupt KEY_ENTRIES with "{}") — done — app/src/main/java/com/example/ModelsAndStorage.kt
+RP7 (Release Plan §7 Letters shelf defects T13 + LS7 envelope delete bottom sheet) — done — app/src/main/java/com/example/LettersScreen.kt, app/src/main/java/com/example/I18nAr.kt
+RP8 (Release Plan §8 Predictive back & notification pools verification) — done — app/src/main/java/com/example/NotificationHelper.kt, app/src/main/java/com/example/MainActivity.kt
+RP9 (Release Plan §9 Version 1.0.0 & metadata verification) — done — app/build.gradle.kts

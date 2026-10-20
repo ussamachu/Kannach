@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.DatePickerDialog
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -206,6 +207,13 @@ private fun CapsuleShelfScreen(
         }
     }
 
+    var actionSheetCapsuleId by remember { mutableStateOf<String?>(null) }
+    var isConfirmingDelete by remember(actionSheetCapsuleId) { mutableStateOf(false) }
+
+    BackHandler(enabled = actionSheetCapsuleId != null) {
+        actionSheetCapsuleId = null
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -374,9 +382,8 @@ private fun CapsuleShelfScreen(
                                         reduceMotion = reduceMotion,
                                         tiltIndex = idx,
                                         language = language,
-                                        deleteContentDescription = strings.delete,
                                         onTap = { viewModel.onLockedCapsuleTap(capsule) },
-                                        onDelete = { viewModel.requestDeleteCapsule(capsule.id) }
+                                        onLongPress = { actionSheetCapsuleId = capsule.id }
                                     )
                                 }
                             }
@@ -417,9 +424,8 @@ private fun CapsuleShelfScreen(
                                         reduceMotion = reduceMotion,
                                         tiltIndex = idx,
                                         language = language,
-                                        deleteContentDescription = strings.delete,
                                         onTap = { viewModel.openReadyCapsule(capsule) },
-                                        onDelete = { viewModel.requestDeleteCapsule(capsule.id) }
+                                        onLongPress = { actionSheetCapsuleId = capsule.id }
                                     )
                                 }
                             }
@@ -464,9 +470,136 @@ private fun CapsuleShelfScreen(
                                 reduceMotion = reduceMotion,
                                 tiltIndex = idx,
                                 language = language,
-                                deleteContentDescription = strings.delete,
                                 onTap = { viewModel.openArchivedCapsule(capsule) },
-                                onDelete = { viewModel.requestDeleteCapsule(capsule.id) }
+                                onLongPress = { actionSheetCapsuleId = capsule.id }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // LS7: Long-press bottom sheet with Delete (danger color) and Cancel, then second confirm step
+        val targetCapsuleId = actionSheetCapsuleId
+        if (targetCapsuleId != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(palette.scrim)
+                    .clickable { actionSheetCapsuleId = null }
+                    .testTag("capsule_delete_sheet_scrim"),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 560.dp)
+                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .background(palette.paperHi)
+                        .border(
+                            width = 1.5.dp,
+                            color = palette.line,
+                            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                        )
+                        .clickable(enabled = false) {}
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 20.dp)
+                        .testTag("capsule_delete_sheet"),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (!isConfirmingDelete) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .clip(HandDrawnRadiusAltShape)
+                                .background(palette.red.copy(alpha = 0.12f))
+                                .border(1.3.dp, palette.red, HandDrawnRadiusAltShape)
+                                .clickable { isConfirmingDelete = true }
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .testTag("capsule_sheet_delete_btn"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.delete,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.red
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .clip(HandDrawnRadiusAltShape)
+                                .background(palette.paper)
+                                .border(1.2.dp, palette.line, HandDrawnRadiusAltShape)
+                                .clickable { actionSheetCapsuleId = null }
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .testTag("capsule_sheet_cancel_btn"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.cancel,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = palette.inkSoft
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = strings.capsuleDeleteTitle,
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.ink
+                        )
+                        Text(
+                            text = strings.capsuleDeleteMsg,
+                            fontSize = 15.5.sp,
+                            color = palette.inkSoft,
+                            modifier = Modifier.testTag("capsule_sheet_confirm_msg")
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .clip(HandDrawnRadiusAltShape)
+                                .background(palette.red)
+                                .border(1.3.dp, palette.red, HandDrawnRadiusAltShape)
+                                .clickable {
+                                    viewModel.deleteCapsuleNow(targetCapsuleId)
+                                    actionSheetCapsuleId = null
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .testTag("capsule_sheet_confirm_delete_btn"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.delete,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.paperHi
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .clip(HandDrawnRadiusAltShape)
+                                .background(palette.paper)
+                                .border(1.2.dp, palette.line, HandDrawnRadiusAltShape)
+                                .clickable { actionSheetCapsuleId = null }
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .testTag("capsule_sheet_confirm_cancel_btn"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.cancel,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = palette.inkSoft
                             )
                         }
                     }
@@ -528,9 +661,10 @@ private val EnvelopeRectShape = HandDrawnShape(
 )
 
 /**
- * LS2–LS5: 16:10 hand-drawn rectangle envelope, V flap of two dashed ink lines from top corners
- * to center, alternating tilt (-1.2° / +1.0°), 28 dp green wax seal with sprout icon on flap tip,
- * 46 dp rotated (-8°) dashed postmark at top-end, and 16 sp hand countdown line at bottom-start.
+ * LS2–LS5 & LS7: Clean fixed/bounded 168.dp height hand-drawn rectangle envelope, V flap of two
+ * dashed ink lines from top corners to center, alternating tilt (-1.2° / +1.0°), 28 dp green wax
+ * seal with sprout icon centered on flap tip, 46 dp rotated (-8°) dashed postmark at top-end,
+ * and 16 sp hand countdown line at bottom-start (no delete icon on card face).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -543,9 +677,8 @@ private fun EnvelopeCard(
     reduceMotion: Boolean,
     tiltIndex: Int,
     language: String,
-    deleteContentDescription: String,
     onTap: () -> Unit,
-    onDelete: () -> Unit
+    onLongPress: () -> Unit
 ) {
     val palette = LocalKannachPalette.current
 
@@ -585,7 +718,7 @@ private fun EnvelopeCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1.6f)
+            .height(168.dp)
             .paperTilt(tiltAngle)
             .paperShadow(
                 shadowColor = palette.paperShadow,
@@ -619,7 +752,7 @@ private fun EnvelopeCard(
             }
             .combinedClickable(
                 onClick = onTap,
-                onLongClick = onDelete
+                onLongClick = onLongPress
             )
             .padding(14.dp)
             .testTag("capsule_card_${capsule.id}")
@@ -664,7 +797,7 @@ private fun EnvelopeCard(
             }
         }
 
-        // LS3: Wax seal (28 dp palette.green circle with sprout icon in palette.onGreen on flap tip, thin darker ring)
+        // LS3: Wax seal (28 dp palette.green circle with sprout icon in palette.onGreen centered on flap tip)
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
@@ -686,7 +819,7 @@ private fun EnvelopeCard(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(end = 44.dp)
+                .padding(end = 12.dp)
         ) {
             if (!previewText.isNullOrBlank()) {
                 Text(
@@ -708,23 +841,6 @@ private fun EnvelopeCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.testTag("capsule_status_${capsule.id}")
-            )
-        }
-
-        // Quiet 48dp delete icon button at bottom-end
-        IconButton(
-            onClick = onDelete,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .size(48.dp)
-                .offset(x = 8.dp, y = 8.dp)
-                .testTag("capsule_delete_${capsule.id}")
-        ) {
-            KannachIcon(
-                icon = KannachIconType.TRASH,
-                tint = palette.inkFaint,
-                contentDescription = deleteContentDescription,
-                modifier = Modifier.size(18.dp)
             )
         }
     }
