@@ -249,7 +249,8 @@ fun YearCaption(
 @Composable
 fun YearField(
     viewModel: MainViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDayClick: ((String) -> Unit)? = null
 ) {
     val palette = LocalKannachPalette.current
     val language by viewModel.language.collectAsState()
@@ -337,7 +338,7 @@ fun YearField(
         Box(
             modifier = Modifier
                 .size(width = fieldWidth, height = fieldHeight)
-                .pointerInput(currentYear, isRtl, cell) {
+                .pointerInput(currentYear, isRtl, cell, onDayClick) {
                     detectTapGestures { off ->
                         if (off.x < 0f || off.y < 0f || cellPx <= 0f) return@detectTapGestures
                         val rawCol = (off.x / cellPx).toInt()
@@ -348,13 +349,18 @@ fun YearField(
                         if (col !in 0..13 || i !in 0 until daysInYear) return@detectTapGestures
 
                         val tappedDateKey = dayInfos[i].dateKey
-                        val liveTodayKey = viewModel.getTodayKey()
-                        if (tappedDateKey > liveTodayKey) {
-                            viewModel.vibrate(10)
-                            viewModel.showToast(strings.notYet)
-                        } else {
+                        if (onDayClick != null) {
                             viewModel.vibrate(8)
-                            viewModel.openSheet(tappedDateKey)
+                            onDayClick(tappedDateKey)
+                        } else {
+                            val liveTodayKey = viewModel.getTodayKey()
+                            if (tappedDateKey > liveTodayKey) {
+                                viewModel.vibrate(10)
+                                viewModel.showToast(strings.notYet)
+                            } else {
+                                viewModel.vibrate(8)
+                                viewModel.openSheet(tappedDateKey)
+                            }
                         }
                     }
                 }
@@ -444,7 +450,9 @@ fun YearField(
                                 )
                             }
                             .onGloballyPositioned { coords ->
-                                viewModel.registerCellBounds(dKey, coords.positionInRoot(), coords.size)
+                                if (onDayClick == null) {
+                                    viewModel.registerCellBounds(dKey, coords.positionInRoot(), coords.size)
+                                }
                             }
                     )
 

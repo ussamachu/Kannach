@@ -217,15 +217,7 @@ fun KannachApp(viewModel: MainViewModel) {
             ) { tab ->
                 when (tab) {
                     Tab.PAGE -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(bottom = dockInset)
-                        ) {
-                            YearHeader(viewModel = viewModel)
-                            YearField(viewModel = viewModel, modifier = Modifier.weight(1f))
-                            YearCaption(viewModel = viewModel)
-                        }
+                        MonthPage(viewModel, Modifier.fillMaxSize())
                     }
                     Tab.GARDEN -> {
                         KannachTheme(
@@ -252,15 +244,7 @@ fun KannachApp(viewModel: MainViewModel) {
                                 TimeCapsuleScreen(viewModel = viewModel)
                             }
                         } else {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(bottom = dockInset)
-                            ) {
-                                YearHeader(viewModel = viewModel)
-                                YearField(viewModel = viewModel, modifier = Modifier.weight(1f))
-                                YearCaption(viewModel = viewModel)
-                            }
+                            MonthPage(viewModel, Modifier.fillMaxSize())
                         }
                     }
                     Tab.DRAW -> {

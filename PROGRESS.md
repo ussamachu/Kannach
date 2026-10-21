@@ -988,3 +988,8 @@ Y1 (v9 §1 YearField.kt: 14-column year dot field drawn in one Canvas with deter
 Y2 (v9 §2 Doodles, today breathing ring/dot, favourites filter, registerCellBounds & shiftYear swipe in YearField.kt) — done — app/src/main/java/com/example/YearField.kt, app/src/main/java/com/example/HomeAndEntryScreens.kt, app/src/main/java/com/example/MainViewModel.kt
 Y3 (v9 §3 YearHeader pill, YearCaption, shiftYear month reset, FoldedPaperCorner & MainActivity wiring) — done — app/src/main/java/com/example/YearField.kt, app/src/main/java/com/example/MainActivity.kt, app/src/main/java/com/example/MainViewModel.kt
 v9: Home is the Year Field (YearField.kt). Month grid, Today row and Month row removed. — done — app/src/main/java/com/example/HomeAndEntryScreens.kt
+M1 (v10 §1 Hand-drawn deterministic inkLine and inkCircle extensions in InkLines.kt) — done — app/src/main/java/com/example/InkLines.kt
+M2 (v10 §2 MonthPage header & weekday row with hand-drawn inkLine borders in MonthPage.kt) — done — app/src/main/java/com/example/MonthPage.kt
+M3 (v10 §3 MonthPage top-aligned grid with single-Canvas horizontal/vertical inkLines and borderless MonthDayCell) — done — app/src/main/java/com/example/MonthPage.kt
+M4 (v10 §4 Today red inkCircle with 450ms PathMeasure animation, horizontal page-flip & 70px swipe, FoldedPaperCorner at 56.dp, and MainActivity wiring) — done — app/src/main/java/com/example/InkLines.kt, app/src/main/java/com/example/MonthPage.kt, app/src/main/java/com/example/MainActivity.kt
+v10: Home is MonthPage (hand-drawn ink lines); YearField is the year overview.
