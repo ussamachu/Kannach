@@ -387,6 +387,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         vibrate(6)
     }
 
+    fun shiftYear(delta: Int) {
+        val y = _currentYear.value + delta
+        if (y < getMinYear() || y > nowYear) return
+        _currentYear.value = y
+        _currentMonth.value = if (y == nowYear) nowMonth else 1
+        vibrate(6)
+    }
+
     fun setGridFilter(filter: String) {
         _gridFilter.value = filter
     }

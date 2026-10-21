@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -216,9 +217,14 @@ fun KannachApp(viewModel: MainViewModel) {
             ) { tab ->
                 when (tab) {
                     Tab.PAGE -> {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            AppHeader(viewModel = viewModel)
-                            MonthGrid(viewModel = viewModel, modifier = Modifier.weight(1f))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(bottom = dockInset)
+                        ) {
+                            YearHeader(viewModel = viewModel)
+                            YearField(viewModel = viewModel, modifier = Modifier.weight(1f))
+                            YearCaption(viewModel = viewModel)
                         }
                     }
                     Tab.GARDEN -> {
@@ -246,9 +252,14 @@ fun KannachApp(viewModel: MainViewModel) {
                                 TimeCapsuleScreen(viewModel = viewModel)
                             }
                         } else {
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                AppHeader(viewModel = viewModel)
-                                MonthGrid(viewModel = viewModel, modifier = Modifier.weight(1f))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(bottom = dockInset)
+                            ) {
+                                YearHeader(viewModel = viewModel)
+                                YearField(viewModel = viewModel, modifier = Modifier.weight(1f))
+                                YearCaption(viewModel = viewModel)
                             }
                         }
                     }

@@ -984,3 +984,7 @@ H3 (v8 §3 Header: start-aligned 34.sp month + 15.sp year on same line, remove h
 H4 (v8 §4 Today strip flat, not a card: remove card chrome from TodayRow/MonthRow, 1.dp top hairline, 64.dp doodle frame, 18.sp/24.sp text, trailing chevron on TodayRow) — done — app/src/main/java/com/example/HomeAndEntryScreens.kt
 H5 (v8 §5 Compact dock for 3 slots: wrapContentWidth dock Row, 58.dp pill & Plant button, 76.dp/64.dp slot widths, 80.dp + navBarBottom dockInset) — done — app/src/main/java/com/example/HomeAndEntryScreens.kt, app/src/main/java/com/example/MainActivity.kt
 v8 home redesign H1–H6 done — done — app/src/main/java/com/example/HomeAndEntryScreens.kt, app/src/main/java/com/example/MainActivity.kt
+Y1 (v9 §1 YearField.kt: 14-column year dot field drawn in one Canvas with deterministic jitter & coordinate tap handling) — done — app/src/main/java/com/example/YearField.kt
+Y2 (v9 §2 Doodles, today breathing ring/dot, favourites filter, registerCellBounds & shiftYear swipe in YearField.kt) — done — app/src/main/java/com/example/YearField.kt, app/src/main/java/com/example/HomeAndEntryScreens.kt, app/src/main/java/com/example/MainViewModel.kt
+Y3 (v9 §3 YearHeader pill, YearCaption, shiftYear month reset, FoldedPaperCorner & MainActivity wiring) — done — app/src/main/java/com/example/YearField.kt, app/src/main/java/com/example/MainActivity.kt, app/src/main/java/com/example/MainViewModel.kt
+v9: Home is the Year Field (YearField.kt). Month grid, Today row and Month row removed. — done — app/src/main/java/com/example/HomeAndEntryScreens.kt
