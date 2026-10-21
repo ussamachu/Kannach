@@ -400,6 +400,27 @@ fun Modifier.paperBackground(
  */
 fun Modifier.linedPaperBackground(
     lineColor: Color,
+    lineHeightPx: Float
+): Modifier = this.drawBehind {
+    if (lineHeightPx <= 0f) return@drawBehind
+
+    val totalHeight = size.height
+    var y = lineHeightPx
+    val strokeWidth = 1.5f
+
+    while (y < totalHeight) {
+        drawLine(
+            color = lineColor,
+            start = Offset(0f, y),
+            end = Offset(size.width, y),
+            strokeWidth = strokeWidth
+        )
+        y += lineHeightPx
+    }
+}
+
+fun Modifier.linedPaperBackground(
+    lineColor: Color,
     lineHeightDp: Dp = 32.dp
 ): Modifier = this.drawBehind {
     val lineHeight = lineHeightDp.toPx()
@@ -592,7 +613,7 @@ fun KannachTheme(
     seasonOverride: String = "auto",
     reduceMotionOverride: Boolean = false,
     hapticsEnabled: Boolean = true,
-    handwritingSp: Int = 20,
+    handwritingSp: Int = 19,
     content: @Composable () -> Unit
 ) {
     val palette = getSeasonalPalette(month, seasonOverride)

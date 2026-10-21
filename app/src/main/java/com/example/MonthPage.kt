@@ -22,11 +22,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -59,6 +59,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -124,14 +125,13 @@ fun MonthPage(
                     )
                 }
         ) {
-            // Header (~150 dp tall, no divider, no wavy line)
+            // Header (no fixed height, no divider, no wavy line)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
                     .padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 // 1. Top row 48 dp: settings IconButton at start, centered app name Text, heart IconButton at end
                 Row(
@@ -185,71 +185,69 @@ fun MonthPage(
                     }
                 }
 
-                // 2 & 3 & 4: Month numeral with side chevrons and month + year subtitle below
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                // 2. Month numeral with side chevrons
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    IconButton(
+                        onClick = { viewModel.shiftMonth(-1) },
+                        enabled = !isAtMinYear,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .alpha(if (isAtMinYear) 0.3f else 1f)
                     ) {
-                        IconButton(
-                            onClick = { viewModel.shiftMonth(-1) },
-                            enabled = !isAtMinYear,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .alpha(if (isAtMinYear) 0.3f else 1f)
-                        ) {
-                            KannachIcon(
-                                icon = if (isRtl) KannachIconType.CHEV_R else KannachIconType.CHEV_L,
-                                tint = palette.inkSoft,
-                                contentDescription = strings.prevMonth,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        Text(
-                            text = I18n.formatNumber(currentMonth, language, userSettings.useArabicIndicNumerals),
-                            fontSize = 52.sp,
-                            lineHeight = 56.sp,
-                            fontFamily = handFont,
-                            color = palette.ink,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .clickable { showYearOverview = true }
-                                .padding(horizontal = 8.dp)
+                        KannachIcon(
+                            icon = if (isRtl) KannachIconType.CHEV_R else KannachIconType.CHEV_L,
+                            tint = palette.inkSoft,
+                            contentDescription = strings.prevMonth,
+                            modifier = Modifier.size(18.dp)
                         )
-
-                        IconButton(
-                            onClick = { viewModel.shiftMonth(1) },
-                            enabled = !isAtMaxYear,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .alpha(if (isAtMaxYear) 0.3f else 1f)
-                        ) {
-                            KannachIcon(
-                                icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
-                                tint = palette.inkSoft,
-                                contentDescription = strings.nextMonth,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
                     }
 
-                    val rawMonthYear = "${strings.months.getOrElse(currentMonth - 1) { "" }}  ${I18n.formatYear(currentYear, language)}"
-                    val monthYearLabel = if (language == "ar") rawMonthYear else rawMonthYear.uppercase()
                     Text(
-                        text = monthYearLabel,
-                        fontSize = 13.sp,
-                        color = palette.inkSoft,
-                        letterSpacing = if (language == "ar") 0.sp else 3.sp,
+                        text = I18n.formatNumber(currentMonth, language, userSettings.useArabicIndicNumerals),
+                        fontSize = 46.sp,
+                        lineHeight = 52.sp,
+                        fontFamily = handFont,
+                        color = palette.ink,
                         textAlign = TextAlign.Center,
-                        maxLines = 1
+                        modifier = Modifier
+                            .clickable { showYearOverview = true }
+                            .padding(horizontal = 8.dp)
                     )
+
+                    IconButton(
+                        onClick = { viewModel.shiftMonth(1) },
+                        enabled = !isAtMaxYear,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .alpha(if (isAtMaxYear) 0.3f else 1f)
+                    ) {
+                        KannachIcon(
+                            icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
+                            tint = palette.inkSoft,
+                            contentDescription = strings.nextMonth,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
+
+                // 3. Month-and-year line
+                val rawMonthYear = "${strings.months.getOrElse(currentMonth - 1) { "" }}  ${I18n.formatYear(currentYear, language)}"
+                val monthYearLabel = if (language == "ar") rawMonthYear else rawMonthYear.uppercase()
+                Text(
+                    text = monthYearLabel,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
+                    color = palette.inkSoft,
+                    letterSpacing = if (language == "ar") 0.sp else 3.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+
+                // 4. Bottom spacer
+                Spacer(Modifier.height(10.dp))
             }
 
             // Top hand-drawn line above weekday row (Canvas 6 dp tall: palette.line, 1.2 dp, wobble 1.5 dp)
@@ -382,7 +380,7 @@ fun MonthPage(
                     val totalCells = firstDayOffset + daysInThisMonth
                     val numWeeks = ((totalCells + 6) / 7).coerceIn(5, 6)
                     val cellW = availW / 7
-                    val cellH = minOf(availH / numWeeks, cellW * 1.45f)
+                    val cellH = minOf(availH / numWeeks, cellW * 2.2f)
                     val gridHeight = cellH * numWeeks
 
                     Box(
@@ -469,6 +467,8 @@ fun MonthPage(
                                                     isFuture = isFuture,
                                                     isDimmed = isDimmed,
                                                     rotation = rot,
+                                                    cellW = cellW,
+                                                    cellH = cellH,
                                                     language = language,
                                                     useArabicIndicNumerals = userSettings.useArabicIndicNumerals,
                                                     reduceMotion = reduceMotion,
@@ -541,6 +541,8 @@ private fun MonthDayCell(
     isFuture: Boolean,
     isDimmed: Boolean,
     rotation: Float,
+    cellW: Dp,
+    cellH: Dp,
     language: String,
     useArabicIndicNumerals: Boolean,
     reduceMotion: Boolean,
@@ -653,17 +655,24 @@ private fun MonthDayCell(
                 palette.green
             }
 
-            GlyphView(
-                strokes = entry.strokes,
-                color = glyphColor,
+            val doodleSize = minOf(cellW, cellH - 22.dp) * 0.86f
+
+            Box(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .fillMaxSize(0.82f)
-                    .offset(y = 6.dp)
-                    .scale(bloomScale)
-                    .rotate(rotation)
-                    .alpha(if (isDimmed) 0.16f else 1.0f)
-            )
+                    .fillMaxSize()
+                    .padding(top = 22.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                GlyphView(
+                    strokes = entry.strokes,
+                    color = glyphColor,
+                    modifier = Modifier
+                        .size(doodleSize)
+                        .scale(bloomScale)
+                        .rotate(rotation)
+                        .alpha(if (isDimmed) 0.16f else 1.0f)
+                )
+            }
 
             if (isFreshlyPlanted) {
                 val firstCelebratedDate by viewModel.firstPlantCelebratedDate.collectAsState()

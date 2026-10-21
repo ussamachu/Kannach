@@ -109,7 +109,7 @@ class DockScrollConnection(
 
 val LocalReduceMotionOverride = androidx.compose.runtime.compositionLocalOf { false }
 val LocalHapticsEnabled = androidx.compose.runtime.compositionLocalOf { true }
-val LocalHandwritingSp = androidx.compose.runtime.compositionLocalOf { 20 }
+val LocalHandwritingSp = androidx.compose.runtime.compositionLocalOf { 19 }
 val LocalDockInset = androidx.compose.runtime.compositionLocalOf { 88.dp }
 val LocalDockScroll = androidx.compose.runtime.staticCompositionLocalOf { DockScrollConnection() }
 

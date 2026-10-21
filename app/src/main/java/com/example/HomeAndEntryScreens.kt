@@ -349,7 +349,7 @@ fun SplashScreen(
  * - NV5 Pill: 16 dp side margins, bottom = system nav inset + 12 dp, height 64 dp,
  *   shape = HandDrawnDockShape (32/28/30/26 dp asymmetric), fill palette.paperHi,
  *   1.5 dp border palette.greenLine, stitched inner edge (dashed 1.2 dp, dash 8/6, inset 4 dp, greenLine @ 0.7 alpha),
- *   soft paper shadow from tokens (paperShadow), no Material elevation, tilt paperTilt(-0.4f).
+ *   soft paper shadow from tokens (paperShadow), no Material elevation.
  * - NV6 Slots: 24 dp hand-drawn icons (NOTEBOOK, GRID, SEAL, BRUSH). Only the selected slot shows its label
  *   (hand font 12 sp, greenDeep) cross-faded by alpha and a hand-drawn rounded highlight behind it
  *   (greenSoft, drawn on with a path-trim animation, SOFT). Unselected slots are icon-only (inkSoft)
@@ -441,7 +441,6 @@ fun KannachDock(
                 Row(
                     modifier = Modifier
                         .height(58.dp)
-                        .paperTilt(-0.4f)
                         .paperShadow(
                             shadowColor = palette.paperShadow,
                             shape = HandDrawnDockShape,
@@ -463,7 +462,7 @@ fun KannachDock(
                 ) {
                     // 1. Page (Month Home)
                     PaperDockSlot(
-                        icon = KannachIconType.NOTEBOOK,
+                        doodle = DockDoodle.PAGE,
                         label = strings.dockPage,
                         selected = currentTab == Tab.PAGE,
                         reduceMotion = reduceMotion,
@@ -476,7 +475,7 @@ fun KannachDock(
 
                     // 2. Garden (Gallery)
                     PaperDockSlot(
-                        icon = KannachIconType.GRID,
+                        doodle = DockDoodle.GARDEN,
                         label = strings.dockGarden,
                         selected = currentTab == Tab.GARDEN,
                         reduceMotion = reduceMotion,
@@ -487,25 +486,9 @@ fun KannachDock(
                             .testTag("dock_tab_garden")
                     )
 
-                    // 3. Letters (Time Capsules) — gated by ENABLE_LETTERS (LF2 & LF5)
-                    if (ENABLE_LETTERS) {
-                        PaperDockSlot(
-                            icon = KannachIconType.SEAL,
-                            label = strings.dockLetters,
-                            selected = currentTab == Tab.LETTERS,
-                            hasBadge = readyCapsule != null,
-                            reduceMotion = reduceMotion,
-                            enabled = dockState == DockState.EXPANDED,
-                            onClick = { viewModel.selectTab(Tab.LETTERS) },
-                            modifier = Modifier
-                                .width(if (ENABLE_LETTERS) 64.dp else 76.dp)
-                                .testTag("dock_tab_letters")
-                        )
-                    }
-
-                    // 4. Draw (Sketchpad)
+                    // 3. Draw (Sketchpad)
                     PaperDockSlot(
-                        icon = KannachIconType.BRUSH,
+                        doodle = DockDoodle.DRAW,
                         label = strings.dockDraw,
                         selected = currentTab == Tab.DRAW,
                         reduceMotion = reduceMotion,
@@ -636,7 +619,7 @@ fun KannachDock(
 
 @Composable
 private fun PaperDockSlot(
-    icon: KannachIconType,
+    doodle: DockDoodle,
     label: String,
     selected: Boolean,
     reduceMotion: Boolean,
@@ -710,13 +693,23 @@ private fun PaperDockSlot(
             verticalArrangement = Arrangement.Center
         ) {
             Box(contentAlignment = Alignment.TopEnd) {
-                KannachIcon(
-                    icon = icon,
-                    tint = if (selected) palette.greenDeep else palette.inkSoft,
-                    strokeWidthDp = 2.dp,
-                    contentDescription = label,
-                    modifier = Modifier.size(24.dp)
-                )
+                when (doodle) {
+                    DockDoodle.PAGE -> DockDoodleIcon(
+                        doodle = DockDoodle.PAGE,
+                        selected = selected,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    DockDoodle.GARDEN -> DockDoodleIcon(
+                        doodle = DockDoodle.GARDEN,
+                        selected = selected,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    DockDoodle.DRAW -> DockDoodleIcon(
+                        doodle = DockDoodle.DRAW,
+                        selected = selected,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
                 if (hasBadge) {
                     Box(
                         modifier = Modifier
@@ -1147,31 +1140,32 @@ private fun MemoryCardView(
                         }
                     )
                 }
-                .shadow(24.dp, HandDrawnRadiusShape)
                 .clip(HandDrawnRadiusShape)
                 .background(palette.paper)
-                .border(2.dp, palette.ink, HandDrawnRadiusShape)
                 .paperBackground(palette.paper)
-                .padding(top = 22.dp, bottom = 18.dp, start = 18.dp, end = 18.dp)
+                .padding(bottom = 18.dp, start = 18.dp, end = 18.dp)
         ) {
-            // Washi Tape at Top Center of Memory Card
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-14).dp)
-                    .size(width = 54.dp, height = 14.dp)
-                    .rotate(1.5f)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(palette.greenSoft.copy(alpha = 0.9f))
-                    .border(0.8.dp, palette.greenLine.copy(alpha = 0.7f), RoundedCornerShape(2.dp))
-            )
-
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Top hand-drawn line handle (40.dp wide, palette.inkFaint, 2.dp, centred, 8.dp from the top)
+                Canvas(
+                    modifier = Modifier
+                        .padding(top = 8.dp, bottom = 6.dp)
+                        .width(40.dp)
+                        .height(6.dp)
+                ) {
+                    inkLine(
+                        from = Offset(0f, size.height / 2f),
+                        to = Offset(size.width, size.height / 2f),
+                        seed = dateKey.hashCode() + 7,
+                        color = palette.inkFaint,
+                        widthPx = 2.dp.toPx(),
+                        wobblePx = 1.2.dp.toPx()
+                    )
+                }
+
                 // Header: Date, Distance line, Favorite, Edit & Close Buttons (WH1-WH3)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1179,23 +1173,15 @@ private fun MemoryCardView(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        var headerDateFontSize by remember(formattedDate) { mutableStateOf(18.sp) }
                         Text(
                             text = formattedDate,
-                            fontSize = headerDateFontSize,
-                            lineHeight = 26.sp,
+                            fontSize = 17.sp,
+                            lineHeight = 24.sp,
                             style = ArabicDisplayStyle,
                             fontWeight = FontWeight.Bold,
                             color = palette.greenDeep,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 4.dp),
-                            onTextLayout = { result ->
-                                if (result.hasVisualOverflow && headerDateFontSize > 16.sp) {
-                                    headerDateFontSize = 16.sp
-                                }
-                            }
+                            maxLines = 2,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
 
                         // WH2 & M3: Poetic time distance line (if isToday, prefix with {today} · {relative} or just {today})
@@ -1212,7 +1198,7 @@ private fun MemoryCardView(
                         if (distanceLineText.isNotBlank()) {
                             Text(
                                 text = distanceLineText,
-                                fontSize = 13.5.sp,
+                                fontSize = 12.5.sp,
                                 fontFamily = LocalKannachHandFont.current,
                                 color = palette.greenDeep,
                                 modifier = Modifier.padding(top = 2.dp)
@@ -1249,140 +1235,170 @@ private fun MemoryCardView(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Doodle Frame (aspect ratio 4:5, paper tilt)
-                Box(
+                // Scrollable content below the header
+                Column(
                     modifier = Modifier
-                        .widthIn(max = 220.dp)
-                        .aspectRatio(4f / 5f)
-                        .paperTilt(dateKey.hashCode())
-                        .shadow(12.dp, HandDrawnRadiusShape)
-                        .clip(HandDrawnRadiusShape)
-                        .background(palette.paperHi)
-                        .border(2.dp, palette.ink, HandDrawnRadiusShape)
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Doodle drawn directly on the paper
                     GlyphView(
                         strokes = entry.strokes,
                         color = glyphColor,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                // Ruled Notebook Text
-                val handSp = LocalHandwritingSp.current
-                if (entry.text.isNotBlank()) {
-                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .linedPaperBackground(palette.line, (handSp + 12).dp)
-                            .padding(vertical = 4.dp, horizontal = 4.dp)
+                            .fillMaxWidth(0.62f)
+                            .widthIn(max = 260.dp)
+                            .aspectRatio(1f)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Short hand-drawn line under doodle (width 56.dp, palette.line, 1.4.dp, wobble 1.5.dp)
+                    Canvas(
+                        modifier = Modifier
+                            .width(56.dp)
+                            .height(6.dp)
                     ) {
-                        Text(
-                            text = entry.text,
-                            fontSize = handSp.sp,
-                            lineHeight = (handSp + 12).sp,
-                            fontFamily = LocalKannachHandFont.current,
-                            color = palette.ink,
-                            modifier = Modifier.testTag("memory_card_text")
+                        inkLine(
+                            from = Offset(0f, size.height / 2f),
+                            to = Offset(size.width, size.height / 2f),
+                            seed = dateKey.hashCode(),
+                            color = palette.line,
+                            widthPx = 1.4.dp.toPx(),
+                            wobblePx = 1.5.dp.toPx()
                         )
                     }
-                }
 
-                // M3: Secondary Creation Time
-                if (recordedTimeStr.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = recordedTimeStr,
-                        fontSize = 11.5.sp,
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Ruled Notebook Text
+                    val handSp = LocalHandwritingSp.current
+                    val lineSpacingPx = with(LocalDensity.current) { (handSp * 1.75f).sp.toPx() }
+                    val ruledLineStyle = TextStyle(
+                        fontSize = handSp.sp,
+                        lineHeight = (handSp * 1.75f).sp,
+                        lineHeightStyle = LineHeightStyle(
+                            alignment = LineHeightStyle.Alignment.Bottom,
+                            trim = LineHeightStyle.Trim.None
+                        ),
                         fontFamily = LocalKannachHandFont.current,
-                        color = palette.inkFaint,
-                        textAlign = TextAlign.Center
+                        color = palette.ink
                     )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // M4: Memory Navigation Buttons & Pagination Dots Indicator
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    if (prevKey != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                    if (entry.text.isNotBlank()) {
+                        Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { viewModel.openSheet(prevKey) }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .fillMaxWidth()
+                                .linedPaperBackground(palette.line, lineSpacingPx)
+                                .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 4.dp)
                         ) {
-                            KannachIcon(
-                                icon = if (isRtlLang) KannachIconType.CHEV_R else KannachIconType.CHEV_L,
-                                tint = palette.greenDeep,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = strings.prevEntry,
-                                fontSize = 12.sp,
+                                text = entry.text,
+                                fontSize = handSp.sp,
+                                lineHeight = (handSp * 1.75f).sp,
+                                style = ruledLineStyle,
                                 fontFamily = LocalKannachHandFont.current,
-                                color = palette.greenDeep
+                                color = palette.ink,
+                                modifier = Modifier.testTag("memory_card_text")
                             )
                         }
-                    } else {
-                        Spacer(modifier = Modifier.size(36.dp))
                     }
 
-                    // M4: Row of small pagination dots (maximum 7 dots)
-                    if (sortedKeys.size > 1) {
-                        val totalDots = sortedKeys.size.coerceAtMost(7)
-                        val activeDotIndex = if (sortedKeys.size <= 7) currentIndex else {
-                            ((currentIndex.toFloat() / (sortedKeys.size - 1)) * (totalDots - 1)).roundToInt()
-                        }
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            for (i in 0 until totalDots) {
-                                val isActive = i == activeDotIndex
-                                Box(
-                                    modifier = Modifier
-                                        .size(if (isActive) 7.dp else 4.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isActive) palette.greenDeep else palette.inkFaint.copy(alpha = 0.35f))
+                    // M3: Secondary Creation Time
+                    if (recordedTimeStr.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = recordedTimeStr,
+                            fontSize = 11.5.sp,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.inkFaint,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // M4: Memory Navigation Buttons & Pagination Dots Indicator
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        if (prevKey != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { viewModel.openSheet(prevKey) }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                KannachIcon(
+                                    icon = if (isRtlLang) KannachIconType.CHEV_R else KannachIconType.CHEV_L,
+                                    tint = palette.greenDeep,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = strings.prevEntry,
+                                    fontSize = 12.sp,
+                                    fontFamily = LocalKannachHandFont.current,
+                                    color = palette.greenDeep
                                 )
                             }
+                        } else {
+                            Spacer(modifier = Modifier.size(36.dp))
                         }
-                    }
 
-                    if (nextKey != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { viewModel.openSheet(nextKey) }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = strings.nextEntry,
-                                fontSize = 12.sp,
-                                fontFamily = LocalKannachHandFont.current,
-                                color = palette.greenDeep
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            KannachIcon(
-                                icon = if (isRtlLang) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
-                                tint = palette.greenDeep,
-                                modifier = Modifier.size(16.dp)
-                            )
+                        // M4: Row of small pagination dots (maximum 7 dots)
+                        if (sortedKeys.size > 1) {
+                            val totalDots = sortedKeys.size.coerceAtMost(7)
+                            val activeDotIndex = if (sortedKeys.size <= 7) currentIndex else {
+                                ((currentIndex.toFloat() / (sortedKeys.size - 1)) * (totalDots - 1)).roundToInt()
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                for (i in 0 until totalDots) {
+                                    val isActive = i == activeDotIndex
+                                    Box(
+                                        modifier = Modifier
+                                            .size(if (isActive) 7.dp else 4.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isActive) palette.greenDeep else palette.inkFaint.copy(alpha = 0.35f))
+                                    )
+                                }
+                            }
                         }
-                    } else {
-                        Spacer(modifier = Modifier.size(36.dp))
+
+                        if (nextKey != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { viewModel.openSheet(nextKey) }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = strings.nextEntry,
+                                    fontSize = 12.sp,
+                                    fontFamily = LocalKannachHandFont.current,
+                                    color = palette.greenDeep
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                KannachIcon(
+                                    icon = if (isRtlLang) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
+                                    tint = palette.greenDeep,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.size(36.dp))
+                        }
                     }
                 }
             }
@@ -1569,7 +1585,7 @@ private fun WritePulseOne(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f)
             ) {
-                var writeDateFontSize by remember(formattedDate) { mutableStateOf(18.sp) }
+                var writeDateFontSize by remember(formattedDate) { mutableStateOf(17.sp) }
                 Text(
                     text = formattedDate,
                     fontSize = writeDateFontSize,
@@ -1583,15 +1599,15 @@ private fun WritePulseOne(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 4.dp),
                     onTextLayout = { result ->
-                        if (result.hasVisualOverflow && writeDateFontSize > 16.sp) {
-                            writeDateFontSize = 16.sp
+                        if (result.hasVisualOverflow && writeDateFontSize > 15.sp) {
+                            writeDateFontSize = 15.sp
                         }
                     }
                 )
                 if (distanceLineText.isNotBlank()) {
                     Text(
                         text = distanceLineText,
-                        fontSize = 13.5.sp,
+                        fontSize = 12.5.sp,
                         fontFamily = LocalKannachHandFont.current,
                         color = palette.greenDeep,
                         maxLines = 1,
@@ -1618,32 +1634,38 @@ private fun WritePulseOne(
 
         // Ruled Paper Text Area extending to bottom of page (W6, W8: No canvas, no prompt box)
         val handSp = LocalHandwritingSp.current
+        val lineSpacingPx = with(LocalDensity.current) { (handSp * 1.75f).sp.toPx() }
+        val ruledLineStyle = TextStyle(
+            fontSize = handSp.sp,
+            lineHeight = (handSp * 1.75f).sp,
+            lineHeightStyle = LineHeightStyle(
+                alignment = LineHeightStyle.Alignment.Bottom,
+                trim = LineHeightStyle.Trim.None
+            ),
+            fontFamily = LocalKannachHandFont.current,
+            color = palette.ink
+        )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .linedPaperBackground(palette.line, (handSp + 12).dp)
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .linedPaperBackground(palette.line, lineSpacingPx)
+                .padding(start = 8.dp, end = 8.dp, top = 0.dp, bottom = 6.dp)
         ) {
             if (text.isEmpty()) {
                 Text(
                     text = strings.entryPlaceholder,
                     fontSize = handSp.sp,
-                    lineHeight = (handSp + 12).sp,
+                    lineHeight = (handSp * 1.75f).sp,
                     fontFamily = LocalKannachHandFont.current,
                     color = palette.inkFaint,
-                    modifier = Modifier.padding(top = 2.dp)
+                    style = ruledLineStyle.copy(color = palette.inkFaint)
                 )
             }
             BasicTextField(
                 value = text,
                 onValueChange = { viewModel.updateSheetText(it) },
-                textStyle = TextStyle(
-                    fontSize = handSp.sp,
-                    lineHeight = (handSp + 12).sp,
-                    fontFamily = LocalKannachHandFont.current,
-                    color = palette.ink
-                ),
+                textStyle = ruledLineStyle,
                 cursorBrush = SolidColor(palette.greenDeep),
                 modifier = Modifier
                     .fillMaxSize()

@@ -145,7 +145,7 @@ data class UserSettings(
         get() = when (handwritingSize) {
             "small" -> 18
             "large" -> 24
-            else -> 20
+            else -> 19
         }
 
     fun effectiveWeekStart(lang: String): Int {
