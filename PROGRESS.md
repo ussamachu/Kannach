@@ -993,3 +993,4 @@ M2 (v10 §2 MonthPage header & weekday row with hand-drawn inkLine borders in Mo
 M3 (v10 §3 MonthPage top-aligned grid with single-Canvas horizontal/vertical inkLines and borderless MonthDayCell) — done — app/src/main/java/com/example/MonthPage.kt
 M4 (v10 §4 Today red inkCircle with 450ms PathMeasure animation, horizontal page-flip & 70px swipe, FoldedPaperCorner at 56.dp, and MainActivity wiring) — done — app/src/main/java/com/example/InkLines.kt, app/src/main/java/com/example/MonthPage.kt, app/src/main/java/com/example/MainActivity.kt
 v10: Home is MonthPage (hand-drawn ink lines); YearField is the year overview.
+G5 — done — StrokeMath.kt

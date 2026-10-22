@@ -49,7 +49,8 @@ data class Point(
 data class SketchStroke(
     val points: List<Point>,
     val colorHex: String,
-    val width: Float
+    val width: Float,
+    val tool: String = "pen"
 )
 
 /**

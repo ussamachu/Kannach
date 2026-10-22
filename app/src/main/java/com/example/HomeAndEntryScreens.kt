@@ -2130,10 +2130,12 @@ fun DrawingCanvas(
 }
 
 private data class CachedSketchStroke(
+    val points: List<Point>,
     val path: Path,
     val color: Color,
     val width: Float,
-    val firstPoint: Point
+    val firstPoint: Point,
+    val tool: String = "pen"
 )
 
 /**
@@ -2152,6 +2154,7 @@ fun DrawingCanvas(
     isEraserMode: Boolean,
     onStrokeCompleted: (SketchStroke) -> Unit,
     onEraseAt: (Point) -> Unit,
+    currentTool: String = "pen",
     onStrokeStarted: () -> Unit = {},
     onGestureEnded: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -2177,6 +2180,7 @@ fun DrawingCanvas(
     val latestEraserMode by androidx.compose.runtime.rememberUpdatedState(isEraserMode)
     val latestColorHex by androidx.compose.runtime.rememberUpdatedState(currentColorHex)
     val latestWidth by androidx.compose.runtime.rememberUpdatedState(currentWidth)
+    val latestTool by androidx.compose.runtime.rememberUpdatedState(currentTool)
     val latestEraserRadius by androidx.compose.runtime.rememberUpdatedState(eraserRadius)
     val latestOnStrokeCompleted by androidx.compose.runtime.rememberUpdatedState(onStrokeCompleted)
     val latestOnEraseAt by androidx.compose.runtime.rememberUpdatedState(onEraseAt)
@@ -2193,10 +2197,12 @@ fun DrawingCanvas(
                 palette.green
             }
             CachedSketchStroke(
+                points = stroke.points,
                 path = StrokeMath.composePathFrom(stroke.points),
                 color = strokeColor,
                 width = stroke.width,
-                firstPoint = stroke.points.first()
+                firstPoint = stroke.points.first(),
+                tool = stroke.tool
             )
         }
     }
@@ -2307,7 +2313,8 @@ fun DrawingCanvas(
                                 SketchStroke(
                                     points = livePoints.toList(),
                                     colorHex = latestColorHex,
-                                    width = latestWidth
+                                    width = latestWidth,
+                                    tool = latestTool
                                 )
                             )
                             livePoints.clear()
@@ -2326,31 +2333,138 @@ fun DrawingCanvas(
         withTransform({
             scale(scaleX, scaleY, Offset.Zero)
         }) {
+            val quadPath = Path()
+            val crayonDash = PathEffect.dashPathEffect(floatArrayOf(7f, 2f))
+
             for (cached in committedPaths) {
-                // JD4: First point of each stroke draws a dot of width * 1.25 at 0.9 alpha (ink pooling)
-                drawCircle(
-                    color = cached.color.copy(alpha = 0.9f),
-                    radius = (cached.width * 1.25f) / 2f,
-                    center = Offset(cached.firstPoint.x, cached.firstPoint.y)
-                )
-                drawPath(
-                    path = cached.path,
-                    color = cached.color,
-                    style = Stroke(width = cached.width, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                )
+                when (cached.tool) {
+                    "brush" -> {
+                        for ((a, b, segW) in StrokeMath.brushSegments(cached.points, cached.width)) {
+                            drawLine(
+                                color = cached.color,
+                                start = Offset(a.x, a.y),
+                                end = Offset(b.x, b.y),
+                                strokeWidth = segW,
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
+                    "calligraphy" -> {
+                        for (quad in StrokeMath.calligraphyQuads(cached.points, cached.width)) {
+                            if (quad.size == 4) {
+                                quadPath.reset()
+                                quadPath.moveTo(quad[0].x, quad[0].y)
+                                quadPath.lineTo(quad[1].x, quad[1].y)
+                                quadPath.lineTo(quad[2].x, quad[2].y)
+                                quadPath.lineTo(quad[3].x, quad[3].y)
+                                quadPath.close()
+                                drawPath(path = quadPath, color = cached.color)
+                            }
+                        }
+                        drawPath(
+                            path = cached.path,
+                            color = cached.color,
+                            style = Stroke(width = cached.width * 0.25f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        )
+                    }
+                    "crayon" -> {
+                        val pointIndex = cached.points.size
+                        for (passIndex in 0 until 3) {
+                            val dx = ((passIndex * 37 + pointIndex) % 5 - 2) * 0.35f
+                            val dy = ((passIndex * 53) % 5 - 2) * 0.35f
+                            withTransform({ translate(dx, dy) }) {
+                                drawPath(
+                                    path = cached.path,
+                                    color = cached.color.copy(alpha = 0.6f),
+                                    style = Stroke(
+                                        width = cached.width * 0.8f,
+                                        cap = StrokeCap.Round,
+                                        join = StrokeJoin.Round,
+                                        pathEffect = crayonDash
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    else -> {
+                        // JD4: First point of each stroke draws a dot of width * 1.25 at 0.9 alpha (ink pooling)
+                        drawCircle(
+                            color = cached.color.copy(alpha = 0.9f),
+                            radius = (cached.width * 1.25f) / 2f,
+                            center = Offset(cached.firstPoint.x, cached.firstPoint.y)
+                        )
+                        drawPath(
+                            path = cached.path,
+                            color = cached.color,
+                            style = Stroke(width = cached.width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        )
+                    }
+                }
             }
             if (version >= 0 && !latestEraserMode && livePoints.isNotEmpty()) {
-                val firstPt = livePoints.first()
-                drawCircle(
-                    color = activeColor.copy(alpha = 0.9f),
-                    radius = (latestWidth * 1.25f) / 2f,
-                    center = Offset(firstPt.x, firstPt.y)
-                )
-                drawPath(
-                    path = livePath,
-                    color = activeColor,
-                    style = Stroke(width = latestWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                )
+                when (currentTool) {
+                    "brush" -> {
+                        for ((a, b, segW) in StrokeMath.brushSegments(livePoints, latestWidth)) {
+                            drawLine(
+                                color = activeColor,
+                                start = Offset(a.x, a.y),
+                                end = Offset(b.x, b.y),
+                                strokeWidth = segW,
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
+                    "calligraphy" -> {
+                        for (quad in StrokeMath.calligraphyQuads(livePoints, latestWidth)) {
+                            if (quad.size == 4) {
+                                quadPath.reset()
+                                quadPath.moveTo(quad[0].x, quad[0].y)
+                                quadPath.lineTo(quad[1].x, quad[1].y)
+                                quadPath.lineTo(quad[2].x, quad[2].y)
+                                quadPath.lineTo(quad[3].x, quad[3].y)
+                                quadPath.close()
+                                drawPath(path = quadPath, color = activeColor)
+                            }
+                        }
+                        drawPath(
+                            path = livePath,
+                            color = activeColor,
+                            style = Stroke(width = latestWidth * 0.25f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        )
+                    }
+                    "crayon" -> {
+                        val pointIndex = livePoints.size
+                        for (passIndex in 0 until 3) {
+                            val dx = ((passIndex * 37 + pointIndex) % 5 - 2) * 0.35f
+                            val dy = ((passIndex * 53) % 5 - 2) * 0.35f
+                            withTransform({ translate(dx, dy) }) {
+                                drawPath(
+                                    path = livePath,
+                                    color = activeColor.copy(alpha = 0.6f),
+                                    style = Stroke(
+                                        width = latestWidth * 0.8f,
+                                        cap = StrokeCap.Round,
+                                        join = StrokeJoin.Round,
+                                        pathEffect = crayonDash
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    else -> {
+                        val firstPt = livePoints.first()
+                        drawCircle(
+                            color = activeColor.copy(alpha = 0.9f),
+                            radius = (latestWidth * 1.25f) / 2f,
+                            center = Offset(firstPt.x, firstPt.y)
+                        )
+                        drawPath(
+                            path = livePath,
+                            color = activeColor,
+                            style = Stroke(width = latestWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        )
+                    }
+                }
             }
             // ER3: Visible eraser ring while eraser is active and a finger is down (radius r, palette.ink at 0.5 alpha, 1.5 dp, no fill)
             val erasePt = eraserTouchPoint.value

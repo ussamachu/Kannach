@@ -28,7 +28,7 @@ enum class SheetMode { VIEW, EDIT }
 
 enum class Tab { PAGE, GARDEN, LETTERS, DRAW }
 
-enum class SketchTool { PEN, MARKER, PENCIL }
+enum class SketchTool { PEN, BRUSH, CALLIGRAPHY, MARKER, PENCIL, CRAYON }
 
 data class CellBounds(
     val offset: Offset,
@@ -1344,6 +1344,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         return when (tool) {
             SketchTool.PEN -> if (raw.length == 9 && raw.startsWith("#")) "#$sixHex" else raw
+            SketchTool.BRUSH, SketchTool.CALLIGRAPHY, SketchTool.CRAYON -> raw
             SketchTool.MARKER -> "#61$sixHex"
             SketchTool.PENCIL -> "#D9$sixHex"
         }
@@ -1355,8 +1356,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ): Float {
         return when (tool) {
             SketchTool.PEN -> rawWidth
+            SketchTool.BRUSH -> rawWidth * 1.6f
+            SketchTool.CALLIGRAPHY -> rawWidth * 1.4f
             SketchTool.MARKER -> rawWidth * 2.4f
             SketchTool.PENCIL -> (rawWidth * 0.75f).coerceAtLeast(2f)
+            SketchTool.CRAYON -> rawWidth * 1.3f
         }
     }
 
@@ -1366,7 +1370,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 SketchStroke(
                     points = points,
                     colorHex = effectiveSketchColorHex(),
-                    width = effectiveSketchWidth()
+                    width = effectiveSketchWidth(),
+                    tool = _sketchTool.value.name.lowercase()
                 )
             )
         }
@@ -1474,7 +1479,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             SketchStroke(
                                 points = dense.subList(runStart, i).toList(),
                                 colorHex = stroke.colorHex,
-                                width = stroke.width
+                                width = stroke.width,
+                                tool = stroke.tool
                             )
                         )
                     }
@@ -1486,7 +1492,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     SketchStroke(
                         points = dense.subList(runStart, dense.size).toList(),
                         colorHex = stroke.colorHex,
-                        width = stroke.width
+                        width = stroke.width,
+                        tool = stroke.tool
                     )
                 )
             }

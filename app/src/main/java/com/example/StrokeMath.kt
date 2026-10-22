@@ -99,6 +99,56 @@ object StrokeMath {
         return path
     }
 
+    fun brushSegments(points: List<Point>, baseWidth: Float): List<Triple<Point, Point, Float>> {
+        if (points.size < 2) {
+            return if (points.size == 1) {
+                val p0 = points[0]
+                listOf(Triple(p0, Point(p0.x + 0.1f, p0.y + 0.1f), baseWidth))
+            } else {
+                emptyList()
+            }
+        }
+        val result = ArrayList<Triple<Point, Point, Float>>(points.size - 1)
+        var prevWidth = baseWidth
+        for (i in 0 until points.size - 1) {
+            val p0 = points[i]
+            val p1 = points[i + 1]
+            val dist = kotlin.math.hypot((p1.x - p0.x).toDouble(), (p1.y - p0.y).toDouble()).toFloat()
+            val targetWidth = (baseWidth * (1.25f - (dist / 14f).coerceIn(0f, 0.9f))).coerceAtLeast(0.35f * baseWidth)
+            val w = if (i == 0) targetWidth else (0.6f * prevWidth + 0.4f * targetWidth)
+            prevWidth = w
+            result.add(Triple(p0, p1, w))
+        }
+        return result
+    }
+
+    fun calligraphyQuads(points: List<Point>, baseWidth: Float): List<List<Point>> {
+        val pts = if (points.size == 1) {
+            val p0 = points[0]
+            listOf(p0, Point(p0.x + 0.1f, p0.y + 0.1f))
+        } else {
+            points
+        }
+        if (pts.size < 2) return emptyList()
+        val rad = Math.toRadians(40.0)
+        val nx = (kotlin.math.cos(rad) * (baseWidth / 2.0)).toFloat()
+        val ny = (-kotlin.math.sin(rad) * (baseWidth / 2.0)).toFloat()
+        val result = ArrayList<List<Point>>(pts.size - 1)
+        for (i in 0 until pts.size - 1) {
+            val p0 = pts[i]
+            val p1 = pts[i + 1]
+            result.add(
+                listOf(
+                    Point(p0.x + nx, p0.y + ny),
+                    Point(p1.x + nx, p1.y + ny),
+                    Point(p1.x - nx, p1.y - ny),
+                    Point(p0.x - nx, p0.y - ny)
+                )
+            )
+        }
+        return result
+    }
+
     /**
      * Returns SVG path data string (e.g. "M... Q... L..."), matching JavaScript `pathFrom(pts)`.
      */
@@ -452,24 +502,87 @@ object StrokeMath {
                     toAndroidColor(palette.green)
                 }
                 val w = stroke.width.coerceAtLeast(1f)
-                val p0 = stroke.points.first()
-                // JD4: First point of each stroke draws a dot of width * 1.25 at 0.9 alpha (ink pooling)
-                val poolPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = strokeColorInt
-                    alpha = (255 * 0.9f).roundToInt().coerceIn(0, 255)
-                    style = Paint.Style.FILL
-                }
-                canvas.drawCircle(p0.x, p0.y, (w * 1.25f) / 2f, poolPaint)
+                when (stroke.tool) {
+                    "brush" -> {
+                        val brushPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = strokeColorInt
+                            style = Paint.Style.STROKE
+                            strokeCap = Paint.Cap.ROUND
+                            strokeJoin = Paint.Join.ROUND
+                        }
+                        for ((a, b, segW) in brushSegments(stroke.points, w)) {
+                            brushPaint.strokeWidth = segW.coerceAtLeast(0.5f)
+                            canvas.drawLine(a.x, a.y, b.x, b.y, brushPaint)
+                        }
+                    }
+                    "calligraphy" -> {
+                        val quadFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = strokeColorInt
+                            style = Paint.Style.FILL
+                        }
+                        val quadPath = android.graphics.Path()
+                        for (quad in calligraphyQuads(stroke.points, w)) {
+                            if (quad.size == 4) {
+                                quadPath.reset()
+                                quadPath.moveTo(quad[0].x, quad[0].y)
+                                quadPath.lineTo(quad[1].x, quad[1].y)
+                                quadPath.lineTo(quad[2].x, quad[2].y)
+                                quadPath.lineTo(quad[3].x, quad[3].y)
+                                quadPath.close()
+                                canvas.drawPath(quadPath, quadFillPaint)
+                            }
+                        }
+                        val gapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = strokeColorInt
+                            style = Paint.Style.STROKE
+                            strokeWidth = (w * 0.25f).coerceAtLeast(0.5f)
+                            strokeCap = Paint.Cap.ROUND
+                            strokeJoin = Paint.Join.ROUND
+                        }
+                        canvas.drawPath(androidPathFrom(stroke.points), gapPaint)
+                    }
+                    "crayon" -> {
+                        val crayonPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = strokeColorInt
+                            alpha = (255 * 0.6f).roundToInt().coerceIn(0, 255)
+                            style = Paint.Style.STROKE
+                            strokeWidth = (w * 0.8f).coerceAtLeast(0.5f)
+                            strokeCap = Paint.Cap.ROUND
+                            strokeJoin = Paint.Join.ROUND
+                            pathEffect = android.graphics.DashPathEffect(floatArrayOf(7f, 2f), 0f)
+                        }
+                        val path = androidPathFrom(stroke.points)
+                        val pointIndex = stroke.points.size
+                        for (passIndex in 0 until 3) {
+                            val dx = ((passIndex * 37 + pointIndex) % 5 - 2) * 0.35f
+                            val dy = ((passIndex * 53) % 5 - 2) * 0.35f
+                            canvas.save()
+                            canvas.translate(dx, dy)
+                            canvas.drawPath(path, crayonPaint)
+                            canvas.restore()
+                        }
+                    }
+                    else -> {
+                        val p0 = stroke.points.first()
+                        // JD4: First point of each stroke draws a dot of width * 1.25 at 0.9 alpha (ink pooling)
+                        val poolPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = strokeColorInt
+                            alpha = (255 * 0.9f).roundToInt().coerceIn(0, 255)
+                            style = Paint.Style.FILL
+                        }
+                        canvas.drawCircle(p0.x, p0.y, (w * 1.25f) / 2f, poolPaint)
 
-                val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = strokeColorInt
-                    style = Paint.Style.STROKE
-                    strokeWidth = w
-                    strokeCap = Paint.Cap.ROUND
-                    strokeJoin = Paint.Join.ROUND
+                        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = strokeColorInt
+                            style = Paint.Style.STROKE
+                            strokeWidth = w
+                            strokeCap = Paint.Cap.ROUND
+                            strokeJoin = Paint.Join.ROUND
+                        }
+                        val path = androidPathFrom(stroke.points)
+                        canvas.drawPath(path, strokePaint)
+                    }
                 }
-                val path = androidPathFrom(stroke.points)
-                canvas.drawPath(path, strokePaint)
             }
         }
         canvas.restore()
@@ -503,14 +616,14 @@ object StrokeMath {
                 "$dayStr $monthName $yearStr"
             }
 
-            val wordPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            val wordPaint = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = toAndroidColor(palette.greenDeep.copy(alpha = 0.72f))
                 textSize = 28f
                 typeface = handTypeface
                 textAlign = Paint.Align.LEFT
             }
 
-            val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            val datePaint = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = toAndroidColor(palette.inkSoft.copy(alpha = 0.65f))
                 textSize = 20f
                 typeface = uiTypeface
@@ -525,41 +638,79 @@ object StrokeMath {
                 strokeJoin = Paint.Join.ROUND
             }
 
+            val textDir = if (isRtl) android.text.TextDirectionHeuristics.RTL else android.text.TextDirectionHeuristics.LTR
+
+            val wordDesiredWidth = android.text.Layout.getDesiredWidth(brandWord, wordPaint)
+            val wordWidthPx = kotlin.math.ceil(wordDesiredWidth).toInt().coerceAtLeast(1)
+            val wordLayout = android.text.StaticLayout.Builder.obtain(brandWord, 0, brandWord.length, wordPaint, wordWidthPx)
+                .setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL)
+                .setTextDirection(textDir)
+                .setIncludePad(true)
+                .build()
+
+            val dateDesiredWidth = android.text.Layout.getDesiredWidth(dateText, datePaint)
+            val dateWidthPx = kotlin.math.ceil(dateDesiredWidth).toInt().coerceAtLeast(1)
+            val dateLayout = android.text.StaticLayout.Builder.obtain(dateText, 0, dateText.length, datePaint, dateWidthPx)
+                .setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL)
+                .setTextDirection(textDir)
+                .setIncludePad(true)
+                .build()
+
             val inset = 36f
             val sproutBoxSize = 28f
             val sproutGap = 8f
-            val wordWidth = wordPaint.measureText(brandWord).coerceAtLeast(110f)
+            val wordWidth = wordLayout.width.toFloat()
+            val dateWidth = dateLayout.width.toFloat()
             val topRowWidth = sproutBoxSize + sproutGap + wordWidth
-            val dateWidth = datePaint.measureText(dateText).coerceAtLeast(100f)
+            val blockWidth = kotlin.math.max(topRowWidth, dateWidth)
+            val blockHeight = wordLayout.height + 6f + dateLayout.height
 
-            val dateBaselineY = cardRect.bottom - inset
-            val wordBaselineY = dateBaselineY - 28f
+            val blockBottom = cardRect.bottom - inset
+            val blockTop = blockBottom - blockHeight
+            val wordTop = blockTop
+            val sproutTop = wordTop + (wordLayout.height - sproutBoxSize) / 2f
+            val dateTop = wordTop + wordLayout.height + 6f
 
             // Bottom-end corner: right in LTR, left in RTL
             if (!isRtl) {
-                val rightEdge = cardRect.right - inset
-                val topRowStartX = rightEdge - topRowWidth
+                val blockRight = cardRect.right - inset
+                val blockLeft = blockRight - blockWidth
+                val topRowStartX = (blockLeft + blockWidth) - topRowWidth
                 drawAndroidSprout(
                     canvas = canvas,
                     left = topRowStartX,
-                    top = wordBaselineY - 24f,
+                    top = sproutTop,
                     size = sproutBoxSize,
                     paint = sproutPaint
                 )
-                canvas.drawText(brandWord, topRowStartX + sproutBoxSize + sproutGap, wordBaselineY, wordPaint)
-                canvas.drawText(dateText, rightEdge - dateWidth, dateBaselineY, datePaint)
+                canvas.save()
+                canvas.translate(topRowStartX + sproutBoxSize + sproutGap, wordTop)
+                wordLayout.draw(canvas)
+                canvas.restore()
+
+                canvas.save()
+                canvas.translate(blockRight - dateWidth, dateTop)
+                dateLayout.draw(canvas)
+                canvas.restore()
             } else {
-                val leftEdge = cardRect.left + inset
-                // In RTL, place wordmark + sprout aligned to the bottom-end (left) corner
-                canvas.drawText(brandWord, leftEdge, wordBaselineY, wordPaint)
+                val blockLeft = cardRect.left + inset
+                canvas.save()
+                canvas.translate(blockLeft, wordTop)
+                wordLayout.draw(canvas)
+                canvas.restore()
+
                 drawAndroidSprout(
                     canvas = canvas,
-                    left = leftEdge + wordWidth + sproutGap,
-                    top = wordBaselineY - 24f,
+                    left = blockLeft + wordWidth + sproutGap,
+                    top = sproutTop,
                     size = sproutBoxSize,
                     paint = sproutPaint
                 )
-                canvas.drawText(dateText, leftEdge, dateBaselineY, datePaint)
+
+                canvas.save()
+                canvas.translate(blockLeft, dateTop)
+                dateLayout.draw(canvas)
+                canvas.restore()
             }
         }
 

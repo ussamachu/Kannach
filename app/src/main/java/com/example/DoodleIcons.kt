@@ -390,6 +390,32 @@ fun doodleSpecFor(icon: KannachIconType): DoodleSpec? = when (icon) {
         ),
         spot = "M12 6 L30 6 L38 14 L38 42 L12 42 Z"
     )
+    KannachIconType.INK_BRUSH -> DoodleSpec(
+        lines = listOf(
+            "M21 5 C21 3 27 3 27 5 L28 22 L20 22 Z",
+            "M20 22 L28 22 L28 28 L20 28 Z",
+            "M20 28 L28 28 C28 36 26 41 24 45 C22 41 20 36 20 28 Z"
+        ),
+        spot = "M20 28 L28 28 C28 36 26 41 24 45 C22 41 20 36 20 28 Z"
+    )
+    KannachIconType.NIB -> DoodleSpec(
+        lines = listOf(
+            "M16 6 L32 6 L32 18 C32 26 28 32 24 42 C20 32 16 26 16 18 Z",
+            "M24 24 L24 42",
+            "M24 18 C25.7 18 26.5 19 26.5 20.5 C26.5 22 25.5 23 24 23 C22.5 23 21.5 22 21.5 20.5 C21.5 19 22.3 18 24 18 Z",
+            "M16 12 L32 12"
+        ),
+        spot = "M16 6 L32 6 L32 18 C32 26 28 32 24 42 C20 32 16 26 16 18 Z"
+    )
+    KannachIconType.CRAYON -> DoodleSpec(
+        lines = listOf(
+            "M19 6 L29 6 L29 34 L19 34 Z",
+            "M19 12 L29 12",
+            "M19 28 L29 28",
+            "M19 34 L29 34 L27 41 C26 43 22 43 21 41 Z"
+        ),
+        spot = "M19 12 L29 12 L29 28 L19 28 Z"
+    )
 }
 
 @Composable
@@ -419,12 +445,14 @@ internal fun RenderDoodleIcon(
         } else {
             palette.red.copy(alpha = 0.25f)
         }
-        KannachIconType.PEN -> if (fillColor != Color.Transparent && fillColor != Color.Unspecified) {
+        KannachIconType.PEN,
+        KannachIconType.NIB -> if (fillColor != Color.Transparent && fillColor != Color.Unspecified) {
             fillColor.copy(alpha = 0.9f)
         } else {
             palette.blue.copy(alpha = 0.45f)
         }
-        KannachIconType.MARKER -> if (fillColor != Color.Transparent && fillColor != Color.Unspecified) {
+        KannachIconType.MARKER,
+        KannachIconType.CRAYON -> if (fillColor != Color.Transparent && fillColor != Color.Unspecified) {
             fillColor.copy(alpha = 0.9f)
         } else {
             palette.orange.copy(alpha = 0.45f)
@@ -433,6 +461,11 @@ internal fun RenderDoodleIcon(
             fillColor.copy(alpha = 0.9f)
         } else {
             palette.red.copy(alpha = 0.45f)
+        }
+        KannachIconType.INK_BRUSH -> if (fillColor != Color.Transparent && fillColor != Color.Unspecified) {
+            fillColor.copy(alpha = 0.9f)
+        } else {
+            palette.green.copy(alpha = 0.45f)
         }
         KannachIconType.EDIT,
         KannachIconType.ERASER,

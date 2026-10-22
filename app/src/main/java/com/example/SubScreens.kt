@@ -949,11 +949,21 @@ fun SketchpadScreen(
     val exportSignature by viewModel.exportSignature.collectAsState()
     var isHeaderOverflowOpen by remember { mutableStateOf(false) }
     var showPaperPopover by remember { mutableStateOf(false) }
-    var showSizePopover by remember { mutableStateOf(false) }
+    var showColorPopover by remember { mutableStateOf(false) }
 
     val inkHex = "#3a523d"
+    val baseSwatches = remember {
+        (I18n.COLORS.map { it.hex } + listOf(inkHex, "#C97A63")).take(7)
+    }
+    val extraSwatches = remember {
+        listOf(
+            "#1B1B1B", "#6B4F3A", "#8E5FBF", "#E86FA0",
+            "#F2C84B", "#2FA38C", "#9AA0A6", "#B5442E",
+            "#7FB069", "#1F2A44", "#F4A97F"
+        )
+    }
     val allSwatches = remember {
-        I18n.COLORS.map { it.hex } + listOf(inkHex)
+        (baseSwatches + extraSwatches).take(18)
     }
     val brushSizes = remember { listOf(4f, 8f, 14f) }
 
@@ -1169,9 +1179,10 @@ fun SketchpadScreen(
                             isEraserMode = isEraserMode,
                             onStrokeCompleted = { viewModel.addSketchStroke(it) },
                             onEraseAt = { viewModel.eraseSketchAt(it) },
+                            currentTool = sketchTool.name.lowercase(),
                             onStrokeStarted = {
                                 showPaperPopover = false
-                                showSizePopover = false
+                                showColorPopover = false
                                 dockScroll.collapse()
                                 viewModel.onSketchStrokeStarted()
                             },
@@ -1201,18 +1212,96 @@ fun SketchpadScreen(
                     }
                 }
 
-                // Popovers above the tray (Paper types & Brush sizes)
+                // Tapping outside closes open popovers
+                if (showColorPopover || showPaperPopover) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                showColorPopover = false
+                                showPaperPopover = false
+                            }
+                    )
+                }
+
+                // Popovers above the tray (Paper types & Colour palette)
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 6.dp),
-                    horizontalAlignment = Alignment.End
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    AnimatedVisibility(
+                        visible = showColorPopover,
+                        enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT)),
+                        exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(palette.paperHi)
+                                .border(1.2.dp, palette.line, RoundedCornerShape(16.dp))
+                                .padding(12.dp)
+                                .testTag("sketch_color_popover"),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            allSwatches.chunked(6).forEachIndexed { rowIdx, rowHexes ->
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    rowHexes.forEachIndexed { colIdx, hex ->
+                                        val idx = rowIdx * 6 + colIdx
+                                        val isSelected = !isEraserMode && selectedColor.equals(hex, ignoreCase = true)
+                                        val swatchColor = try {
+                                            Color(android.graphics.Color.parseColor(hex))
+                                        } catch (_: Exception) {
+                                            palette.ink
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clickable {
+                                                    viewModel.setSketchColor(hex)
+                                                    showColorPopover = false
+                                                }
+                                                .drawBehind {
+                                                    if (isSelected) {
+                                                        inkCircle(
+                                                            center = Offset(size.width / 2f, size.height / 2f),
+                                                            radiusPx = 19.dp.toPx(),
+                                                            seed = idx + 11,
+                                                            color = palette.ink,
+                                                            widthPx = 2.dp.toPx()
+                                                        )
+                                                    }
+                                                }
+                                                .testTag("sketch_swatch_$idx"),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .clip(CircleShape)
+                                                    .background(swatchColor)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     AnimatedVisibility(
                         visible = showPaperPopover,
                         enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT)),
-                        exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
+                        exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT)),
+                        modifier = Modifier.align(Alignment.End)
                     ) {
                         Row(
                             modifier = Modifier
@@ -1257,54 +1346,15 @@ fun SketchpadScreen(
                             }
                         }
                     }
-
-                    AnimatedVisibility(
-                        visible = showSizePopover,
-                        enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT)),
-                        exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(palette.paperHi)
-                                .border(1.2.dp, palette.line, RoundedCornerShape(14.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            brushSizes.forEach { w ->
-                                val isSelected = brushWidth == w
-                                val dotDp = when (w) {
-                                    4f -> 8.dp
-                                    8f -> 14.dp
-                                    else -> 22.dp
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .clickable {
-                                            viewModel.setSketchBrushWidth(w)
-                                            showSizePopover = false
-                                        }
-                                        .testTag("sketch_brush_${w.toInt()}"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(dotDp)
-                                            .clip(CircleShape)
-                                            .background(if (isSelected) palette.greenDeep else palette.inkSoft)
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
             }
 
             // Ephemeral mood-name label and clear-undo slot directly above the tray
-            val moodName = I18n.getMoodName(selectedColor, language)
+            val hasMoodName = remember(selectedColor) {
+                I18n.COLORS.any { it.hex.equals(selectedColor, ignoreCase = true) } ||
+                    selectedColor.equals(inkHex, ignoreCase = true)
+            }
+            val moodName = if (hasMoodName) I18n.getMoodName(selectedColor, language) else ""
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1347,7 +1397,7 @@ fun SketchpadScreen(
                 }
 
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = !clearUndoVisible && moodLabelVisible && !isEraserMode,
+                    visible = !clearUndoVisible && moodLabelVisible && !isEraserMode && hasMoodName && moodName.isNotBlank(),
                     enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.INSTANT)),
                     exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
                 ) {
@@ -1367,7 +1417,7 @@ fun SketchpadScreen(
                 }
             }
 
-            // Tray: background palette.paper, no border, no shadow, no card, hand-drawn inkLine on top edge
+            // Tray: background palette.paper, no border, no shadow, hand-drawn inkLine on top edge
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1382,97 +1432,168 @@ fun SketchpadScreen(
                             wobblePx = 1.5.dp.toPx()
                         )
                     }
-                    .padding(horizontal = 12.dp)
                     .testTag("sketch_tools_tray")
             ) {
-                // Row 1 (height 52.dp): colour swatches (30.dp dots, inkCircle scribble ring when selected) + PAPER button (32.dp)
+                // Row 1, tools (height 72.dp): horizontally scrollable Row of 7 upright doodles
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .height(72.dp)
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Bottom
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        allSwatches.forEachIndexed { idx, hex ->
-                            val isSelected = !isEraserMode && selectedColor.equals(hex, ignoreCase = true)
-                            val swatchColor = try {
-                                Color(android.graphics.Color.parseColor(hex))
-                            } catch (_: Exception) {
-                                palette.ink
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clickable {
-                                        showPaperPopover = false
-                                        showSizePopover = false
-                                        viewModel.setSketchColor(hex)
-                                    }
-                                    .drawBehind {
-                                        if (isSelected) {
-                                            inkCircle(
-                                                center = Offset(size.width / 2f, size.height / 2f),
-                                                radiusPx = 18.dp.toPx(),
-                                                seed = idx + 11,
-                                                color = palette.ink,
-                                                widthPx = 2.dp.toPx()
-                                            )
-                                        }
-                                    }
-                                    .testTag("sketch_swatch_$idx"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(CircleShape)
-                                        .background(swatchColor)
-                                )
-                            }
+                    val toolItems = listOf(
+                        Triple(SketchTool.PEN, KannachIconType.PEN, "sketch_tool_pen"),
+                        Triple(SketchTool.BRUSH, KannachIconType.INK_BRUSH, "sketch_tool_brush"),
+                        Triple(SketchTool.CALLIGRAPHY, KannachIconType.NIB, "sketch_tool_calligraphy"),
+                        Triple(SketchTool.MARKER, KannachIconType.MARKER, "sketch_tool_marker"),
+                        Triple(SketchTool.PENCIL, KannachIconType.PENCIL, "sketch_tool_pencil"),
+                        Triple(SketchTool.CRAYON, KannachIconType.CRAYON, "sketch_tool_crayon")
+                    )
+                    toolItems.forEach { (tool, iconType, tag) ->
+                        val isSelected = !isEraserMode && sketchTool == tool
+                        val liftDp by animateDpAsState(
+                            targetValue = if (isSelected) 10.dp else 0.dp,
+                            animationSpec = tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT),
+                            label = "toolLift_$tag"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(width = 44.dp, height = 56.dp)
+                                .offset(y = -liftDp)
+                                .alpha(if (isSelected) 1f else 0.8f)
+                                .clickable {
+                                    showPaperPopover = false
+                                    showColorPopover = false
+                                    viewModel.setSketchTool(tool)
+                                }
+                                .testTag(tag),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            KannachIcon(
+                                icon = iconType,
+                                tint = palette.ink,
+                                fillColor = currentInkColor,
+                                modifier = Modifier.size(width = 44.dp, height = 56.dp)
+                            )
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(6.dp))
-
+                    val eraserLiftDp by animateDpAsState(
+                        targetValue = if (isEraserMode) 10.dp else 0.dp,
+                        animationSpec = tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT),
+                        label = "toolLift_eraser"
+                    )
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
+                            .size(width = 44.dp, height = 56.dp)
+                            .offset(y = -eraserLiftDp)
+                            .alpha(if (isEraserMode) 1f else 0.8f)
                             .clickable {
-                                showSizePopover = false
-                                showPaperPopover = !showPaperPopover
+                                showPaperPopover = false
+                                showColorPopover = false
+                                viewModel.setSketchEraserMode(true)
                             }
-                            .testTag("sketch_paper_button"),
+                            .testTag("sketch_tool_eraser"),
                         contentAlignment = Alignment.Center
                     ) {
                         KannachIcon(
-                            icon = KannachIconType.PAPER,
+                            icon = KannachIconType.ERASER,
                             tint = palette.ink,
-                            modifier = Modifier.size(32.dp)
+                            contentDescription = strings.clear,
+                            modifier = Modifier.size(width = 44.dp, height = 56.dp)
                         )
                     }
                 }
 
-                // Row 2 (height 76.dp): UNDO/REDO at start; PEN, MARKER, PENCIL, ERASER at end
+                // Row 2 (height 52.dp): (a) colour button, (b) three size dots, (c) UNDO & REDO, (d) PAPER button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(76.dp),
+                        .height(52.dp)
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // (a) COLOUR BUTTON: 36.dp circle filled with current colour + inkCircle scribble ring
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clickable {
+                                    showPaperPopover = false
+                                    showColorPopover = !showColorPopover
+                                }
+                                .drawBehind {
+                                    inkCircle(
+                                        center = Offset(size.width / 2f, size.height / 2f),
+                                        radiusPx = 19.dp.toPx(),
+                                        seed = 31,
+                                        color = palette.ink,
+                                        widthPx = 2.dp.toPx()
+                                    )
+                                }
+                                .testTag("sketch_color_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(currentInkColor)
+                            )
+                        }
+
+                        // (b) three size dots (8.dp, 14.dp, 22.dp in current colour, 40.dp touch area, selected with small inkCircle ring)
+                        brushSizes.forEachIndexed { idx, w ->
+                            val isSelected = brushWidth == w
+                            val dotDp = when (w) {
+                                4f -> 8.dp
+                                8f -> 14.dp
+                                else -> 22.dp
+                            }
+                            val ringRadius = when (w) {
+                                4f -> 8.dp
+                                8f -> 11.dp
+                                else -> 15.dp
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clickable {
+                                        showPaperPopover = false
+                                        showColorPopover = false
+                                        viewModel.setSketchBrushWidth(w)
+                                    }
+                                    .drawBehind {
+                                        if (isSelected) {
+                                            inkCircle(
+                                                center = Offset(size.width / 2f, size.height / 2f),
+                                                radiusPx = ringRadius.toPx(),
+                                                seed = idx + 41,
+                                                color = palette.ink,
+                                                widthPx = 1.6.dp.toPx()
+                                            )
+                                        }
+                                    }
+                                    .testTag("sketch_brush_${w.toInt()}"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(dotDp)
+                                        .clip(CircleShape)
+                                        .background(currentInkColor)
+                                )
+                            }
+                        }
+
+                        // (c) UNDO and REDO icon buttons (44.dp touch, alpha 0.3 when disabled)
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
@@ -1506,77 +1627,23 @@ fun SketchpadScreen(
                         }
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        val toolItems = listOf(
-                            Triple(SketchTool.PEN, KannachIconType.PEN, "sketch_tool_pen"),
-                            Triple(SketchTool.MARKER, KannachIconType.MARKER, "sketch_tool_marker"),
-                            Triple(SketchTool.PENCIL, KannachIconType.PENCIL, "sketch_tool_pencil")
-                        )
-                        toolItems.forEach { (tool, iconType, tag) ->
-                            val isSelected = !isEraserMode && sketchTool == tool
-                            val liftDp by animateDpAsState(
-                                targetValue = if (isSelected) 10.dp else 0.dp,
-                                animationSpec = tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT),
-                                label = "toolLift_$tag"
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 44.dp, height = 56.dp)
-                                    .offset(y = -liftDp)
-                                    .alpha(if (isSelected) 1f else 0.8f)
-                                    .clickable {
-                                        showPaperPopover = false
-                                        if (isSelected) {
-                                            showSizePopover = !showSizePopover
-                                        } else {
-                                            showSizePopover = false
-                                            viewModel.setSketchTool(tool)
-                                        }
-                                    }
-                                    .testTag(tag),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                KannachIcon(
-                                    icon = iconType,
-                                    tint = palette.ink,
-                                    fillColor = currentInkColor,
-                                    modifier = Modifier.size(width = 44.dp, height = 56.dp)
-                                )
+                    // (d) PAPER button at the end
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                showColorPopover = false
+                                showPaperPopover = !showPaperPopover
                             }
-                        }
-
-                        val eraserLiftDp by animateDpAsState(
-                            targetValue = if (isEraserMode) 10.dp else 0.dp,
-                            animationSpec = tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT),
-                            label = "toolLift_eraser"
+                            .testTag("sketch_paper_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        KannachIcon(
+                            icon = KannachIconType.PAPER,
+                            tint = palette.ink,
+                            modifier = Modifier.size(32.dp)
                         )
-                        Box(
-                            modifier = Modifier
-                                .size(width = 44.dp, height = 56.dp)
-                                .offset(y = -eraserLiftDp)
-                                .alpha(if (isEraserMode) 1f else 0.8f)
-                                .clickable {
-                                    showPaperPopover = false
-                                    if (isEraserMode) {
-                                        showSizePopover = !showSizePopover
-                                    } else {
-                                        showSizePopover = false
-                                        viewModel.setSketchEraserMode(true)
-                                    }
-                                }
-                                .testTag("sketch_tool_eraser"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            KannachIcon(
-                                icon = KannachIconType.ERASER,
-                                tint = palette.ink,
-                                contentDescription = strings.clear,
-                                modifier = Modifier.size(width = 44.dp, height = 56.dp)
-                            )
-                        }
                     }
                 }
             }
