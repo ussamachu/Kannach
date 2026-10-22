@@ -88,6 +88,8 @@ fun MonthPage(
     val calendar = Calendar.getInstance()
     val nowYear = calendar.get(Calendar.YEAR)
     val nowMonth = calendar.get(Calendar.MONTH) + 1
+    val nowDay = calendar.get(Calendar.DAY_OF_MONTH)
+    val isCurrentMonth = currentYear == nowYear && currentMonth == nowMonth
     val isAtMaxYear = currentYear >= nowYear && currentMonth >= nowMonth
 
     val weekStartDow = userSettings.effectiveWeekStart(language)
@@ -205,12 +207,13 @@ fun MonthPage(
                         )
                     }
 
+                    val headerNumber = if (isCurrentMonth) nowDay else currentMonth
                     Text(
-                        text = I18n.formatNumber(currentMonth, language, userSettings.useArabicIndicNumerals),
+                        text = I18n.formatNumber(headerNumber, language, userSettings.useArabicIndicNumerals),
                         fontSize = 46.sp,
                         lineHeight = 52.sp,
                         fontFamily = handFont,
-                        color = palette.ink,
+                        color = if (isCurrentMonth) palette.ink else palette.ink.copy(alpha = 0.45f),
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .clickable { showYearOverview = true }
@@ -243,7 +246,12 @@ fun MonthPage(
                     color = palette.inkSoft,
                     letterSpacing = if (language == "ar") 0.sp else 3.sp,
                     textAlign = TextAlign.Center,
-                    maxLines = 1
+                    maxLines = 1,
+                    modifier = Modifier.clickable(enabled = !isCurrentMonth) {
+                        if (!isCurrentMonth) {
+                            viewModel.setMonth(nowYear, nowMonth)
+                        }
+                    }
                 )
 
                 // 4. Bottom spacer

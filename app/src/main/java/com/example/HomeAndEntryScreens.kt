@@ -440,7 +440,7 @@ fun KannachDock(
                 // NV5 & H5: Stitched Paper Pill
                 Row(
                     modifier = Modifier
-                        .height(58.dp)
+                        .height(54.dp)
                         .paperShadow(
                             shadowColor = palette.paperShadow,
                             shape = HandDrawnDockShape,
@@ -505,10 +505,10 @@ fun KannachDock(
 
                 Spacer(modifier = Modifier.width(10.dp))
 
-                // NV6b & DK3 & H5: Detached Plant button inside the expanded dock only (58 dp circle, stitched inner ring inset 5 dp)
+                // NV6b & DK3 & H5: Detached Plant button inside the expanded dock only (54 dp circle, stitched inner ring inset 5 dp)
                 Box(
                     modifier = Modifier
-                        .size(58.dp)
+                        .size(54.dp)
                         .paperShadow(
                             shadowColor = palette.paperShadow,
                             shape = CircleShape,
@@ -688,59 +688,31 @@ private fun PaperDockSlot(
             }
             .padding(horizontal = 6.dp)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Box(contentAlignment = Alignment.TopEnd) {
-                when (doodle) {
-                    DockDoodle.PAGE -> DockDoodleIcon(
-                        doodle = DockDoodle.PAGE,
-                        selected = selected,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    DockDoodle.GARDEN -> DockDoodleIcon(
-                        doodle = DockDoodle.GARDEN,
-                        selected = selected,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    DockDoodle.DRAW -> DockDoodleIcon(
-                        doodle = DockDoodle.DRAW,
-                        selected = selected,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                if (hasBadge) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(palette.red)
-                    )
-                }
+        Box(contentAlignment = Alignment.Center) {
+            when (doodle) {
+                DockDoodle.PAGE -> DockDoodleIcon(
+                    doodle = DockDoodle.PAGE,
+                    selected = selected,
+                    modifier = Modifier.size(32.dp)
+                )
+                DockDoodle.GARDEN -> DockDoodleIcon(
+                    doodle = DockDoodle.GARDEN,
+                    selected = selected,
+                    modifier = Modifier.size(32.dp)
+                )
+                DockDoodle.DRAW -> DockDoodleIcon(
+                    doodle = DockDoodle.DRAW,
+                    selected = selected,
+                    modifier = Modifier.size(32.dp)
+                )
             }
-            if (selected) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = label,
-                    fontSize = 12.sp,
-                    lineHeight = 14.sp,
-                    fontFamily = LocalKannachHandFont.current,
-                    fontWeight = FontWeight.Bold,
-                    color = palette.greenDeep,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(
-                        lineHeightStyle = LineHeightStyle(
-                            alignment = LineHeightStyle.Alignment.Center,
-                            trim = LineHeightStyle.Trim.Both
-                        ),
-                        platformStyle = PlatformTextStyle(includeFontPadding = false)
-                    ),
-                    modifier = Modifier.graphicsLayer {
-                        alpha = highlightTrim.value
-                    }
+            if (hasBadge) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(palette.red)
                 )
             }
         }

@@ -23,7 +23,8 @@ import androidx.compose.ui.unit.dp
 enum class KannachIconType {
     CHEV_L, CHEV_R, FLOWER, LEAF, X, HEART, CHECK, UNDO, REDO, TRASH, EDIT,
     GRID, SLIDERS, SPROUT, WINTER, SPRING, SUMMER, AUTUMN, SEAL,
-    SPARKLE, UPLOAD, BOUQUET, BRUSH, RIBBON, NOTEBOOK, ERASER, MORE
+    SPARKLE, UPLOAD, BOUQUET, BRUSH, RIBBON, NOTEBOOK, ERASER, MORE,
+    BELL, TALK, EYE_OFF, HUT
 }
 
 /**
@@ -44,6 +45,20 @@ fun KannachIcon(
         modifier.semantics { this.contentDescription = contentDescription }
     } else {
         modifier
+    }
+
+    val doodleSpec = doodleSpecFor(icon)
+    if (doodleSpec != null) {
+        RenderDoodleIcon(
+            icon = icon,
+            spec = doodleSpec,
+            modifier = semanticModifier,
+            effectiveTint = effectiveTint,
+            strokeWidthDp = strokeWidthDp,
+            filled = filled,
+            fillColor = fillColor
+        )
+        return
     }
 
     Canvas(modifier = semanticModifier) {
@@ -80,6 +95,7 @@ fun KannachIcon(
             KannachIconType.NOTEBOOK -> drawNotebook(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.ERASER -> drawEraser(scaleX, scaleY, effectiveTint, stroke)
             KannachIconType.MORE -> drawMore(scaleX, scaleY, effectiveTint)
+            else -> Unit
         }
     }
 }

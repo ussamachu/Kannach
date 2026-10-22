@@ -28,6 +28,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -89,6 +91,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -1948,14 +1951,13 @@ fun SettingsScreen(
                     .padding(bottom = 36.dp)
                     .testTag("settings_scroll_container")
             ) {
-                // Header: Back chevron + "Settings" in hand font
+                // Header: Back chevron row, then centred HUT doodle + Settings title
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(BorderStroke(1.dp, palette.line))
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.Start
                 ) {
                     IconButton(
                         onClick = { viewModel.closeSettings() },
@@ -1970,97 +1972,98 @@ fun SettingsScreen(
                             modifier = Modifier.size(24.dp)
                         )
                     }
-                    Text(
-                        text = strings.settings,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = LocalKannachHandFont.current,
-                        color = palette.greenDeep,
-                        modifier = Modifier.testTag("settings_header_title")
-                    )
-                    Spacer(modifier = Modifier.size(48.dp))
                 }
 
-                // Single clean scroll of rows (no chapter cards)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    KannachIcon(
+                        icon = KannachIconType.HUT,
+                        tint = palette.ink,
+                        modifier = Modifier.size(84.dp)
+                    )
+                    Text(
+                        text = strings.settings,
+                        fontSize = 22.sp,
+                        fontFamily = LocalKannachHandFont.current,
+                        color = palette.inkSoft,
+                        modifier = Modifier.testTag("settings_header_title")
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // Single clean scroll of rows (no chapter cards, no dividers between rows)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // =========================================================================
                     // ROW 1: Language (tap -> bottom sheet with 5 radio choices + Arabic numerals switch)
                     // =========================================================================
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 54.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { showLanguageSheet = true }
-                            .padding(horizontal = 8.dp, vertical = 12.dp)
-                            .testTag("settings_row_language"),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = strings.language,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = palette.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = currentLanguageDisplay,
-                                fontSize = 14.sp,
-                                color = palette.inkSoft,
-                                maxLines = 1
-                            )
-                            KannachIcon(
-                                icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
-                                tint = palette.inkSoft,
-                                modifier = Modifier.size(18.dp)
-                            )
+                    SettingsDoodleRow(
+                        title = strings.language,
+                        description = strings.settingsDescLanguage,
+                        tile = {
+                            SettingsTile(selected = null) {
+                                KannachIcon(
+                                    icon = KannachIconType.TALK,
+                                    tint = palette.ink,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        },
+                        onClick = { showLanguageSheet = true },
+                        modifier = Modifier.testTag("settings_row_language")
+                    )
+
+                    // =========================================================================
+                    // ROW 2: Daily reminder (toggle tile; when on, time and permission inline under description)
+                    // =========================================================================
+                    val onToggleReminder: (Boolean) -> Unit = { enabled ->
+                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            val granted = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (!granted && !viewModel.repository.isNotifPermissionAsked()) {
+                                viewModel.repository.markNotifPermissionAsked()
+                                try {
+                                    notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } catch (_: Exception) {}
+                            }
                         }
+                        viewModel.toggleReminder(enabled)
                     }
 
-                    SettingsThinDivider()
-
-                    // =========================================================================
-                    // ROW 2: Daily reminder (switch; when on, time inline on the same row)
-                    // =========================================================================
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
-                            .testTag("settings_row_reminder")
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = strings.reminderTitle,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = palette.ink,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    SettingsDoodleRow(
+                        title = strings.reminderTitle,
+                        description = strings.settingsDescReminder,
+                        tile = {
+                            SettingsTile(
+                                selected = reminder.enabled,
+                                modifier = Modifier.testTag("settings_reminder_switch")
                             ) {
+                                KannachIcon(
+                                    icon = KannachIconType.BELL,
+                                    tint = if (reminder.enabled) palette.paperHi else palette.ink,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .testTag("settings_row_reminder")
+                            .toggleable(
+                                value = reminder.enabled,
+                                role = Role.Switch,
+                                onValueChange = onToggleReminder
+                            ),
+                        extraContent = if (reminder.enabled || !isNotifPermissionGranted) {
+                            {
                                 if (reminder.enabled) {
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     Box(
                                         modifier = Modifier
                                             .heightIn(min = 38.dp)
@@ -2099,230 +2102,165 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Switch(
-                                    checked = reminder.enabled,
-                                    onCheckedChange = { enabled ->
-                                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                            val granted = ContextCompat.checkSelfPermission(
-                                                context,
-                                                Manifest.permission.POST_NOTIFICATIONS
-                                            ) == PackageManager.PERMISSION_GRANTED
-                                            if (!granted && !viewModel.repository.isNotifPermissionAsked()) {
-                                                viewModel.repository.markNotifPermissionAsked()
-                                                try {
-                                                    notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                                } catch (_: Exception) {}
-                                            }
+                                if (!isNotifPermissionGranted) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 4.dp, bottom = 4.dp)
+                                            .testTag("settings_reminder_perm_row"),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = strings.reminderPermOff,
+                                            fontSize = 13.sp,
+                                            color = palette.inkSoft,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .testTag("settings_reminder_perm_status")
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .heightIn(min = 36.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(palette.greenSoft)
+                                                .border(1.dp, palette.greenLine, RoundedCornerShape(8.dp))
+                                                .clickable { openNotificationSettings() }
+                                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                                .testTag("settings_reminder_perm_btn"),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = strings.reminderPermSettings,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = palette.greenDeep,
+                                                maxLines = 1
+                                            )
                                         }
-                                        viewModel.toggleReminder(enabled)
-                                    },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = palette.onGreen,
-                                        checkedTrackColor = palette.green
-                                    ),
-                                    modifier = Modifier.testTag("settings_reminder_switch")
+                                    }
+                                }
+                            }
+                        } else null
+                    )
+
+                    // =========================================================================
+                    // ROW 3: Season colors (one row, 5 choices as small swatches under description)
+                    // =========================================================================
+                    val seasonTileIcon = when (userSettings.seasonOverride) {
+                        "summer" -> KannachIconType.SUMMER
+                        "autumn" -> KannachIconType.AUTUMN
+                        "winter" -> KannachIconType.WINTER
+                        else -> KannachIconType.SPRING
+                    }
+                    val seasonSwatches = listOf(
+                        Triple("auto", strings.seasonAuto, Color(0xFF56945F)),
+                        Triple("spring", strings.seasonSpring, Color(0xFF5AA25F)),
+                        Triple("summer", strings.seasonSummer, Color(0xFF6A9C3F)),
+                        Triple("autumn", strings.seasonAutumn, Color(0xFFC87D46)),
+                        Triple("winter", strings.seasonWinter, Color(0xFF3F7566))
+                    )
+
+                    SettingsDoodleRow(
+                        title = strings.settingsSeasonLabel,
+                        description = strings.settingsDescSeasons,
+                        tile = {
+                            SettingsTile(selected = null) {
+                                KannachIcon(
+                                    icon = seasonTileIcon,
+                                    tint = palette.ink,
+                                    modifier = Modifier.size(28.dp)
                                 )
                             }
-                        }
-
-                        // If notification permission is missing, show one line "Notifications are off" + system settings button
-                        if (!isNotifPermissionGranted) {
+                        },
+                        modifier = Modifier.testTag("settings_row_season"),
+                        extraContent = {
+                            Spacer(modifier = Modifier.height(6.dp))
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 4.dp, bottom = 4.dp)
-                                    .testTag("settings_reminder_perm_row"),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = strings.reminderPermOff,
-                                    fontSize = 13.sp,
-                                    color = palette.inkSoft,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("settings_reminder_perm_status")
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .heightIn(min = 36.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(palette.greenSoft)
-                                        .border(1.dp, palette.greenLine, RoundedCornerShape(8.dp))
-                                        .clickable { openNotificationSettings() }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                                        .testTag("settings_reminder_perm_btn"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = strings.reminderPermSettings,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = palette.greenDeep,
-                                        maxLines = 1
+                                seasonSwatches.forEach { (key, label, swatchColor) ->
+                                    val isSelected = userSettings.seasonOverride == key
+                                    SettingsSeasonSwatch(
+                                        key = key,
+                                        label = label,
+                                        color = swatchColor,
+                                        selected = isSelected,
+                                        onClick = { viewModel.setSeasonOverride(key) },
+                                        modifier = Modifier.testTag("settings_season_$key")
                                     )
                                 }
                             }
                         }
-                    }
-
-                    SettingsThinDivider()
-
-                    // =========================================================================
-                    // ROW 3: Season colors (one row, 5 choices as small swatches inline)
-                    // =========================================================================
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 56.dp)
-                            .padding(horizontal = 8.dp, vertical = 10.dp)
-                            .testTag("settings_row_season"),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = strings.settingsSeasonLabel,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = palette.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        val seasonSwatches = listOf(
-                            Triple("auto", strings.seasonAuto, Color(0xFF56945F)),
-                            Triple("spring", strings.seasonSpring, Color(0xFF5AA25F)),
-                            Triple("summer", strings.seasonSummer, Color(0xFF6A9C3F)),
-                            Triple("autumn", strings.seasonAutumn, Color(0xFFC87D46)),
-                            Triple("winter", strings.seasonWinter, Color(0xFF3F7566))
-                        )
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            seasonSwatches.forEach { (key, label, swatchColor) ->
-                                val isSelected = userSettings.seasonOverride == key
-                                SettingsSeasonSwatch(
-                                    key = key,
-                                    label = label,
-                                    color = swatchColor,
-                                    selected = isSelected,
-                                    onClick = { viewModel.setSeasonOverride(key) },
-                                    modifier = Modifier.testTag("settings_season_$key")
-                                )
-                            }
-                        }
-                    }
-
-                    SettingsThinDivider()
+                    )
 
                     // =========================================================================
                     // ROW 4: Back up my diary (row -> sheet with Export, Import, Last backup, Monthly switch)
                     // =========================================================================
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 54.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { showBackupSheet = true }
-                            .padding(horizontal = 8.dp, vertical = 12.dp)
-                            .testTag("settings_row_backup"),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = strings.settingsBackupRow,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = palette.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        KannachIcon(
-                            icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
-                            tint = palette.inkSoft,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    SettingsThinDivider()
+                    SettingsDoodleRow(
+                        title = strings.settingsBackupRow,
+                        description = strings.settingsDescBackup,
+                        tile = {
+                            SettingsTile(selected = null) {
+                                KannachIcon(
+                                    icon = KannachIconType.UPLOAD,
+                                    tint = palette.ink,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        },
+                        onClick = { showBackupSheet = true },
+                        modifier = Modifier.testTag("settings_row_backup")
+                    )
 
                     // =========================================================================
-                    // ROW 5: Hide from recent apps (switch)
+                    // ROW 5: Hide from recent apps (toggle tile)
                     // =========================================================================
-                    Row(
+                    SettingsDoodleRow(
+                        title = strings.settingsHideRecents,
+                        description = strings.settingsDescHide,
+                        tile = {
+                            SettingsTile(
+                                selected = userSettings.hideInRecents,
+                                modifier = Modifier.testTag("settings_hide_recents_switch")
+                            ) {
+                                KannachIcon(
+                                    icon = KannachIconType.EYE_OFF,
+                                    tint = if (userSettings.hideInRecents) palette.paperHi else palette.ink,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 54.dp)
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                            .testTag("settings_row_hide_recents"),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = strings.settingsHideRecents,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = palette.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(
-                            checked = userSettings.hideInRecents,
-                            onCheckedChange = { viewModel.setHideInRecents(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = palette.onGreen,
-                                checkedTrackColor = palette.green
-                            ),
-                            modifier = Modifier.testTag("settings_hide_recents_switch")
-                        )
-                    }
-
-                    SettingsThinDivider()
+                            .testTag("settings_row_hide_recents")
+                            .toggleable(
+                                value = userSettings.hideInRecents,
+                                role = Role.Switch,
+                                onValueChange = { viewModel.setHideInRecents(it) }
+                            )
+                    )
 
                     // =========================================================================
                     // ROW 6: More (expandable row, collapsed by default, state not persisted)
                     // =========================================================================
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 54.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { isMoreExpanded = !isMoreExpanded }
-                            .padding(horizontal = 8.dp, vertical = 12.dp)
-                            .testTag("settings_row_more"),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = strings.settingsMore,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = palette.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        KannachIcon(
-                            icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
-                            tint = palette.inkSoft,
-                            modifier = Modifier
-                                .size(18.dp)
-                                .rotate(
-                                    if (isMoreExpanded) {
-                                        if (isRtl) -90f else 90f
-                                    } else {
-                                        0f
-                                    }
+                    SettingsDoodleRow(
+                        title = strings.settingsMore,
+                        description = strings.settingsDescMore,
+                        tile = {
+                            SettingsTile(selected = null) {
+                                KannachIcon(
+                                    icon = KannachIconType.MORE,
+                                    tint = palette.ink,
+                                    modifier = Modifier.size(28.dp)
                                 )
-                        )
-                    }
+                            }
+                        },
+                        onClick = { isMoreExpanded = !isMoreExpanded },
+                        modifier = Modifier.testTag("settings_row_more")
+                    )
 
                     // 4.2 Inside "More" (collapsed by default)
                     AnimatedVisibility(visible = isMoreExpanded) {
@@ -2505,37 +2443,24 @@ fun SettingsScreen(
                         }
                     }
 
-                    SettingsThinDivider()
-
                     // =========================================================================
-                    // ROW 7: Tell a friend (text button)
+                    // ROW 7: Tell a friend
                     // =========================================================================
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { viewModel.shareAppWithFriend(context) }
-                            .padding(horizontal = 8.dp, vertical = 12.dp)
-                            .testTag("settings_tell_friend_btn"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        KannachIcon(
-                            icon = KannachIconType.UPLOAD,
-                            tint = palette.greenDeep,
-                            strokeWidthDp = 1.8.dp,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = strings.settingsTellFriend,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = palette.greenDeep,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    SettingsDoodleRow(
+                        title = strings.settingsTellFriend,
+                        description = strings.settingsDescShare,
+                        tile = {
+                            SettingsTile(selected = null) {
+                                KannachIcon(
+                                    icon = KannachIconType.BOUQUET,
+                                    tint = palette.ink,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        },
+                        onClick = { viewModel.shareAppWithFriend(context) },
+                        modifier = Modifier.testTag("settings_tell_friend_btn")
+                    )
 
                     // =========================================================================
                     // FOOTER: centered, 13 sp, palette.inkFaint: "Made By" line
@@ -2795,6 +2720,90 @@ private fun SettingsThinDivider() {
             .height(1.dp)
             .background(palette.line.copy(alpha = 0.65f))
     )
+}
+
+@Composable
+private fun SettingsDoodleRow(
+    title: String,
+    description: String,
+    tile: @Composable () -> Unit,
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    extraContent: (@Composable () -> Unit)? = null
+) {
+    val palette = LocalKannachPalette.current
+    val handFont = LocalKannachHandFont.current
+    val clickModifier = if (onClick != null) {
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick
+        )
+    } else {
+        Modifier
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .then(clickModifier)
+            .padding(horizontal = 4.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 19.sp,
+                fontFamily = handFont,
+                color = palette.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = description,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
+                fontFamily = handFont,
+                color = palette.inkSoft,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (extraContent != null) {
+                extraContent()
+            }
+        }
+        tile()
+    }
+}
+
+@Composable
+private fun SettingsTile(
+    selected: Boolean? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val palette = LocalKannachPalette.current
+    val isSelected = selected == true
+    val shape = RoundedCornerShape(16.dp)
+    Box(
+        modifier = modifier
+            .size(width = 64.dp, height = 52.dp)
+            .clip(shape)
+            .background(if (isSelected) palette.green else palette.paperLo)
+            .then(
+                if (isSelected) Modifier else Modifier.border(1.2.dp, palette.line, shape)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
 }
 
 @Composable

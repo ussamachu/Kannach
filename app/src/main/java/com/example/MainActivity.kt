@@ -138,7 +138,7 @@ fun KannachApp(viewModel: MainViewModel) {
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val navBarBottomPx = WindowInsets.navigationBars.getBottom(density)
     val navBarBottom = with(density) { navBarBottomPx.toDp() }
-    val dockInset = 80.dp + navBarBottom
+    val dockInset = 76.dp + navBarBottom
 
     // DK1, DK2, DK4: DockState and DockScrollConnection held in KannachApp (not persisted)
     var isDockCollapsed by remember { mutableStateOf(false) }
