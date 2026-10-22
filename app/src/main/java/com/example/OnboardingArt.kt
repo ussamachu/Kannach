@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
@@ -41,6 +43,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -167,7 +170,7 @@ fun DrawnScene(
     val pathMeasure = remember { PathMeasure() }
     val segmentPath = remember { Path() }
 
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.defaultMinSize(minWidth = 160.dp, minHeight = 160.dp)) {
         val scale = size.minDimension / 160f
         val offsetX = (size.width - 160f * scale) / 2f
         val offsetY = (size.height - 160f * scale) / 2f
@@ -401,7 +404,7 @@ fun SceneDrawDay(
     val pathMeasure = remember { PathMeasure() }
     val segmentPath = remember { Path() }
 
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.defaultMinSize(minWidth = 160.dp, minHeight = 160.dp)) {
         val scale = size.minDimension / 160f
         val offsetX = (size.width - 160f * scale) / 2f
         val offsetY = (size.height - 160f * scale) / 2f
@@ -582,25 +585,6 @@ fun SceneYearGrid(
                     wobblePx = wobble
                 )
             }
-
-            val cp = circleProgress.value
-            if (cp > 0f) {
-                val targetIndex = 20
-                val targetCol = targetIndex % cols
-                val targetRow = targetIndex / cols
-                val numCenter = Offset(
-                    x = targetCol * cellW + 9.dp.toPx(),
-                    y = targetRow * cellH + 8.dp.toPx()
-                )
-                inkCircle(
-                    center = numCenter,
-                    radiusPx = 7.dp.toPx(),
-                    seed = 720,
-                    color = palette.red,
-                    widthPx = 1.5.dp.toPx(),
-                    progress = cp
-                )
-            }
         }
 
         Column(modifier = Modifier.fillMaxSize()) {
@@ -620,15 +604,39 @@ fun SceneYearGrid(
                                 .fillMaxHeight()
                         ) {
                             if (dayNum <= 31) {
-                                Text(
-                                    text = dayNum.toString(),
-                                    fontSize = 9.sp,
-                                    fontFamily = handFont,
-                                    color = palette.ink.copy(alpha = 0.45f),
+                                val isTargetCell = cellIndex == 20
+                                val isCircled = isTargetCell && circleProgress.value > 0f
+                                Box(
                                     modifier = Modifier
                                         .align(Alignment.TopStart)
-                                        .padding(start = 3.dp, top = 1.dp)
-                                )
+                                        .padding(start = 3.dp, top = 2.dp)
+                                        .size(width = 16.dp, height = 14.dp)
+                                        .then(
+                                            if (isTargetCell) {
+                                                Modifier.drawBehind {
+                                                    inkCircle(
+                                                        center = Offset(size.width / 2f, size.height / 2f),
+                                                        radiusPx = 10.dp.toPx(),
+                                                        seed = 720,
+                                                        color = palette.red,
+                                                        widthPx = 1.6.dp.toPx(),
+                                                        progress = circleProgress.value
+                                                    )
+                                                }
+                                            } else {
+                                                Modifier
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = dayNum.toString(),
+                                        fontSize = 9.sp,
+                                        fontFamily = handFont,
+                                        fontWeight = if (isCircled) FontWeight.Bold else null,
+                                        color = if (isCircled) palette.ink else palette.ink.copy(alpha = 0.45f)
+                                    )
+                                }
                             }
                             if (doodleIdx >= 0) {
                                 val scaleVal = doodleScales[doodleIdx].value

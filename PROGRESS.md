@@ -998,3 +998,4 @@ O1 — done — I18n.kt, I18nEn.kt, I18nFr.kt, I18nEs.kt, I18nAr.kt
 O2 — done — OnboardingArt.kt
 O3 — done — OnboardingArt.kt
 O4 — done — HomeAndEntryScreens.kt
+P1 — done — HomeAndEntryScreens.kt, OnboardingArt.kt

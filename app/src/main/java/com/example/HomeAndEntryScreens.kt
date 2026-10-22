@@ -2617,10 +2617,10 @@ fun FirstRunOnboarding(
                     contentAlignment = Alignment.Center
                 ) {
                     when (page) {
-                        0 -> DrawnScene(SceneWelcome, active = isCurrentPage, swayDegrees = 2.5f)
-                        1 -> SceneDrawDay(active = isCurrentPage)
+                        0 -> DrawnScene(SceneWelcome, active = isCurrentPage, modifier = Modifier.fillMaxSize(), swayDegrees = 2.5f)
+                        1 -> SceneDrawDay(active = isCurrentPage, modifier = Modifier.fillMaxSize())
                         2 -> SceneYearGrid(active = isCurrentPage)
-                        else -> DrawnScene(ScenePrivate, active = isCurrentPage, pulse = 0.05f)
+                        else -> DrawnScene(ScenePrivate, active = isCurrentPage, modifier = Modifier.fillMaxSize(), pulse = 0.05f)
                     }
                 }
 
