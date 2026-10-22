@@ -358,6 +358,38 @@ fun doodleSpecFor(icon: KannachIconType): DoodleSpec? = when (icon) {
             spot = shield
         )
     }
+    KannachIconType.PEN -> DoodleSpec(
+        lines = listOf(
+            "M19 5 C19 3 29 3 29 5 L29 28 L24 41 L19 28 Z",
+            "M19 12 L29 12",
+            "M24 33 L24 41"
+        ),
+        spot = "M19 12 L29 12 L29 28 L24 41 L19 28 Z"
+    )
+    KannachIconType.MARKER -> DoodleSpec(
+        lines = listOf(
+            "M18 6 L30 6 L30 26 L18 26 Z",
+            "M20 26 L28 26 L27 34 L21 34 Z",
+            "M22 34 L26 34 L26 42 C26 43 22 43 22 42 Z"
+        ),
+        spot = "M18 6 L30 6 L30 26 L18 26 Z"
+    )
+    KannachIconType.PENCIL -> DoodleSpec(
+        lines = listOf(
+            "M19 5 L29 5 L29 33 L24 43 L19 33 Z",
+            "M19 11 L29 11",
+            "M19 33 L29 33",
+            "M22.5 39 L24 43 L25.5 39"
+        ),
+        spot = "M19 5 L29 5 L29 11 L19 11 Z"
+    )
+    KannachIconType.PAPER -> DoodleSpec(
+        lines = listOf(
+            "M12 6 L30 6 L38 14 L38 42 L12 42 Z",
+            "M30 6 L30 14 L38 14"
+        ),
+        spot = "M12 6 L30 6 L38 14 L38 42 L12 42 Z"
+    )
 }
 
 @Composable
@@ -387,6 +419,21 @@ internal fun RenderDoodleIcon(
         } else {
             palette.red.copy(alpha = 0.25f)
         }
+        KannachIconType.PEN -> if (fillColor != Color.Transparent && fillColor != Color.Unspecified) {
+            fillColor.copy(alpha = 0.9f)
+        } else {
+            palette.blue.copy(alpha = 0.45f)
+        }
+        KannachIconType.MARKER -> if (fillColor != Color.Transparent && fillColor != Color.Unspecified) {
+            fillColor.copy(alpha = 0.9f)
+        } else {
+            palette.orange.copy(alpha = 0.45f)
+        }
+        KannachIconType.PENCIL -> if (fillColor != Color.Transparent && fillColor != Color.Unspecified) {
+            fillColor.copy(alpha = 0.9f)
+        } else {
+            palette.red.copy(alpha = 0.45f)
+        }
         KannachIconType.EDIT,
         KannachIconType.ERASER,
         KannachIconType.AUTUMN,
@@ -411,7 +458,8 @@ internal fun RenderDoodleIcon(
         KannachIconType.WINTER,
         KannachIconType.TALK,
         KannachIconType.EYE_OFF,
-        KannachIconType.ABOUT -> palette.green.copy(alpha = 0.45f)
+        KannachIconType.ABOUT,
+        KannachIconType.PAPER -> palette.green.copy(alpha = 0.45f)
         else -> null
     }
 

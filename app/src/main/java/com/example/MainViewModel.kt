@@ -28,6 +28,8 @@ enum class SheetMode { VIEW, EDIT }
 
 enum class Tab { PAGE, GARDEN, LETTERS, DRAW }
 
+enum class SketchTool { PEN, MARKER, PENCIL }
+
 data class CellBounds(
     val offset: Offset,
     val size: IntSize
@@ -184,6 +186,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _sketchEraserMode = MutableStateFlow(false)
     val sketchEraserMode: StateFlow<Boolean> = _sketchEraserMode.asStateFlow()
+
+    private val _sketchTool = MutableStateFlow(SketchTool.PEN)
+    val sketchTool: StateFlow<SketchTool> = _sketchTool.asStateFlow()
 
     private val _sketchPaperType = MutableStateFlow(SketchPaperType.PLAIN)
     val sketchPaperType: StateFlow<SketchPaperType> = _sketchPaperType.asStateFlow()
@@ -1327,13 +1332,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun effectiveSketchColorHex(
+        rawColor: String = _sketchColor.value,
+        tool: SketchTool = _sketchTool.value
+    ): String {
+        val raw = rawColor.trim()
+        val sixHex = if (raw.length == 9 && raw.startsWith("#")) {
+            raw.takeLast(6)
+        } else {
+            raw.removePrefix("#").takeLast(6)
+        }
+        return when (tool) {
+            SketchTool.PEN -> if (raw.length == 9 && raw.startsWith("#")) "#$sixHex" else raw
+            SketchTool.MARKER -> "#61$sixHex"
+            SketchTool.PENCIL -> "#D9$sixHex"
+        }
+    }
+
+    fun effectiveSketchWidth(
+        rawWidth: Float = _sketchBrushWidth.value,
+        tool: SketchTool = _sketchTool.value
+    ): Float {
+        return when (tool) {
+            SketchTool.PEN -> rawWidth
+            SketchTool.MARKER -> rawWidth * 2.4f
+            SketchTool.PENCIL -> (rawWidth * 0.75f).coerceAtLeast(2f)
+        }
+    }
+
     fun addSketchStroke(points: List<Point>) {
         if (points.isNotEmpty()) {
             addSketchStroke(
                 SketchStroke(
                     points = points,
-                    colorHex = _sketchColor.value,
-                    width = _sketchBrushWidth.value
+                    colorHex = effectiveSketchColorHex(),
+                    width = effectiveSketchWidth()
                 )
             )
         }
@@ -1554,6 +1587,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         vibrate(5)
         eraseGestureUndoPushed = false
         _sketchEraserMode.value = enabled
+    }
+
+    fun setSketchTool(tool: SketchTool) {
+        _sketchTool.value = tool
+        setSketchEraserMode(false)
     }
 
     fun setSketchPaperType(paperType: SketchPaperType) {

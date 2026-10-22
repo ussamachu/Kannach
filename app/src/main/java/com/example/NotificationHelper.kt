@@ -87,7 +87,8 @@ class KannachAlarmReceiver : BroadcastReceiver() {
                     )
 
                     val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-                        .setSmallIcon(R.drawable.ic_launcher_foreground)
+                        .setSmallIcon(R.drawable.ic_stat_kannach)
+                        .setColor(0xFFC0683A.toInt())
                         .setContentTitle(strings.appTitle)
                         .setContentText(message)
                         .setStyle(NotificationCompat.BigTextStyle().bigText(message))
@@ -109,7 +110,8 @@ class KannachAlarmReceiver : BroadcastReceiver() {
                 val capsuleSub = strings.capsuleReadyBanner
 
                 val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                    .setSmallIcon(R.drawable.ic_stat_kannach)
+                    .setColor(0xFFC0683A.toInt())
                     .setContentTitle(capsuleTitle)
                     .setContentText(capsuleSub)
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -126,7 +128,8 @@ class KannachAlarmReceiver : BroadcastReceiver() {
                 if (settings.copyReminder != "monthly") return
 
                 val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                    .setSmallIcon(R.drawable.ic_stat_kannach)
+                    .setColor(0xFFC0683A.toInt())
                     .setContentTitle(strings.appTitle)
                     .setContentText(strings.copyReminderNotifMsg)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(strings.copyReminderNotifMsg))
@@ -291,7 +294,8 @@ object NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val notif = NotificationCompat.Builder(context, KannachAlarmReceiver.CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_stat_kannach)
+                .setColor(0xFFC0683A.toInt())
                 .setContentTitle(strings.appTitle)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))

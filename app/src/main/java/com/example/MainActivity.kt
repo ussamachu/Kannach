@@ -26,8 +26,10 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -35,6 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
 
@@ -46,8 +52,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val language by viewModel.language.collectAsState()
-            val currentMonth by viewModel.currentMonth.collectAsState()
             val userSettings by viewModel.userSettings.collectAsState()
+            val themeMonth = remember { mutableIntStateOf(Calendar.getInstance().get(Calendar.MONTH) + 1) }
+            val lifecycleOwner = LocalLifecycleOwner.current
+
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        themeMonth.intValue = Calendar.getInstance().get(Calendar.MONTH) + 1
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
 
             androidx.compose.runtime.LaunchedEffect(userSettings.hideInRecents) {
                 if (userSettings.hideInRecents) {
@@ -59,7 +78,7 @@ class MainActivity : ComponentActivity() {
 
             KannachTheme(
                 language = language,
-                month = currentMonth,
+                month = themeMonth.intValue,
                 seasonOverride = userSettings.seasonOverride,
                 reduceMotionOverride = userSettings.reduceMotion == "on",
                 hapticsEnabled = userSettings.hapticsEnabled,

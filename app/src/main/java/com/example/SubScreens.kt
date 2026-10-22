@@ -14,6 +14,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -46,6 +47,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -78,12 +80,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -909,18 +915,9 @@ private fun StatCard(
 
 
 /**
- * 4. SketchpadScreen (فقط ارسم / Just Draw — SK1–SK12 & v5 JD1–JD7):
- * - JD1: Whisper line above the canvas (hand font 15 sp, palette.ink at 0.55 alpha, fades in 320 ms
- *   after entry and fades out at the first stroke; rotates through drawWhisper1..4 without repeating).
- * - JD2: Paper on a desk (palette.paperDesk background, canvas sheet with paperTilt(0.4f), paperShadow,
- *   and a dotted margin 12 dp inside the edge; when empty the sheet shows nothing else).
- * - JD3: Inks by feeling (selecting a swatch shows its mood name as a 1-line label above the tray
- *   for 1.2 s, then fades; light haptic tick on first stroke only).
- * - JD4: Ink feel (round caps/joins + ink pooling dot of width * 1.25 at 0.9 alpha on first point).
- * - JD5: Clearing is a page turn (sheet slides out by KannachMotion.PAGE and fresh paper slides in,
- *   or 120 ms cross-fade with reduce-motion; Undo action appears for 5 s).
- * - JD6: After export (shows one whisper line from drawSaved1..2 for 2.4 s, no confetti).
- * - JD7: Tray vs dock (tray's bottom edge is strictly above LocalDockInset even at largest font scale).
+ * 4. SketchpadScreen (فقط ارسم / Just Draw — SK1–SK12 & v5 JD1–JD7 & F3):
+ * Full-bleed sheet of paper with a slim 52.dp top bar, whisper centered inside the empty canvas,
+ * and a two-row tools tray at the bottom.
  */
 @Composable
 fun SketchpadScreen(
@@ -939,6 +936,7 @@ fun SketchpadScreen(
     val selectedColor by viewModel.sketchColor.collectAsState()
     val brushWidth by viewModel.sketchBrushWidth.collectAsState()
     val isEraserMode by viewModel.sketchEraserMode.collectAsState()
+    val sketchTool by viewModel.sketchTool.collectAsState()
     val paperType by viewModel.sketchPaperType.collectAsState()
     val introDismissed by viewModel.sketchIntroDismissed.collectAsState()
     val whisperIndex by viewModel.sketchWhisperIndex.collectAsState()
@@ -950,6 +948,8 @@ fun SketchpadScreen(
     val exportFormat by viewModel.exportFormat.collectAsState()
     val exportSignature by viewModel.exportSignature.collectAsState()
     var isHeaderOverflowOpen by remember { mutableStateOf(false) }
+    var showPaperPopover by remember { mutableStateOf(false) }
+    var showSizePopover by remember { mutableStateOf(false) }
 
     val inkHex = "#3a523d"
     val allSwatches = remember {
@@ -986,12 +986,19 @@ fun SketchpadScreen(
         else -> null
     }
 
+    val currentInkColor = remember(selectedColor, palette.ink) {
+        try {
+            Color(android.graphics.Color.parseColor(selectedColor))
+        } catch (_: Exception) {
+            palette.ink
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding()
-            // JD2: The canvas sits on paperDesk
-            .paperBackground(palette.paperDesk)
+            .paperBackground(palette.paper)
             .clickable(enabled = false) {}
     ) {
         Column(
@@ -1000,12 +1007,12 @@ fun SketchpadScreen(
                 // JD7: Tray's bottom edge is strictly above LocalDockInset
                 .padding(bottom = dockInset)
         ) {
-            // Header (NV7: Settings icon in leading 48dp slot; SK5: no X, title in hand font; SK7: share icon top-end)
+            // Top bar (height 52.dp, no wavy divider)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .wavyHeaderDivider(palette.greenLine, waveHeightDp = 6.dp)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .height(52.dp)
+                    .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -1024,12 +1031,11 @@ fun SketchpadScreen(
                 }
                 Text(
                     text = strings.sketchTitle,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
                     fontFamily = LocalKannachHandFont.current,
-                    color = palette.greenDeep,
+                    color = palette.inkSoft,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .weight(1f)
@@ -1050,7 +1056,7 @@ fun SketchpadScreen(
                             modifier = Modifier.size(22.dp)
                         )
                     }
-                    // TR1: Clear is removed from the tray and moves to an overflow control (three-dot icon) in the header
+                    // TR1: Clear in header overflow
                     Box {
                         IconButton(
                             onClick = { isHeaderOverflowOpen = true },
@@ -1099,84 +1105,7 @@ fun SketchpadScreen(
                 }
             }
 
-            // Top controls: JD1 / JD6 single whisper line above canvas + SK4 Paper types
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 2.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // JD1 & JD6: Fixed-height single whisper line slot above the canvas (hand font 15 sp, palette.ink at 0.55 alpha)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 24.dp)
-                        .padding(bottom = 2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = activeTopWhisper != null,
-                        enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT, easing = KannachMotion.Settle)),
-                        exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
-                    ) {
-                        Text(
-                            text = activeTopWhisper ?: "",
-                            fontSize = 15.sp,
-                            fontFamily = LocalKannachHandFont.current,
-                            color = palette.ink.copy(alpha = 0.55f),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag(if (currentSavedWhisperText != null) "sketch_saved_whisper" else "sketch_whisper_line")
-                        )
-                    }
-                }
-
-                // SK4: Paper types (small row of four swatches: plain, ruled, dotted, kraft)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 4.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    SketchPaperType.entries.forEach { type ->
-                        val isSelected = paperType == type
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 5.dp)
-                                .size(40.dp)
-                                .clip(HandDrawnRadiusAltShape)
-                                .then(
-                                    if (isSelected) {
-                                        Modifier
-                                            .background(palette.greenSoft)
-                                            .border(1.8.dp, palette.greenDeep, HandDrawnRadiusAltShape)
-                                    } else {
-                                        Modifier
-                                            .background(palette.paperHi.copy(alpha = 0.65f))
-                                            .border(1.dp, palette.line, HandDrawnRadiusAltShape)
-                                    }
-                                )
-                                .clickable { viewModel.setSketchPaperType(type) }
-                                .padding(4.dp)
-                                .testTag("sketch_paper_${type.name.lowercase(Locale.ROOT)}"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            PaperTypeMiniSwatch(
-                                type = type,
-                                palette = palette,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    }
-                }
-            }
-
-            // PF5 & JD2 & JD5: Free Canvas (300x400) sitting on paperDesk with paperTilt(0.4f),
-            // paperShadow, and a 12 dp inner dotted margin. Clearing is a page turn (AnimatedContent).
+            // Full-bleed paper canvas between the top bar and the tray
             val canvasBaseBg = when (paperType) {
                 SketchPaperType.KRAFT -> palette.paperKraft
                 else -> palette.paperHi
@@ -1192,16 +1121,11 @@ fun SketchpadScreen(
                 SketchPaperType.KRAFT -> Modifier.paperBackground(canvasBaseBg, drawNoise = true)
             }
 
-            BoxWithConstraints(
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 2.dp),
-                contentAlignment = Alignment.Center
             ) {
-                val sheetW = minOf(maxWidth, maxHeight * (3f / 4f))
-                val sheetH = sheetW * (4f / 3f)
-
                 AnimatedContent(
                     targetState = pageTurnCount,
                     transitionSpec = {
@@ -1226,31 +1150,28 @@ fun SketchpadScreen(
                 ) { _ ->
                     Box(
                         modifier = Modifier
-                            .size(sheetW, sheetH)
-                            // JD2: paperTilt(0.4f), paperShadow, and a dotted margin 12 dp inside the edge
-                            .paperTilt(0.4f)
-                            .paperShadow(palette.paperShadow, HandDrawnRadiusShape, offsetY = 5.dp)
-                            .clip(HandDrawnRadiusShape)
+                            .fillMaxSize()
+                            .clip(RectangleShape)
                             .then(canvasPaperModifier)
-                            .border(1.6.dp, palette.line, HandDrawnRadiusShape)
-                            .dashedHandDrawnBorder(
-                                color = palette.line.copy(alpha = 0.75f),
-                                shape = HandDrawnRadiusShape,
-                                strokeWidth = 1.2.dp,
-                                dashIntervals = floatArrayOf(4f, 6f),
-                                inset = 12.dp
-                            )
-                            .testTag("sketch_canvas_box")
+                            .testTag("sketch_canvas_box"),
+                        contentAlignment = Alignment.Center
                     ) {
-                        // JD2: When the desk is empty the sheet shows nothing else.
+                        val effectiveColorHex = remember(sketchTool, selectedColor) {
+                            viewModel.effectiveSketchColorHex(selectedColor, sketchTool)
+                        }
+                        val effectiveWidth = remember(sketchTool, brushWidth) {
+                            viewModel.effectiveSketchWidth(brushWidth, sketchTool)
+                        }
                         DrawingCanvas(
                             sketchStrokes = strokes,
-                            currentColorHex = selectedColor,
-                            currentWidth = brushWidth,
+                            currentColorHex = effectiveColorHex,
+                            currentWidth = effectiveWidth,
                             isEraserMode = isEraserMode,
                             onStrokeCompleted = { viewModel.addSketchStroke(it) },
                             onEraseAt = { viewModel.eraseSketchAt(it) },
                             onStrokeStarted = {
+                                showPaperPopover = false
+                                showSizePopover = false
                                 dockScroll.collapse()
                                 viewModel.onSketchStrokeStarted()
                             },
@@ -1259,13 +1180,130 @@ fun SketchpadScreen(
                                 .fillMaxSize()
                                 .testTag("sketch_drawing_canvas")
                         )
+
+                        // Whisper text centred inside the empty canvas (17.sp, hand font, palette.inkFaint)
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = activeTopWhisper != null,
+                            enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT, easing = KannachMotion.Settle)),
+                            exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
+                        ) {
+                            Text(
+                                text = activeTopWhisper ?: "",
+                                fontSize = 17.sp,
+                                fontFamily = LocalKannachHandFont.current,
+                                color = palette.inkFaint,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .padding(horizontal = 24.dp)
+                                    .testTag(if (currentSavedWhisperText != null) "sketch_saved_whisper" else "sketch_whisper_line")
+                            )
+                        }
+                    }
+                }
+
+                // Popovers above the tray (Paper types & Brush sizes)
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    AnimatedVisibility(
+                        visible = showPaperPopover,
+                        enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT)),
+                        exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(palette.paperHi)
+                                .border(1.2.dp, palette.line, RoundedCornerShape(14.dp))
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SketchPaperType.entries.forEach { type ->
+                                val isSelected = paperType == type
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(HandDrawnRadiusAltShape)
+                                        .then(
+                                            if (isSelected) {
+                                                Modifier
+                                                    .background(palette.greenSoft)
+                                                    .border(1.8.dp, palette.greenDeep, HandDrawnRadiusAltShape)
+                                            } else {
+                                                Modifier
+                                                    .background(palette.paperHi.copy(alpha = 0.65f))
+                                                    .border(1.dp, palette.line, HandDrawnRadiusAltShape)
+                                            }
+                                        )
+                                        .clickable {
+                                            viewModel.setSketchPaperType(type)
+                                            showPaperPopover = false
+                                        }
+                                        .padding(4.dp)
+                                        .testTag("sketch_paper_${type.name.lowercase(Locale.ROOT)}"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    PaperTypeMiniSwatch(
+                                        type = type,
+                                        palette = palette,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = showSizePopover,
+                        enter = fadeIn(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT)),
+                        exit = fadeOut(tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(palette.paperHi)
+                                .border(1.2.dp, palette.line, RoundedCornerShape(14.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            brushSizes.forEach { w ->
+                                val isSelected = brushWidth == w
+                                val dotDp = when (w) {
+                                    4f -> 8.dp
+                                    8f -> 14.dp
+                                    else -> 22.dp
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .clickable {
+                                            viewModel.setSketchBrushWidth(w)
+                                            showSizePopover = false
+                                        }
+                                        .testTag("sketch_brush_${w.toInt()}"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(dotDp)
+                                            .clip(CircleShape)
+                                            .background(if (isSelected) palette.greenDeep else palette.inkSoft)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // JD3 & JD5: 1-line ephemeral slot directly above the tray:
-            // - JD5: Undo action appears for 5 s after page-turn Clear
-            // - JD3: Selecting a swatch shows its mood name as a 1-line label above the tray for 1.2 s, then fades
+            // Ephemeral mood-name label and clear-undo slot directly above the tray
             val moodName = I18n.getMoodName(selectedColor, language)
             Box(
                 modifier = Modifier
@@ -1303,7 +1341,7 @@ fun SketchpadScreen(
                             fontFamily = LocalKannachHandFont.current,
                             color = palette.greenDeep,
                             maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1321,7 +1359,7 @@ fun SketchpadScreen(
                         color = palette.greenDeep,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("sketch_mood_label")
@@ -1329,35 +1367,35 @@ fun SketchpadScreen(
                 }
             }
 
-            // PF5 & SK2 & JD7: Hand-drawn paper tools tray below the canvas, fixed (scrolls horizontally if needed), above LocalDockInset
-            Box(
+            // Tray: background palette.paper, no border, no shadow, no card, hand-drawn inkLine on top edge
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .paperTilt(-0.3f)
-                    .paperShadow(palette.paperShadow, HandDrawnRadiusShape, offsetY = 4.dp)
-                    .clip(HandDrawnRadiusShape)
-                    .background(palette.paperHi)
-                    .border(1.5.dp, palette.greenLine, HandDrawnRadiusShape)
-                    .dashedHandDrawnBorder(
-                        color = palette.greenLine.copy(alpha = 0.7f),
-                        shape = HandDrawnRadiusShape,
-                        strokeWidth = 1.2.dp,
-                        dashIntervals = floatArrayOf(8f, 6f),
-                        inset = 4.dp
-                    )
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .background(palette.paper)
+                    .drawBehind {
+                        inkLine(
+                            from = Offset(0f, 0f),
+                            to = Offset(size.width, 0f),
+                            seed = 73,
+                            color = palette.line,
+                            widthPx = 1.3.dp.toPx(),
+                            wobblePx = 1.5.dp.toPx()
+                        )
+                    }
+                    .padding(horizontal = 12.dp)
                     .testTag("sketch_tools_tray")
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                // Row 1 (height 52.dp): colour swatches (30.dp dots, inkCircle scribble ring when selected) + PAPER button (32.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Row 1: Mood palette swatches - scrolls horizontally if constrained
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .weight(1f)
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
@@ -1369,136 +1407,174 @@ fun SketchpadScreen(
                             } catch (_: Exception) {
                                 palette.ink
                             }
-                            val swatchMoodDesc = I18n.getMoodName(hex, language)
 
                             Box(
                                 modifier = Modifier
-                                    .padding(horizontal = 4.dp)
-                                    .size(48.dp)
-                                    .clip(HandDrawnRadiusAltShape)
-                                    .then(
+                                    .size(44.dp)
+                                    .clickable {
+                                        showPaperPopover = false
+                                        showSizePopover = false
+                                        viewModel.setSketchColor(hex)
+                                    }
+                                    .drawBehind {
                                         if (isSelected) {
-                                            Modifier
-                                                .background(palette.greenSoft)
-                                                .border(1.4.dp, palette.greenLine, HandDrawnRadiusAltShape)
-                                        } else Modifier
-                                    )
-                                    .clickable { viewModel.setSketchColor(hex) }
+                                            inkCircle(
+                                                center = Offset(size.width / 2f, size.height / 2f),
+                                                radiusPx = 18.dp.toPx(),
+                                                seed = idx + 11,
+                                                color = palette.ink,
+                                                widthPx = 2.dp.toPx()
+                                            )
+                                        }
+                                    }
                                     .testTag("sketch_swatch_$idx"),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(26.dp)
-                                        .scale(if (isSelected) 1.12f else 1.0f)
+                                        .size(30.dp)
                                         .clip(CircleShape)
                                         .background(swatchColor)
-                                        .border(
-                                            width = if (isSelected) 2.2.dp else 1.dp,
-                                            color = if (isSelected) palette.greenDeep else palette.line,
-                                            shape = CircleShape
-                                        )
                                 )
                             }
                         }
                     }
 
-                    // TR1–TR3: Row 2: three size dots · Eraser · Undo · Redo (Clear moved to header overflow)
-                    Row(
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                showSizePopover = false
+                                showPaperPopover = !showPaperPopover
+                            }
+                            .testTag("sketch_paper_button"),
+                        contentAlignment = Alignment.Center
                     ) {
-                        // 3 Brush / Eraser size dots (pen width 4/8/14, eraser radius 8/14/24; ER4 keeps current mode)
-                        brushSizes.forEach { w ->
-                            val isSelected = brushWidth == w
-                            val dotDp = when (w) {
-                                4f -> 6.dp
-                                8f -> 11.dp
-                                else -> 16.dp
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(HandDrawnRadiusAltShape)
-                                    .then(
-                                        if (isSelected) {
-                                            Modifier
-                                                .background(palette.greenSoft)
-                                                .border(1.4.dp, palette.greenLine, HandDrawnRadiusAltShape)
-                                        } else Modifier
-                                    )
-                                    .clickable { viewModel.setSketchBrushWidth(w) }
-                                    .testTag("sketch_brush_${w.toInt()}"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(dotDp)
-                                        .clip(CircleShape)
-                                        .background(if (isSelected) palette.greenDeep else palette.inkSoft)
-                                )
-                            }
-                        }
+                        KannachIcon(
+                            icon = KannachIconType.PAPER,
+                            tint = palette.ink,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
 
-                        // Eraser toggle (ER1–ER4)
+                // Row 2 (height 76.dp): UNDO/REDO at start; PEN, MARKER, PENCIL, ERASER at end
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(76.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(HandDrawnRadiusAltShape)
-                                .then(
-                                    if (isEraserMode) {
-                                        Modifier
-                                            .background(palette.greenSoft)
-                                            .border(1.4.dp, palette.greenLine, HandDrawnRadiusAltShape)
-                                    } else Modifier
-                                )
-                                .clickable { viewModel.toggleSketchEraser() }
-                                .testTag("sketch_tool_eraser"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            KannachIcon(
-                                icon = KannachIconType.ERASER,
-                                tint = if (isEraserMode) palette.greenDeep else palette.inkSoft,
-                                strokeWidthDp = if (isEraserMode) 2.2.dp else 1.8.dp,
-                                contentDescription = strings.clear,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-
-                        // Undo button (TR1–TR2)
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(HandDrawnRadiusAltShape)
+                                .size(44.dp)
+                                .alpha(if (canUndo) 1f else 0.3f)
                                 .clickable(enabled = canUndo) { viewModel.undoSketchStroke() }
                                 .testTag("sketch_tool_undo"),
                             contentAlignment = Alignment.Center
                         ) {
                             KannachIcon(
                                 icon = KannachIconType.UNDO,
-                                tint = if (canUndo) palette.inkSoft else palette.inkSoft.copy(alpha = 0.35f),
+                                tint = palette.ink,
                                 contentDescription = strings.undo,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
-                        // Redo button (TR1–TR2)
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(HandDrawnRadiusAltShape)
+                                .size(44.dp)
+                                .alpha(if (canRedo) 1f else 0.3f)
                                 .clickable(enabled = canRedo) { viewModel.redoSketchStroke() }
                                 .testTag("sketch_tool_redo"),
                             contentAlignment = Alignment.Center
                         ) {
                             KannachIcon(
                                 icon = KannachIconType.REDO,
-                                tint = if (canRedo) palette.inkSoft else palette.inkSoft.copy(alpha = 0.35f),
+                                tint = palette.ink,
                                 contentDescription = strings.undo,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val toolItems = listOf(
+                            Triple(SketchTool.PEN, KannachIconType.PEN, "sketch_tool_pen"),
+                            Triple(SketchTool.MARKER, KannachIconType.MARKER, "sketch_tool_marker"),
+                            Triple(SketchTool.PENCIL, KannachIconType.PENCIL, "sketch_tool_pencil")
+                        )
+                        toolItems.forEach { (tool, iconType, tag) ->
+                            val isSelected = !isEraserMode && sketchTool == tool
+                            val liftDp by animateDpAsState(
+                                targetValue = if (isSelected) 10.dp else 0.dp,
+                                animationSpec = tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT),
+                                label = "toolLift_$tag"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 44.dp, height = 56.dp)
+                                    .offset(y = -liftDp)
+                                    .alpha(if (isSelected) 1f else 0.8f)
+                                    .clickable {
+                                        showPaperPopover = false
+                                        if (isSelected) {
+                                            showSizePopover = !showSizePopover
+                                        } else {
+                                            showSizePopover = false
+                                            viewModel.setSketchTool(tool)
+                                        }
+                                    }
+                                    .testTag(tag),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                KannachIcon(
+                                    icon = iconType,
+                                    tint = palette.ink,
+                                    fillColor = currentInkColor,
+                                    modifier = Modifier.size(width = 44.dp, height = 56.dp)
+                                )
+                            }
+                        }
+
+                        val eraserLiftDp by animateDpAsState(
+                            targetValue = if (isEraserMode) 10.dp else 0.dp,
+                            animationSpec = tween(if (reduceMotion) KannachMotion.INSTANT else KannachMotion.SOFT),
+                            label = "toolLift_eraser"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(width = 44.dp, height = 56.dp)
+                                .offset(y = -eraserLiftDp)
+                                .alpha(if (isEraserMode) 1f else 0.8f)
+                                .clickable {
+                                    showPaperPopover = false
+                                    if (isEraserMode) {
+                                        showSizePopover = !showSizePopover
+                                    } else {
+                                        showSizePopover = false
+                                        viewModel.setSketchEraserMode(true)
+                                    }
+                                }
+                                .testTag("sketch_tool_eraser"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            KannachIcon(
+                                icon = KannachIconType.ERASER,
+                                tint = palette.ink,
+                                contentDescription = strings.clear,
+                                modifier = Modifier.size(width = 44.dp, height = 56.dp)
                             )
                         }
                     }
@@ -1527,7 +1603,6 @@ fun SketchpadScreen(
                         .fillMaxWidth()
                         .widthIn(max = 520.dp)
                         .clickable(enabled = false) {}
-                        .paperShadow(palette.paperShadow, HandDrawnRadiusShape, offsetY = 6.dp)
                         .clip(HandDrawnRadiusShape)
                         .paperBackground(palette.paperHi)
                         .border(2.dp, palette.ink, HandDrawnRadiusShape)
