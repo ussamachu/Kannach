@@ -178,6 +178,8 @@ object I18n {
         val onboardingBeat2Sub: String,
         val onboardingBeat3: String,
         val onboardingBeat3Sub: String,
+        val onboardingBeat4: String,
+        val onboardingBeat4Sub: String,
         val onboardingNext: String,
         val onboardingSkip: String,
         val onboardingStart: String,

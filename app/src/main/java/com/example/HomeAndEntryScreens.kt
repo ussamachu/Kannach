@@ -10,6 +10,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -73,6 +74,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -132,6 +135,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import java.util.Calendar
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -2494,341 +2498,202 @@ fun FirstRunOnboarding(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalKannachPalette.current
-    val reduceMotion = rememberReduceMotion()
-    var currentBeat by remember { mutableIntStateOf(1) }
-    var visible by remember { mutableStateOf(true) }
+    val handFont = LocalKannachHandFont.current
+    val pagerState = rememberPagerState(pageCount = { 4 })
+    val coroutineScope = rememberCoroutineScope()
 
-    // Sample flower strokes for Beat 2 rendered faithfully in normalized 300x300 space
-    val sampleStrokes = remember {
-        listOf(
-            // Stem: curve upward
-            listOf(
-                Point(150f, 240f),
-                Point(150f, 200f),
-                Point(150f, 150f)
-            ),
-            // Left petal curve
-            listOf(
-                Point(150f, 150f),
-                Point(115f, 120f),
-                Point(125f, 95f),
-                Point(150f, 150f)
-            ),
-            // Right petal curve
-            listOf(
-                Point(150f, 150f),
-                Point(185f, 120f),
-                Point(175f, 95f),
-                Point(150f, 150f)
-            ),
-            // Upper blossom bud
-            listOf(
-                Point(150f, 150f),
-                Point(140f, 85f),
-                Point(160f, 85f),
-                Point(150f, 150f)
-            )
-        )
-    }
-
-    // Animated sprout for Beat 1
-    val sproutProgress = remember { Animatable(if (reduceMotion) 1f else 0f) }
-    LaunchedEffect(currentBeat) {
-        if (currentBeat == 1 && !reduceMotion) {
-            sproutProgress.snapTo(0f)
-            sproutProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = KannachMotion.CEREMONY,
-                    easing = KannachMotion.Settle
-                )
-            )
+    BackHandler(enabled = pagerState.currentPage > 0) {
+        coroutineScope.launch {
+            pagerState.animateScrollToPage(pagerState.currentPage - 1)
         }
     }
 
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(animationSpec = tween(KannachMotion.PAGE)),
-        exit = fadeOut(animationSpec = tween(KannachMotion.PAGE))
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .paperBackground(palette.paper)
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Top row (56.dp, horizontal padding 24.dp): 4 page dots in centre, Skip at the end (hidden on last page)
         Box(
-            modifier = modifier
-                .fillMaxSize()
-                .paperBackground(palette.paper)
-                .statusBarsPadding()
-                .navigationBarsPadding()
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 24.dp)
         ) {
-            // Header / Skip Button (Visible and interactive throughout or after Beat 1)
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Skip Button (>=48dp touch target)
-                Text(
-                    text = strings.onboardingSkip,
-                    fontSize = 15.sp,
-                    fontFamily = LocalKannachHandFont.current,
-                    color = palette.inkFaint,
-                    modifier = Modifier
-                        .clickable {
-                            visible = false
-                            onFinish()
+                for (i in 0 until 4) {
+                    val isCurrent = pagerState.currentPage == i
+                    val dotSize by animateDpAsState(
+                        targetValue = if (isCurrent) 10.dp else 8.dp,
+                        animationSpec = tween(200),
+                        label = "OnboardingDotSize"
+                    )
+                    Canvas(modifier = Modifier.size(12.dp)) {
+                        val r = dotSize.toPx() / 2f
+                        if (isCurrent) {
+                            drawCircle(
+                                color = palette.ink,
+                                radius = r,
+                                center = center
+                            )
+                        } else {
+                            drawCircle(
+                                color = palette.inkFaint,
+                                radius = r,
+                                center = center,
+                                style = Stroke(width = 1.5.dp.toPx())
+                            )
                         }
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                )
+                    }
+                }
             }
 
-            // Central Content per Beat
+            if (pagerState.currentPage < 3) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .heightIn(min = 48.dp)
+                        .widthIn(min = 48.dp)
+                        .clickable { onFinish() }
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = strings.onboardingSkip,
+                        fontSize = 15.sp,
+                        fontFamily = handFont,
+                        color = palette.inkSoft
+                    )
+                }
+            }
+        }
+
+        // Four-page HorizontalPager
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) { page ->
+            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+            val isCurrentPage = pagerState.currentPage == page
+            val textAlpha = (1f - abs(pageOffset)).coerceIn(0f, 1f)
+
+            val title = when (page) {
+                0 -> strings.onboardingBeat1
+                1 -> strings.onboardingBeat2
+                2 -> strings.onboardingBeat3
+                else -> strings.onboardingBeat4
+            }
+            val subtitle = when (page) {
+                0 -> strings.onboardingBeat1Sub
+                1 -> strings.onboardingBeat2Sub
+                2 -> strings.onboardingBeat3Sub
+                else -> strings.onboardingBeat4Sub
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.weight(0.7f))
+                Spacer(modifier = Modifier.weight(0.6f))
 
-                AnimatedContent(
-                    targetState = currentBeat,
-                    transitionSpec = {
-                        (fadeIn(animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)) +
-                                slideInVertically(animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)) { it / 4 })
-                            .togetherWith(
-                                fadeOut(animationSpec = tween(KannachMotion.SOFT)) +
-                                        slideOutVertically(animationSpec = tween(KannachMotion.SOFT)) { -it / 6 }
-                            )
-                    },
-                    label = "OnboardingBeatTransition"
-                ) { beat ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        when (beat) {
-                            1 -> {
-                                // Beat 1: Sprout drawn stroke-by-stroke + poetic intro
-                                Box(
-                                    modifier = Modifier
-                                        .size(120.dp)
-                                        .padding(8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    AnimatedSprout(
-                                        progress = sproutProgress.value,
-                                        tint = palette.greenDeep,
-                                        strokeWidthDp = 3.2.dp,
-                                        modifier = Modifier.size(100.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(32.dp))
-
-                                Text(
-                                    text = strings.onboardingBeat1,
-                                    fontSize = 26.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = LocalKannachHandFont.current,
-                                    color = palette.greenDeep,
-                                    textAlign = TextAlign.Center
-                                )
-
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                Text(
-                                    text = strings.onboardingBeat1Sub,
-                                    fontSize = 16.sp,
-                                    fontFamily = LocalKannachHandFont.current,
-                                    color = palette.inkSoft,
-                                    textAlign = TextAlign.Center,
-                                    lineHeight = 24.sp,
-                                    modifier = Modifier.widthIn(max = 320.dp)
-                                )
-                            }
-                            2 -> {
-                                // Beat 2: Authentic sample day cell sprouting a flower glyph
-                                Box(
-                                    modifier = Modifier
-                                        .size(130.dp)
-                                        .clip(HandDrawnRadiusShape)
-                                        .background(palette.paperHi)
-                                        .dashedHandDrawnBorder(color = palette.line, shape = HandDrawnRadiusShape, strokeWidth = 1.8.dp)
-                                        .padding(12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        modifier = Modifier.fillMaxSize()
-                                    ) {
-                                        Text(
-                                            text = "15",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = LocalKannachHandFont.current,
-                                            color = palette.inkSoft
-                                        )
-                                        Box(
-                                            modifier = Modifier.weight(1f),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            GlyphView(
-                                                strokes = sampleStrokes,
-                                                color = palette.green,
-                                                modifier = Modifier.fillMaxSize(0.85f)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(32.dp))
-
-                                Text(
-                                    text = strings.onboardingBeat2,
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = LocalKannachHandFont.current,
-                                    color = palette.greenDeep,
-                                    textAlign = TextAlign.Center
-                                )
-
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                Text(
-                                    text = strings.onboardingBeat2Sub,
-                                    fontSize = 16.sp,
-                                    fontFamily = LocalKannachHandFont.current,
-                                    color = palette.inkSoft,
-                                    textAlign = TextAlign.Center,
-                                    lineHeight = 24.sp,
-                                    modifier = Modifier.widthIn(max = 320.dp)
-                                )
-                            }
-                            3 -> {
-                                // Beat 3: Invitation to touch any day and begin
-                                Box(
-                                    modifier = Modifier
-                                        .size(110.dp)
-                                        .clip(CircleShape)
-                                        .background(palette.paperHi)
-                                        .dashedHandDrawnBorder(color = palette.green, shape = CircleShape, strokeWidth = 2.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    KannachIcon(
-                                        icon = KannachIconType.SPROUT,
-                                        tint = palette.greenDeep,
-                                        strokeWidthDp = 2.6.dp,
-                                        modifier = Modifier.size(54.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(32.dp))
-
-                                Text(
-                                    text = strings.onboardingBeat3,
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = LocalKannachHandFont.current,
-                                    color = palette.greenDeep,
-                                    textAlign = TextAlign.Center
-                                )
-
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                Text(
-                                    text = strings.onboardingBeat3Sub,
-                                    fontSize = 16.sp,
-                                    fontFamily = LocalKannachHandFont.current,
-                                    color = palette.inkSoft,
-                                    textAlign = TextAlign.Center,
-                                    lineHeight = 24.sp,
-                                    modifier = Modifier.widthIn(max = 320.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Beat Dots Indicator (1, 2, 3)
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 28.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(260.dp)
+                        .graphicsLayer {
+                            translationX = pageOffset * 40.dp.toPx()
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
-                    for (i in 1..3) {
-                        val isCurrent = i == currentBeat
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 5.dp)
-                                .size(if (isCurrent) 10.dp else 7.dp)
-                                .clip(CircleShape)
-                                .background(if (isCurrent) palette.greenDeep else palette.line)
-                        )
-                    }
-                }
-
-                // Action Button (Next or Start)
-                if (currentBeat < 3) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp)
-                            .clip(HandDrawnRadiusAltShape)
-                            .background(palette.paperHi)
-                            .border(1.5.dp, palette.line, HandDrawnRadiusAltShape)
-                            .clickable {
-                                currentBeat += 1
-                            }
-                            .padding(horizontal = 24.dp, vertical = 12.dp)
-                    ) {
-                        Text(
-                            text = strings.onboardingNext,
-                            fontSize = 17.sp,
-                            fontFamily = LocalKannachHandFont.current,
-                            fontWeight = FontWeight.Bold,
-                            color = palette.greenDeep
-                        )
-                    }
-                } else {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 54.dp)
-                            .clip(HandDrawnRadiusAltShape)
-                            .background(palette.green)
-                            .clickable {
-                                visible = false
-                                onFinish()
-                            }
-                            .padding(horizontal = 24.dp, vertical = 14.dp)
-                    ) {
-                        KannachIcon(
-                            icon = KannachIconType.SPROUT,
-                            tint = palette.onGreen,
-                            strokeWidthDp = 2.dp,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = strings.onboardingStart,
-                            fontSize = 18.sp,
-                            fontFamily = LocalKannachHandFont.current,
-                            fontWeight = FontWeight.Bold,
-                            color = palette.onGreen
-                        )
+                    when (page) {
+                        0 -> DrawnScene(SceneWelcome, active = isCurrentPage, swayDegrees = 2.5f)
+                        1 -> SceneDrawDay(active = isCurrentPage)
+                        2 -> SceneYearGrid(active = isCurrentPage)
+                        else -> DrawnScene(ScenePrivate, active = isCurrentPage, pulse = 0.05f)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))
+
+                Text(
+                    text = title,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = handFont,
+                    color = palette.ink,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = textAlpha
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = subtitle,
+                    fontSize = 16.sp,
+                    lineHeight = 24.sp,
+                    fontFamily = handFont,
+                    color = palette.inkSoft,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .widthIn(max = 320.dp)
+                        .graphicsLayer {
+                            alpha = textAlpha
+                        }
+                )
+
+                Spacer(modifier = Modifier.weight(0.4f))
+            }
+        }
+
+        // Bottom button (height 56.dp, fillMaxWidth(0.8f), bottom padding 28.dp, centred)
+        Box(
+            modifier = Modifier
+                .padding(bottom = 28.dp)
+                .fillMaxWidth(0.8f)
+                .height(56.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(palette.green)
+                .clickable {
+                    if (pagerState.currentPage < 3) {
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        }
+                    } else {
+                        onFinish()
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedContent(
+                targetState = if (pagerState.currentPage < 3) strings.onboardingNext else strings.onboardingStart,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(200)).togetherWith(fadeOut(animationSpec = tween(200)))
+                },
+                label = "OnboardingButtonText"
+            ) { label ->
+                Text(
+                    text = label,
+                    fontSize = 18.sp,
+                    fontFamily = handFont,
+                    fontWeight = FontWeight.Bold,
+                    color = palette.onGreen,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
 }
+

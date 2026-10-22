@@ -994,3 +994,7 @@ M3 (v10 §3 MonthPage top-aligned grid with single-Canvas horizontal/vertical in
 M4 (v10 §4 Today red inkCircle with 450ms PathMeasure animation, horizontal page-flip & 70px swipe, FoldedPaperCorner at 56.dp, and MainActivity wiring) — done — app/src/main/java/com/example/InkLines.kt, app/src/main/java/com/example/MonthPage.kt, app/src/main/java/com/example/MainActivity.kt
 v10: Home is MonthPage (hand-drawn ink lines); YearField is the year overview.
 G5 — done — StrokeMath.kt
+O1 — done — I18n.kt, I18nEn.kt, I18nFr.kt, I18nEs.kt, I18nAr.kt
+O2 — done — OnboardingArt.kt
+O3 — done — OnboardingArt.kt
+O4 — done — HomeAndEntryScreens.kt
