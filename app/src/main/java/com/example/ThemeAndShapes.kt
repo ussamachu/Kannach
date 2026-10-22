@@ -117,54 +117,74 @@ val BasePalette = KannachPalette(
 
 // Season: Winter (months 12, 1, 2)
 val WinterPalette = BasePalette.copy(
-    green = Color(0xFF3F7566),
-    greenDeep = Color(0xFF2C5850),
-    greenSoft = Color(0xFFE2EEEA),
-    greenLine = Color(0xFFC3D9D2),
-    paper = Color(0xFFF5F8F6),
-    paperHi = Color(0xFFFDFFFE)
+    green = Color(0xFF4B7A8C),
+    greenDeep = Color(0xFF2F5565),
+    greenSoft = Color(0xFFE3EDF1),
+    greenLine = Color(0xFFC5D7DE),
+    paper = Color(0xFFF4F7F8),
+    paperHi = Color(0xFFFDFEFF),
+    paperLo = Color(0xFFE9EFF2),
+    ink = Color(0xFF2E4350),
+    inkSoft = Color(0xFF6E8794),
+    inkFaint = Color(0xFFA3B6BF),
+    dot = Color(0xFFC2D2D9),
+    line = Color(0xFFD3DEE3)
 )
 
 // Season: Spring (months 3, 4, 5)
 val SpringPalette = BasePalette.copy(
-    green = Color(0xFF5AA25F),
-    greenDeep = Color(0xFF386B42),
-    paper = Color(0xFFFBFAF0),
-    paperHi = Color(0xFFFFFDF5)
+    green = Color(0xFF55A060),
+    greenDeep = Color(0xFF2F6B3E),
+    greenSoft = Color(0xFFE4F1DC),
+    greenLine = Color(0xFFC9DEBE),
+    paper = Color(0xFFFAF8F0),
+    paperHi = Color(0xFFFFFDF6),
+    paperLo = Color(0xFFF0EEDC),
+    ink = Color(0xFF34523A),
+    inkSoft = Color(0xFF76907A),
+    inkFaint = Color(0xFFA7B8A3),
+    dot = Color(0xFFC7D8BC),
+    line = Color(0xFFDCE0C8)
 )
 
 // Season: Summer (months 6, 7, 8)
 val SummerPalette = BasePalette.copy(
-    green = Color(0xFF6A9C3F),
-    greenDeep = Color(0xFF476B28),
-    greenSoft = Color(0xFFEAF0DC),
-    greenLine = Color(0xFFD3DDBD),
-    paper = Color(0xFFFDFAF0),
-    paperHi = Color(0xFFFFFDF3)
+    green = Color(0xFF8A9A2B),
+    greenDeep = Color(0xFF5C6A1A),
+    greenSoft = Color(0xFFF1F2D3),
+    greenLine = Color(0xFFDADDA6),
+    paper = Color(0xFFFFF9E8),
+    paperHi = Color(0xFFFFFCF0),
+    paperLo = Color(0xFFF7EFD2),
+    ink = Color(0xFF4A4A22),
+    inkSoft = Color(0xFF8A8A55),
+    inkFaint = Color(0xFFB8B88A),
+    dot = Color(0xFFD8D6A0),
+    line = Color(0xFFE8E0BE)
 )
 
 // Season: Autumn (months 9, 10, 11)
 val AutumnPalette = BasePalette.copy(
-    green = Color(0xFF4F8A52),
-    greenDeep = Color(0xFF33613A),
-    greenSoft = Color(0xFFE6EEDB),
-    greenLine = Color(0xFFCDDABB),
-    paper = Color(0xFFF8F4E8),
-    paperHi = Color(0xFFFFFCF2)
+    green = Color(0xFFC0683A),
+    greenDeep = Color(0xFF8A4424),
+    greenSoft = Color(0xFFF6E3D6),
+    greenLine = Color(0xFFE7C9B5),
+    paper = Color(0xFFFAF1E6),
+    paperHi = Color(0xFFFFF8EE),
+    paperLo = Color(0xFFF1E4D2),
+    ink = Color(0xFF4A3426),
+    inkSoft = Color(0xFF8E7360),
+    inkFaint = Color(0xFFBBA591),
+    dot = Color(0xFFE2C9B3),
+    line = Color(0xFFE9D8C3)
 )
 
-fun getSeasonalPalette(month: Int, seasonOverride: String = "auto"): KannachPalette {
-    return when (seasonOverride.lowercase()) {
-        "winter" -> WinterPalette
-        "spring" -> SpringPalette
-        "summer" -> SummerPalette
-        "autumn" -> AutumnPalette
-        else -> when (month) {
-            12, 1, 2 -> WinterPalette
-            3, 4, 5 -> SpringPalette
-            6, 7, 8 -> SummerPalette
-            else -> AutumnPalette
-        }
+fun getSeasonalPalette(month: Int, @Suppress("UNUSED_PARAMETER") seasonOverride: String = "auto"): KannachPalette {
+    return when (month) {
+        12, 1, 2 -> WinterPalette
+        3, 4, 5 -> SpringPalette
+        6, 7, 8 -> SummerPalette
+        else -> AutumnPalette
     }
 }
 

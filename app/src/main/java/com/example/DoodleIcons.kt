@@ -334,6 +334,30 @@ fun doodleSpecFor(icon: KannachIconType): DoodleSpec? = when (icon) {
         ),
         spot = "M12 22 L24 11 L36 22 L36 40 L12 40 Z"
     )
+    KannachIconType.PLANT -> {
+        val pot = "M17 36 L19 44 L29 44 L31 36 Z"
+        DoodleSpec(
+            lines = listOf(
+                pot,
+                "M15 36 L33 36",
+                "M24 36 C24 28 23 20 24 12",
+                "M24 28 C16 28 11 23 11 15 C19 15 24 20 24 28 Z",
+                "M24 22 C24 14 30 9 38 9 C38 17 32 22 24 22 Z",
+                "M24 12 C21 9 22 5 24 4 C26 5 27 9 24 12 Z"
+            ),
+            spot = pot
+        )
+    }
+    KannachIconType.ABOUT -> {
+        val shield = "M24 6 C30 10 36 11 40 11 C40 24 36 36 24 42 C12 36 8 24 8 11 C12 11 18 10 24 6 Z"
+        DoodleSpec(
+            lines = listOf(
+                shield,
+                "M24 31 C19 27 17 24 17 21 C17 18 20 17 22 18 C23 18 24 19 24 20 C24 19 25 18 26 18 C28 17 31 18 31 21 C31 24 29 27 24 31 Z"
+            ),
+            spot = shield
+        )
+    }
 }
 
 @Composable
@@ -370,7 +394,8 @@ internal fun RenderDoodleIcon(
         KannachIconType.SPARKLE,
         KannachIconType.NOTEBOOK,
         KannachIconType.BELL,
-        KannachIconType.HUT -> palette.orange.copy(alpha = 0.45f)
+        KannachIconType.HUT,
+        KannachIconType.PLANT -> palette.orange.copy(alpha = 0.45f)
         KannachIconType.TRASH,
         KannachIconType.FLOWER,
         KannachIconType.BOUQUET,
@@ -385,7 +410,8 @@ internal fun RenderDoodleIcon(
         KannachIconType.LEAF,
         KannachIconType.WINTER,
         KannachIconType.TALK,
-        KannachIconType.EYE_OFF -> palette.green.copy(alpha = 0.45f)
+        KannachIconType.EYE_OFF,
+        KannachIconType.ABOUT -> palette.green.copy(alpha = 0.45f)
         else -> null
     }
 

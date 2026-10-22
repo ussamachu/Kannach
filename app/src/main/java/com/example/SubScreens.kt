@@ -1816,12 +1816,14 @@ fun SettingsScreen(
     // Sheet & expansion states (not persisted)
     var showLanguageSheet by remember { mutableStateOf(false) }
     var showBackupSheet by remember { mutableStateOf(false) }
+    var showAboutSheet by remember { mutableStateOf(false) }
     var isMoreExpanded by remember { mutableStateOf(false) }
 
-    androidx.activity.compose.BackHandler(enabled = showLanguageSheet || showBackupSheet) {
+    androidx.activity.compose.BackHandler(enabled = showLanguageSheet || showBackupSheet || showAboutSheet) {
         when {
             showLanguageSheet -> showLanguageSheet = false
             showBackupSheet -> showBackupSheet = false
+            showAboutSheet -> showAboutSheet = false
         }
     }
 
@@ -1979,9 +1981,9 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     KannachIcon(
-                        icon = KannachIconType.HUT,
+                        icon = KannachIconType.PLANT,
                         tint = palette.ink,
-                        modifier = Modifier.size(84.dp)
+                        modifier = Modifier.size(96.dp)
                     )
                     Text(
                         text = strings.settings,
@@ -2144,57 +2146,6 @@ fun SettingsScreen(
                                 }
                             }
                         } else null
-                    )
-
-                    // =========================================================================
-                    // ROW 3: Season colors (one row, 5 choices as small swatches under description)
-                    // =========================================================================
-                    val seasonTileIcon = when (userSettings.seasonOverride) {
-                        "summer" -> KannachIconType.SUMMER
-                        "autumn" -> KannachIconType.AUTUMN
-                        "winter" -> KannachIconType.WINTER
-                        else -> KannachIconType.SPRING
-                    }
-                    val seasonSwatches = listOf(
-                        Triple("auto", strings.seasonAuto, Color(0xFF56945F)),
-                        Triple("spring", strings.seasonSpring, Color(0xFF5AA25F)),
-                        Triple("summer", strings.seasonSummer, Color(0xFF6A9C3F)),
-                        Triple("autumn", strings.seasonAutumn, Color(0xFFC87D46)),
-                        Triple("winter", strings.seasonWinter, Color(0xFF3F7566))
-                    )
-
-                    SettingsDoodleRow(
-                        title = strings.settingsSeasonLabel,
-                        description = strings.settingsDescSeasons,
-                        tile = {
-                            SettingsTile(selected = null) {
-                                KannachIcon(
-                                    icon = seasonTileIcon,
-                                    tint = palette.ink,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        },
-                        modifier = Modifier.testTag("settings_row_season"),
-                        extraContent = {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                seasonSwatches.forEach { (key, label, swatchColor) ->
-                                    val isSelected = userSettings.seasonOverride == key
-                                    SettingsSeasonSwatch(
-                                        key = key,
-                                        label = label,
-                                        color = swatchColor,
-                                        selected = isSelected,
-                                        onClick = { viewModel.setSeasonOverride(key) },
-                                        modifier = Modifier.testTag("settings_season_$key")
-                                    )
-                                }
-                            }
-                        }
                     )
 
                     // =========================================================================
@@ -2463,6 +2414,25 @@ fun SettingsScreen(
                     )
 
                     // =========================================================================
+                    // ROW 8: About Kannach & privacy
+                    // =========================================================================
+                    SettingsDoodleRow(
+                        title = strings.settingsAboutRow,
+                        description = strings.settingsDescAbout,
+                        tile = {
+                            SettingsTile(selected = null) {
+                                KannachIcon(
+                                    icon = KannachIconType.ABOUT,
+                                    tint = palette.ink,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        },
+                        onClick = { showAboutSheet = true },
+                        modifier = Modifier.testTag("settings_row_about")
+                    )
+
+                    // =========================================================================
                     // FOOTER: centered, 13 sp, palette.inkFaint: "Made By" line
                     // =========================================================================
                     Text(
@@ -2704,6 +2674,136 @@ fun SettingsScreen(
                                 modifier = Modifier.testTag("settings_copy_reminder_switch")
                             )
                         }
+                    }
+                }
+            }
+
+            // =========================================================================
+            // SHEET 3: About Kannach & privacy bottom sheet
+            // =========================================================================
+            if (showAboutSheet) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(palette.scrim)
+                        .clickable { showAboutSheet = false }
+                        .testTag("settings_about_sheet_scrim"),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 560.dp)
+                            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                            .background(palette.paperHi)
+                            .clickable(enabled = false) {}
+                            .navigationBarsPadding()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp, vertical = 20.dp)
+                            .testTag("settings_about_sheet")
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = { showAboutSheet = false },
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                KannachIcon(
+                                    icon = KannachIconType.X,
+                                    tint = palette.inkSoft,
+                                    contentDescription = strings.dismiss,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            KannachIcon(
+                                icon = KannachIconType.ABOUT,
+                                tint = palette.ink,
+                                modifier = Modifier.size(64.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = strings.aboutTitle,
+                            fontSize = 22.sp,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.greenDeep,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = strings.aboutWhatTitle,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.ink
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = strings.aboutWhatBody,
+                            fontSize = 16.sp,
+                            lineHeight = 24.sp,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.ink
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = strings.aboutPrivacyTitle,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = LocalKannachHandFont.current,
+                            color = palette.ink
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            strings.aboutPrivacyBody.split("\n").filter { it.isNotBlank() }.forEach { line ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(top = 9.dp)
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(palette.green)
+                                    )
+                                    Text(
+                                        text = line,
+                                        fontSize = 16.sp,
+                                        lineHeight = 24.sp,
+                                        fontFamily = LocalKannachHandFont.current,
+                                        color = palette.ink,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(32.dp))
                     }
                 }
             }

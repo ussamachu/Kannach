@@ -53,7 +53,7 @@ object I18n {
     fun getGentlePrompts(language: String): List<String> =
         if (isRtl(language)) GENTLE_PROMPTS_AR else GENTLE_PROMPTS_EN
 
-    data class Strings(
+    class Strings(
         val dir: String,
         val appTitle: String,
         val appSub: String,
@@ -91,6 +91,13 @@ object I18n {
         val settingsDescHide: String,
         val settingsDescMore: String,
         val settingsDescShare: String,
+        val settingsAboutRow: String,
+        val settingsDescAbout: String,
+        val aboutTitle: String,
+        val aboutWhatTitle: String,
+        val aboutWhatBody: String,
+        val aboutPrivacyTitle: String,
+        val aboutPrivacyBody: String,
         val confirmDeleteTitle: String,
         val confirmDeleteMsg: String,
         val confirmCloseTitle: String,
@@ -251,7 +258,6 @@ object I18n {
         val reminderPermAllow: String,
         val reminderPermSettings: String,
         val reminderTestBtn: String,
-        val settingsWritingTitle: String,
         val settingsWeekStartLabel: String,
         val weekStartSat: String,
         val weekStartSun: String,
@@ -263,27 +269,12 @@ object I18n {
         val handSizeSmall: String,
         val handSizeNormal: String,
         val handSizeLarge: String,
-        val settingsAppearanceTitle: String,
-        val settingsSeasonLabel: String,
-        val seasonAuto: String,
-        val seasonWinter: String,
-        val seasonSpring: String,
-        val seasonSummer: String,
-        val seasonAutumn: String,
-        val settingsReduceMotionLabel: String,
-        val reduceMotionSystem: String,
-        val reduceMotionOn: String,
-        val settingsHapticsLabel: String,
-        val toggleOn: String,
-        val toggleOff: String,
-        val settingsPrivacyTitle: String,
         val settingsHideRecents: String,
         val settingsLastBackup: String,
         val settingsBackupNever: String,
         val settingsCopyReminderLabel: String,
         val copyReminderMonthly: String,
         val copyReminderNotifMsg: String,
-        val privacyDeviceNote: String,
         val settingsSignatureExport: String,
         val settingsReplayWelcome: String,
         val settingsTellFriend: String,
@@ -297,11 +288,11 @@ object I18n {
         val drawWhisper4: String,
         val drawSaved1: String,
         val drawSaved2: String,
-        val notifMorning: List<String> = emptyList(),
-        val notifAfternoon: List<String> = emptyList(),
-        val notifEvening: List<String> = emptyList(),
-        val notifNight: List<String> = emptyList(),
-        val notifComeback: List<String> = emptyList()
+        val notifMorning: List<String>,
+        val notifAfternoon: List<String>,
+        val notifEvening: List<String>,
+        val notifNight: List<String>,
+        val notifComeback: List<String>
     ) {
         fun messagesForPool(pool: NotificationPool): List<String> {
             return when (pool) {

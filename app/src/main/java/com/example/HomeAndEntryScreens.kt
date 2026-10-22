@@ -60,13 +60,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
@@ -1403,19 +1407,15 @@ private fun EntryEditBottomSheet(
     val hasExisting = entries.containsKey(dateKey)
     val reduceMotion = rememberReduceMotion()
 
-    // Full-height authentic journal paper page (W1)
+    // Full-bleed paper page (W1 / D5)
     Box(
         modifier = Modifier
-            .fillMaxWidth(0.96f)
-            .fillMaxHeight(0.93f)
-            .widthIn(max = 520.dp)
+            .fillMaxSize()
             .clickable(enabled = false) {}
-            .shadow(24.dp, HandDrawnRadiusShape)
-            .clip(HandDrawnRadiusShape)
             .background(palette.paper)
-            .border(2.dp, palette.ink, HandDrawnRadiusShape)
             .paperBackground(palette.paper)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .systemBarsPadding()
+            .imePadding()
     ) {
         AnimatedContent(
             targetState = writeStep,
@@ -1490,8 +1490,8 @@ private fun EntryEditBottomSheet(
 }
 
 /**
- * Pulse 1 — Arrive & Write (W1, W5, W6, W8).
- * Large handwritten date, soft-filling heart, ruled paper filling the page, prompt box deleted.
+ * Pulse 1 — Arrive & Write (W1, W5, W6, W8, D5).
+ * Calm full-bleed paper page with centered date pill, unruled text area, and solid Leave mark button.
  */
 @Composable
 private fun WritePulseOne(
@@ -1506,6 +1506,13 @@ private fun WritePulseOne(
     reduceMotion: Boolean
 ) {
     val palette = LocalKannachPalette.current
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(dateKey) {
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) {}
+    }
 
     val heartFillColor by animateColorAsState(
         targetValue = if (isFav) palette.red.copy(alpha = 0.45f) else Color.Transparent,
@@ -1519,11 +1526,12 @@ private fun WritePulseOne(
     )
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header Row
+        // Top bar (height 56.dp, no divider)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp),
+                .height(56.dp)
+                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -1547,47 +1555,31 @@ private fun WritePulseOne(
                     !it.equals(strings.today, ignoreCase = true) &&
                     !it.equals(strings.todayWord, ignoreCase = true)
             }.orEmpty()
-            val distanceLineText = if (isToday) {
-                if (cleanRelative.isNotBlank()) "${strings.today} · $cleanRelative" else strings.today
+            val relativeWord = if (isToday) strings.today else cleanRelative.ifBlank { relativeDistance }
+            val pillDateText = if (relativeWord.isNotBlank()) {
+                "$formattedDate · $relativeWord"
             } else {
-                relativeDistance
+                formattedDate
             }
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f)
+            Box(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .padding(horizontal = 8.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(palette.paperLo)
+                    .border(1.2.dp, palette.line, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
             ) {
-                var writeDateFontSize by remember(formattedDate) { mutableStateOf(17.sp) }
                 Text(
-                    text = formattedDate,
-                    fontSize = writeDateFontSize,
-                    lineHeight = 26.sp,
-                    style = ArabicDisplayStyle,
-                    fontWeight = FontWeight.Bold,
+                    text = pillDateText,
+                    fontSize = 14.sp,
                     fontFamily = LocalKannachHandFont.current,
-                    color = palette.greenDeep,
+                    color = palette.ink,
                     maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 4.dp),
-                    onTextLayout = { result ->
-                        if (result.hasVisualOverflow && writeDateFontSize > 15.sp) {
-                            writeDateFontSize = 15.sp
-                        }
-                    }
+                    overflow = TextOverflow.Ellipsis
                 )
-                if (distanceLineText.isNotBlank()) {
-                    Text(
-                        text = distanceLineText,
-                        fontSize = 12.5.sp,
-                        fontFamily = LocalKannachHandFont.current,
-                        color = palette.greenDeep,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
             }
 
             IconButton(
@@ -1604,77 +1596,70 @@ private fun WritePulseOne(
             }
         }
 
-        // Ruled Paper Text Area extending to bottom of page (W6, W8: No canvas, no prompt box)
-        val handSp = LocalHandwritingSp.current
-        val lineSpacingPx = with(LocalDensity.current) { (handSp * 1.75f).sp.toPx() }
-        val ruledLineStyle = TextStyle(
-            fontSize = handSp.sp,
-            lineHeight = (handSp * 1.75f).sp,
-            lineHeightStyle = LineHeightStyle(
-                alignment = LineHeightStyle.Alignment.Bottom,
-                trim = LineHeightStyle.Trim.None
-            ),
+        // Writing area: unruled calm paper
+        val writeTextStyle = TextStyle(
+            fontSize = 22.sp,
+            lineHeight = 34.sp,
             fontFamily = LocalKannachHandFont.current,
             color = palette.ink
         )
-        Box(
+
+        Spacer(modifier = Modifier.height(96.dp))
+
+        BasicTextField(
+            value = text,
+            onValueChange = { viewModel.updateSheetText(it) },
+            textStyle = writeTextStyle,
+            cursorBrush = SolidColor(palette.green),
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .linedPaperBackground(palette.line, lineSpacingPx)
-                .padding(start = 8.dp, end = 8.dp, top = 0.dp, bottom = 6.dp)
-        ) {
-            if (text.isEmpty()) {
-                Text(
-                    text = strings.entryPlaceholder,
-                    fontSize = handSp.sp,
-                    lineHeight = (handSp * 1.75f).sp,
-                    fontFamily = LocalKannachHandFont.current,
-                    color = palette.inkFaint,
-                    style = ruledLineStyle.copy(color = palette.inkFaint)
-                )
+                .padding(horizontal = 28.dp)
+                .focusRequester(focusRequester)
+                .testTag("diary_entry_text_input"),
+            decorationBox = { innerTextField ->
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (text.isEmpty()) {
+                        Text(
+                            text = strings.entryPlaceholder,
+                            style = writeTextStyle.copy(color = palette.inkFaint)
+                        )
+                    }
+                    innerTextField()
+                }
             }
-            BasicTextField(
-                value = text,
-                onValueChange = { viewModel.updateSheetText(it) },
-                textStyle = ruledLineStyle,
-                cursorBrush = SolidColor(palette.greenDeep),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .testTag("diary_entry_text_input")
-            )
-        }
+        )
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Corner Next Step Arrow (W1)
+        // Bottom: solid Leave mark button at the end side
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
                 modifier = Modifier
-                    .clip(HandDrawnRadiusShape)
-                    .background(palette.greenSoft)
-                    .border(1.3.dp, palette.green, HandDrawnRadiusShape)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(palette.green)
                     .clickable { viewModel.setWriteStep(2) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = strings.leaveMark,
-                    fontSize = 15.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = LocalKannachHandFont.current,
-                    color = palette.greenDeep
+                    color = palette.onGreen
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 KannachIcon(
                     icon = if (isRtl) KannachIconType.CHEV_L else KannachIconType.CHEV_R,
-                    tint = palette.greenDeep,
+                    tint = palette.onGreen,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -1705,7 +1690,8 @@ private fun WritePulseTwo(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Header: Back arrow to Step 1 + Title + Close
