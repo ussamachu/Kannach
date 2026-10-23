@@ -11,6 +11,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -153,7 +155,7 @@ fun KannachApp(viewModel: MainViewModel) {
     }
 
     val nowMonth = remember { java.util.Calendar.getInstance().get(java.util.Calendar.MONTH) + 1 }
-    val tabSlidePx = remember(density) { with(density) { 8.dp.roundToPx() } }
+    val tabSlidePx = remember(density) { with(density) { 14.dp.roundToPx() } }
     val isImeVisible = WindowInsets.ime.getBottom(density) > 0
     val navBarBottomPx = WindowInsets.navigationBars.getBottom(density)
     val navBarBottom = with(density) { navBarBottomPx.toDp() }
@@ -219,15 +221,23 @@ fun KannachApp(viewModel: MainViewModel) {
                         val enterOffset = tabSlidePx * sign
                         val exitOffset = -tabSlidePx * sign
 
-                        (fadeIn(animationSpec = tween(KannachMotion.SOFT, easing = KannachMotion.Settle)) +
+                        (fadeIn(animationSpec = tween(KannachMotion.SOFT, delayMillis = 40, easing = KannachMotion.Settle)) +
                             slideInHorizontally(
                                 animationSpec = tween(KannachMotion.SOFT, easing = KannachMotion.Settle),
                                 initialOffsetX = { enterOffset }
+                            ) +
+                            scaleIn(
+                                initialScale = 0.97f,
+                                animationSpec = tween(KannachMotion.SOFT, easing = KannachMotion.Settle)
                             )) togetherWith
                             (fadeOut(animationSpec = tween(KannachMotion.SOFT, easing = KannachMotion.Settle)) +
                                 slideOutHorizontally(
                                     animationSpec = tween(KannachMotion.SOFT, easing = KannachMotion.Settle),
                                     targetOffsetX = { exitOffset }
+                                ) +
+                                scaleOut(
+                                    targetScale = 0.985f,
+                                    animationSpec = tween(KannachMotion.SOFT, easing = KannachMotion.Settle)
                                 ))
                     }
                 },

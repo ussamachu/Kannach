@@ -122,7 +122,9 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -152,7 +154,8 @@ import kotlin.math.sin
 fun GlyphView(
     strokes: List<List<Point>>,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    revealProgress: () -> Float = { 1f }
 ) {
     Spacer(
         modifier = modifier.drawWithCache {
@@ -171,6 +174,10 @@ fun GlyphView(
                 )
 
                 val paths = ArrayList<Path>(strokes.size)
+                val measures = ArrayList<PathMeasure>(strokes.size)
+                val lengths = FloatArray(strokes.size)
+                var totalLength = 0f
+
                 for (stroke in strokes) {
                     if (stroke.isNotEmpty()) {
                         val path = StrokeMath.composePathFrom(stroke)
@@ -179,13 +186,38 @@ fun GlyphView(
                             translate(dx / scale, dy / scale)
                         }
                         path.transform(matrix)
+                        val pm = PathMeasure().apply { setPath(path, false) }
+                        val len = pm.length
+                        lengths[paths.size] = len
+                        totalLength += len
                         paths.add(path)
+                        measures.add(pm)
                     }
                 }
+                val segPath = Path()
 
                 onDrawBehind {
-                    for (path in paths) {
-                        drawPath(path = path, color = color, style = strokeStyle)
+                    val progress = revealProgress().coerceIn(0f, 1f)
+                    if (progress >= 1f) {
+                        for (path in paths) {
+                            drawPath(path = path, color = color, style = strokeStyle)
+                        }
+                    } else if (progress > 0f && totalLength > 0f) {
+                        val targetLen = totalLength * progress
+                        var accumulated = 0f
+                        for (i in paths.indices) {
+                            val len = lengths[i]
+                            if (accumulated >= targetLen) break
+                            val end = min(len, targetLen - accumulated)
+                            if (end >= len) {
+                                drawPath(path = paths[i], color = color, style = strokeStyle)
+                            } else if (end > 0f) {
+                                segPath.reset()
+                                measures[i].getSegment(0f, end, segPath, true)
+                                drawPath(path = segPath, color = color, style = strokeStyle)
+                            }
+                            accumulated += len
+                        }
                     }
                 }
             }
@@ -637,6 +669,9 @@ private fun PaperDockSlot(
     hasBadge: Boolean = false
 ) {
     val palette = LocalKannachPalette.current
+    val hapticFeedback = LocalHapticFeedback.current
+    val hapticsEnabled = LocalHapticsEnabled.current
+    var playKey by remember { mutableIntStateOf(0) }
     val highlightTrim = remember { Animatable(if (selected) 1f else 0f) }
     val pathMeasure = remember { PathMeasure() }
 
@@ -668,7 +703,13 @@ private fun PaperDockSlot(
                 enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
+                onClick = {
+                    playKey++
+                    if (hapticsEnabled) {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+                    onClick()
+                }
             )
             .drawBehind {
                 val progress = highlightTrim.value
@@ -701,17 +742,20 @@ private fun PaperDockSlot(
                 DockDoodle.PAGE -> DockDoodleIcon(
                     doodle = DockDoodle.PAGE,
                     selected = selected,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(32.dp),
+                    playKey = playKey
                 )
                 DockDoodle.GARDEN -> DockDoodleIcon(
                     doodle = DockDoodle.GARDEN,
                     selected = selected,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(32.dp),
+                    playKey = playKey
                 )
                 DockDoodle.DRAW -> DockDoodleIcon(
                     doodle = DockDoodle.DRAW,
                     selected = selected,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(32.dp),
+                    playKey = playKey
                 )
             }
             if (hasBadge) {
@@ -1026,8 +1070,25 @@ fun EntrySheetOverlay(
 
             AnimatedVisibility(
                 visible = mode == SheetMode.EDIT,
-                enter = kannachSheetEnter(reduceMotion),
-                exit = kannachSheetExit(reduceMotion)
+                enter = if (reduceMotion) {
+                    fadeIn(tween(KannachMotion.INSTANT))
+                } else {
+                    slideInVertically(
+                        initialOffsetY = { it / 6 },
+                        animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                    ) + fadeIn(tween(KannachMotion.SOFT)) + scaleIn(
+                        initialScale = 0.96f,
+                        animationSpec = tween(KannachMotion.PAGE, easing = KannachMotion.Settle)
+                    )
+                },
+                exit = if (reduceMotion) {
+                    fadeOut(tween(KannachMotion.INSTANT))
+                } else {
+                    slideOutVertically(
+                        targetOffsetY = { it / 8 },
+                        animationSpec = tween(KannachMotion.SOFT)
+                    ) + fadeOut(tween(KannachMotion.INSTANT))
+                }
             ) {
                 EntryEditBottomSheet(
                     viewModel = viewModel,
@@ -1062,6 +1123,20 @@ private fun MemoryCardView(
     val strings = I18n.forLanguage(language)
     val entries by viewModel.entries.collectAsState()
     val entry = entries[dateKey] ?: DayEntry()
+    val reduceMotion = rememberReduceMotion()
+    val anim = remember(dateKey) { Animatable(0f) }
+
+    LaunchedEffect(dateKey, reduceMotion) {
+        if (reduceMotion) {
+            anim.snapTo(1f)
+        } else {
+            anim.snapTo(0f)
+            anim.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 900, easing = KannachMotion.Settle)
+            )
+        }
+    }
 
     // M2: Seasonal palette of the entry's own month!
     val entryMonth = remember(dateKey) {
@@ -1231,7 +1306,8 @@ private fun MemoryCardView(
                         modifier = Modifier
                             .fillMaxWidth(0.62f)
                             .widthIn(max = 260.dp)
-                            .aspectRatio(1f)
+                            .aspectRatio(1f),
+                        revealProgress = { anim.value }
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -1939,14 +2015,15 @@ fun PlantingCeremonyOverlay(viewModel: MainViewModel) {
     }
 
     val p = progress.value
+    val density = LocalDensity.current
     val currentX = anim.startOffset.x + (anim.targetOffset.x - anim.startOffset.x) * p
-    val arcHeight = with(LocalDensity.current) { 70.dp.toPx() }
+    val arcHeight = with(density) { 70.dp.toPx() }
     val arcOffset = sin(p * Math.PI.toFloat()) * arcHeight
     val currentY = anim.startOffset.y + (anim.targetOffset.y - anim.startOffset.y) * p - arcOffset
 
     val targetW = anim.targetSize.width.toFloat().coerceAtLeast(10f)
     val targetH = anim.targetSize.height.toFloat().coerceAtLeast(10f)
-    val initialSizePx = with(LocalDensity.current) { 200.dp.toPx() }
+    val initialSizePx = with(density) { 200.dp.toPx() }
     val currentW = initialSizePx + (targetW - initialSizePx) * p
     val currentH = initialSizePx + (targetH - initialSizePx) * p
 
@@ -1955,26 +2032,73 @@ fun PlantingCeremonyOverlay(viewModel: MainViewModel) {
     } catch (_: Exception) {
         palette.green
     }
+    val shadowColor = palette.ink.copy(alpha = (0.10f * (1f - p)).coerceIn(0f, 1f))
 
     Box(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val cp = progress.value
+            if (cp in 0.05f..0.95f) {
+                val baseRadius = 2.dp.toPx()
+                for (k in 1..5) {
+                    val pk = (cp - 0.06f * k).coerceAtLeast(0f)
+                    val kx = anim.startOffset.x + (anim.targetOffset.x - anim.startOffset.x) * pk
+                    val ky = anim.startOffset.y + (anim.targetOffset.y - anim.startOffset.y) * pk - sin(pk * Math.PI.toFloat()) * arcHeight
+                    val kw = initialSizePx + (targetW - initialSizePx) * pk
+                    val kh = initialSizePx + (targetH - initialSizePx) * pk
+                    val dotRadius = baseRadius * (1f - k * 0.15f)
+                    val dotAlpha = 0.25f * (1f - k * 0.18f)
+                    drawCircle(
+                        color = palette.ink.copy(alpha = dotAlpha),
+                        radius = dotRadius,
+                        center = Offset(kx + kw / 2f, ky + kh / 2f)
+                    )
+                }
+            }
+        }
+
         Box(
             modifier = Modifier
                 .offset {
                     androidx.compose.ui.unit.IntOffset(currentX.roundToInt(), currentY.roundToInt())
                 }
                 .size(
-                    width = with(LocalDensity.current) { currentW.toDp() },
-                    height = with(LocalDensity.current) { currentH.toDp() }
-                ),
+                    width = with(density) { currentW.toDp() },
+                    height = with(density) { currentH.toDp() }
+                )
+                .graphicsLayer {
+                    val cp = progress.value
+                    rotationZ = (1f - cp) * -9f + sin(cp * Math.PI.toFloat() * 2f) * 3f
+                    val extraScale = if (cp > 0.85f) {
+                        1f + 0.06f * sin(((cp - 0.85f) / 0.15f) * Math.PI.toFloat())
+                    } else {
+                        1f
+                    }
+                    scaleX = extraScale
+                    scaleY = extraScale
+                },
             contentAlignment = Alignment.Center
         ) {
             if (anim.strokes.isNotEmpty()) {
+                GlyphView(
+                    strokes = anim.strokes,
+                    color = shadowColor,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .offset(x = 3.dp, y = 4.dp)
+                )
                 GlyphView(
                     strokes = anim.strokes,
                     color = glyphColor,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
+                KannachIcon(
+                    icon = KannachIconType.SPROUT,
+                    tint = shadowColor,
+                    modifier = Modifier
+                        .fillMaxSize(0.7f)
+                        .offset(x = 3.dp, y = 4.dp)
+                )
                 KannachIcon(
                     icon = KannachIconType.SPROUT,
                     tint = glyphColor,
