@@ -21,7 +21,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -609,8 +613,8 @@ fun SceneYearGrid(
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.TopStart)
-                                        .padding(start = 3.dp, top = 2.dp)
-                                        .size(width = 16.dp, height = 14.dp)
+                                        .padding(start = 2.dp, top = 2.dp)
+                                        .size(width = 18.dp, height = 16.dp)
                                         .then(
                                             if (isTargetCell) {
                                                 Modifier.drawBehind {
@@ -632,9 +636,20 @@ fun SceneYearGrid(
                                     Text(
                                         text = dayNum.toString(),
                                         fontSize = 9.sp,
+                                        lineHeight = 9.sp,
                                         fontFamily = handFont,
                                         fontWeight = if (isCircled) FontWeight.Bold else null,
-                                        color = if (isCircled) palette.ink else palette.ink.copy(alpha = 0.45f)
+                                        color = if (isCircled) palette.ink else palette.ink.copy(alpha = 0.45f),
+                                        style = LocalTextStyle.current.copy(
+                                            lineHeightStyle = LineHeightStyle(
+                                                alignment = LineHeightStyle.Alignment.Center,
+                                                trim = LineHeightStyle.Trim.Both
+                                            ),
+                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                                        ),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier.wrapContentSize(unbounded = true)
                                     )
                                 }
                             }

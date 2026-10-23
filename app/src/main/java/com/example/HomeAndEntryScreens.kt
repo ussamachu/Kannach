@@ -2647,6 +2647,7 @@ fun FirstRunOnboarding(
                     fontFamily = handFont,
                     color = palette.inkSoft,
                     textAlign = TextAlign.Center,
+                    maxLines = 2,
                     modifier = Modifier
                         .widthIn(max = 320.dp)
                         .graphicsLayer {
