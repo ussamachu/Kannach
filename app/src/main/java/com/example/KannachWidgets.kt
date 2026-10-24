@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.util.Log
 import android.widget.RemoteViews
 import kotlin.math.roundToInt
 
@@ -65,14 +66,9 @@ abstract class KannachWidgetProvider : AppWidgetProvider() {
         }).let { if (it > 0) it else defaultHeightDp }
 
         val density = context.resources.displayMetrics.density
-        val widthPx = (widthDp * density).roundToInt().coerceAtLeast(1)
-        val heightPx = (heightDp * density).roundToInt().coerceAtLeast(1)
-
-        val bitmap = try {
-            render(context, widthPx, heightPx)
-        } catch (_: Throwable) {
-            return
-        }
+        val rawWidthPx = (widthDp * density).roundToInt().coerceAtLeast(100)
+        val rawHeightPx = (heightDp * density).roundToInt().coerceAtLeast(100)
+        val (widthPx, heightPx) = WidgetRenderer.clampDimensions(rawWidthPx, rawHeightPx)
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
             if (openTodayOnClick) {
@@ -91,12 +87,35 @@ abstract class KannachWidgetProvider : AppWidgetProvider() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val views = RemoteViews(context.packageName, R.layout.widget_image).apply {
-            setImageViewBitmap(R.id.widget_image, bitmap)
+        val initialFallback = WidgetRenderer.renderFallback(context, widthPx, heightPx, message = null)
+        val initialViews = RemoteViews(context.packageName, R.layout.widget_image).apply {
+            setImageViewBitmap(R.id.widget_image, initialFallback)
             setOnClickPendingIntent(R.id.widget_image, pendingIntent)
         }
+        manager.updateAppWidget(id, initialViews)
 
-        manager.updateAppWidget(id, views)
+        try {
+            val bitmap = render(context, widthPx, heightPx)
+            val views = RemoteViews(context.packageName, R.layout.widget_image).apply {
+                setImageViewBitmap(R.id.widget_image, bitmap)
+                setOnClickPendingIntent(R.id.widget_image, pendingIntent)
+            }
+            manager.updateAppWidget(id, views)
+        } catch (t: Throwable) {
+            Log.e("KannachWidget", "render failed", t)
+            // TODO remove the message before release
+            val errorBitmap = WidgetRenderer.renderFallback(
+                context,
+                widthPx,
+                heightPx,
+                message = t.javaClass.simpleName + ": " + (t.message ?: "") + " @" + (t.stackTrace.firstOrNull()?.let { it.fileName + ":" + it.lineNumber } ?: "")
+            )
+            val errorViews = RemoteViews(context.packageName, R.layout.widget_image).apply {
+                setImageViewBitmap(R.id.widget_image, errorBitmap)
+                setOnClickPendingIntent(R.id.widget_image, pendingIntent)
+            }
+            manager.updateAppWidget(id, errorViews)
+        }
     }
 }
 
@@ -136,9 +155,17 @@ object KannachWidgets {
             SmallWidgetProvider()
         )
         for (provider in providers) {
-            val ids = manager.getAppWidgetIds(ComponentName(context, provider::class.java))
-            for (id in ids) {
-                provider.refresh(context, manager, id)
+            try {
+                val ids = manager.getAppWidgetIds(ComponentName(context, provider::class.java))
+                for (id in ids) {
+                    try {
+                        provider.refresh(context, manager, id)
+                    } catch (t: Throwable) {
+                        Log.e("KannachWidget", "refresh failed", t)
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.e("KannachWidget", "updateAll failed", t)
             }
         }
     }

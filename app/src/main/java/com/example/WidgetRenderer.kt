@@ -8,6 +8,10 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.TextUtils
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.PathParser
@@ -24,6 +28,76 @@ object WidgetRenderer {
 
     private const val MAX_PIXELS = 1_000_000
     private const val MIN_DIM_PX = 100
+
+    fun renderFallback(
+        context: Context,
+        widthPx: Int,
+        heightPx: Int,
+        message: String?
+    ): Bitmap {
+        val (w, h) = clampDimensions(widthPx, heightPx)
+        val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        val metrics = context.resources.displayMetrics
+        val density = metrics.density
+        @Suppress("DEPRECATION")
+        val scaledDensity = metrics.scaledDensity
+
+        val nowMonth = Calendar.getInstance().get(Calendar.MONTH) + 1
+        val p = getSeasonalPalette(nowMonth)
+        drawPaperBackground(canvas, w.toFloat(), h.toFloat(), density, p)
+
+        val cx = w / 2f
+        val cy = if (message != null) h * 0.38f else h / 2f
+        val s = 12f * density
+
+        val sproutPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 3f * density
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            color = p.ink.toArgb()
+        }
+
+        // Vertical stem
+        canvas.drawLine(cx, cy + s, cx, cy - s * 0.8f, sproutPaint)
+
+        // Two leaf curves
+        val leafPath = android.graphics.Path().apply {
+            moveTo(cx, cy + s * 0.1f)
+            quadTo(cx - s * 0.9f, cy - s * 0.2f, cx - s * 0.75f, cy - s * 0.85f)
+            quadTo(cx - s * 0.15f, cy - s * 0.65f, cx, cy + s * 0.1f)
+
+            moveTo(cx, cy - s * 0.15f)
+            quadTo(cx + s * 0.9f, cy - s * 0.45f, cx + s * 0.75f, cy - s * 1.05f)
+            quadTo(cx + s * 0.15f, cy - s * 0.85f, cx, cy - s * 0.15f)
+        }
+        canvas.drawPath(leafPath, sproutPaint)
+
+        if (message != null) {
+            val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                textSize = 10f * scaledDensity
+                color = withAlpha(p.ink.toArgb(), 0.7f)
+            }
+            val padPx = (12f * density).roundToInt()
+            val layoutWidth = max(20, w - padPx * 2)
+            val staticLayout = StaticLayout.Builder
+                .obtain(message, 0, message.length, textPaint, layoutWidth)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .setMaxLines(4)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .build()
+
+            val textTop = cy + s + 6f * density
+            canvas.save()
+            canvas.translate(padPx.toFloat(), textTop)
+            staticLayout.draw(canvas)
+            canvas.restore()
+        }
+
+        return bitmap
+    }
 
     fun renderYear(context: Context, widthPx: Int, heightPx: Int): Bitmap {
         val (w, h) = clampDimensions(widthPx, heightPx)
@@ -473,7 +547,7 @@ object WidgetRenderer {
         canvas.drawRoundRect(rect, radius, radius, borderPaint)
     }
 
-    private fun clampDimensions(widthPx: Int, heightPx: Int): Pair<Int, Int> {
+    fun clampDimensions(widthPx: Int, heightPx: Int): Pair<Int, Int> {
         var w = max(MIN_DIM_PX, widthPx)
         var h = max(MIN_DIM_PX, heightPx)
         val total = w.toLong() * h.toLong()
