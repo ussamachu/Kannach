@@ -1,0 +1,8 @@
+<resources>
+    <string name="widget_year_label">Kannach año</string>
+    <string name="widget_year_desc">Todo tu año como un campo de pequeñas huellas.</string>
+    <string name="widget_today_label">Kannach hoy</string>
+    <string name="widget_today_desc">El dibujo de hoy, grande y tranquilo.</string>
+    <string name="widget_small_label">Kannach pequeño</string>
+    <string name="widget_small_desc">El dibujo de hoy, pequeño.</string>
+</resources>

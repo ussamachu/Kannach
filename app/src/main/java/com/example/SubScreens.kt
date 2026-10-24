@@ -3,6 +3,8 @@ package com.example
 import android.Manifest
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -1959,13 +1961,15 @@ fun SettingsScreen(
     var showLanguageSheet by remember { mutableStateOf(false) }
     var showBackupSheet by remember { mutableStateOf(false) }
     var showAboutSheet by remember { mutableStateOf(false) }
+    var showWidgetDialog by remember { mutableStateOf(false) }
     var isMoreExpanded by remember { mutableStateOf(false) }
 
-    androidx.activity.compose.BackHandler(enabled = showLanguageSheet || showBackupSheet || showAboutSheet) {
+    androidx.activity.compose.BackHandler(enabled = showLanguageSheet || showBackupSheet || showAboutSheet || showWidgetDialog) {
         when {
             showLanguageSheet -> showLanguageSheet = false
             showBackupSheet -> showBackupSheet = false
             showAboutSheet -> showAboutSheet = false
+            showWidgetDialog -> showWidgetDialog = false
         }
     }
 
@@ -2556,6 +2560,27 @@ fun SettingsScreen(
                     )
 
                     // =========================================================================
+                    // ROW 7.5: Add widget to home screen (API 26+)
+                    // =========================================================================
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        SettingsDoodleRow(
+                            title = strings.widgetAddTitle,
+                            description = "${strings.widgetAddYear} · ${strings.widgetAddToday} · ${strings.widgetAddSmall}",
+                            tile = {
+                                SettingsTile(selected = null) {
+                                    KannachIcon(
+                                        icon = KannachIconType.FLOWER,
+                                        tint = palette.ink,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            },
+                            onClick = { showWidgetDialog = true },
+                            modifier = Modifier.testTag("settings_row_widget")
+                        )
+                    }
+
+                    // =========================================================================
                     // ROW 8: About Kannach & privacy
                     // =========================================================================
                     SettingsDoodleRow(
@@ -2946,6 +2971,94 @@ fun SettingsScreen(
                         }
 
                         Spacer(modifier = Modifier.height(32.dp))
+                    }
+                }
+            }
+
+            // =========================================================================
+            // DIALOG: Add widget to home screen choice dialog (API 26+)
+            // =========================================================================
+            if (showWidgetDialog && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                fun pinWidget(providerClass: Class<*>) {
+                    showWidgetDialog = false
+                    val manager = AppWidgetManager.getInstance(context)
+                    if (manager.isRequestPinAppWidgetSupported) {
+                        manager.requestPinAppWidget(ComponentName(context, providerClass), null, null)
+                    } else {
+                        viewModel.showToast(strings.widgetAddTitle)
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(palette.scrim)
+                        .clickable { showWidgetDialog = false }
+                        .testTag("settings_widget_dialog_scrim"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.86f)
+                            .widthIn(max = 340.dp)
+                            .clickable(enabled = false) {}
+                            .shadow(16.dp, HandDrawnRadiusShape)
+                            .clip(HandDrawnRadiusShape)
+                            .background(palette.paperHi)
+                            .border(2.dp, palette.ink, HandDrawnRadiusShape)
+                            .padding(22.dp)
+                            .testTag("settings_widget_dialog")
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = strings.widgetAddTitle,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = LocalKannachHandFont.current,
+                                    color = palette.greenDeep
+                                )
+                                IconButton(
+                                    onClick = { showWidgetDialog = false },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    KannachIcon(
+                                        icon = KannachIconType.X,
+                                        tint = palette.inkSoft,
+                                        contentDescription = strings.dismiss,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            SettingsPaperActionRow(
+                                label = strings.widgetAddYear,
+                                icon = KannachIconType.FLOWER,
+                                onClick = { pinWidget(YearWidgetProvider::class.java) },
+                                modifier = Modifier.testTag("settings_widget_add_year")
+                            )
+
+                            SettingsPaperActionRow(
+                                label = strings.widgetAddToday,
+                                icon = KannachIconType.FLOWER,
+                                onClick = { pinWidget(TodayWidgetProvider::class.java) },
+                                modifier = Modifier.testTag("settings_widget_add_today")
+                            )
+
+                            SettingsPaperActionRow(
+                                label = strings.widgetAddSmall,
+                                icon = KannachIconType.FLOWER,
+                                onClick = { pinWidget(SmallWidgetProvider::class.java) },
+                                modifier = Modifier.testTag("settings_widget_add_small")
+                            )
+                        }
                     }
                 }
             }

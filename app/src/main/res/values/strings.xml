@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">Kannach</string>
+    <string name="widget_year_label">Kannach year</string>
+    <string name="widget_year_desc">Your whole year as a field of small marks.</string>
+    <string name="widget_today_label">Kannach today</string>
+    <string name="widget_today_desc">Today\'s doodle, big and quiet.</string>
+    <string name="widget_small_label">Kannach small</string>
+    <string name="widget_small_desc">Today\'s doodle, small.</string>
+    <string name="widget_image_desc">Kannach</string>
 </resources>

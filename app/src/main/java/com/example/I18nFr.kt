@@ -322,5 +322,11 @@ val FR: Strings = Strings(
         "Bon retour au bureau — il n’y a rien à rattraper.",
         "Reprendre à partir d’aujourd’hui, aussi légèrement qu’un trait sur le papier.",
         "Le carnet est toujours là, paisible et sans hâte."
-    )
+    ),
+    widgetDaysPlanted = "%d jours semés",
+    widgetPlantToday = "Sème aujourd'hui",
+    widgetAddTitle = "Ajouter un widget",
+    widgetAddYear = "Jardin de l'année",
+    widgetAddToday = "Trace du jour",
+    widgetAddSmall = "Petite trace"
 )

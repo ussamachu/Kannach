@@ -322,5 +322,11 @@ val EN: Strings = Strings(
         "Welcome back to the desk — there's no catching up to do.",
         "Pick up from today, as lightly as setting a pen on paper.",
         "The notebook is still here, quiet and unhurried."
-    )
+    ),
+    widgetDaysPlanted = "%d days planted",
+    widgetPlantToday = "Plant today",
+    widgetAddTitle = "Add a widget",
+    widgetAddYear = "Year garden",
+    widgetAddToday = "Today's mark",
+    widgetAddSmall = "Small mark"
 )

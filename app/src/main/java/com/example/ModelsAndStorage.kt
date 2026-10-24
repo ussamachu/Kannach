@@ -332,6 +332,7 @@ class KannachRepository(private val context: Context) {
             _languageChoiceFlow.value = normalized
             _languageFlow.value = normalized
         }
+        KannachWidgets.updateAll(context.applicationContext)
     }
 
     fun getLanguageChoice(): String = _languageChoiceFlow.value
@@ -359,6 +360,7 @@ class KannachRepository(private val context: Context) {
             val rawJson = json.encodeToString(settings)
             saveJsonSafely(KEY_USER_SETTINGS, rawJson, userInitiated = true)
         } catch (_: Exception) {}
+        KannachWidgets.updateAll(context.applicationContext)
     }
 
     fun updateUserSettings(transform: (UserSettings) -> UserSettings): UserSettings {
@@ -417,6 +419,7 @@ class KannachRepository(private val context: Context) {
         current[dateKey] = entry
         _entriesFlow.value = current
         persistEntries(current, userInitiated = true)
+        KannachWidgets.updateAll(context.applicationContext)
     }
 
     fun deleteEntry(dateKey: String) {
@@ -424,6 +427,7 @@ class KannachRepository(private val context: Context) {
         if (current.remove(dateKey) != null) {
             _entriesFlow.value = current
             persistEntries(current, userInitiated = true)
+            KannachWidgets.updateAll(context.applicationContext)
         }
     }
 

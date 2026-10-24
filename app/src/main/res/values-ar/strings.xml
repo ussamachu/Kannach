@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">كُنَّاش</string>
+    <string name="widget_year_label">كناش السنة</string>
+    <string name="widget_year_desc">سنتك كلها حقل من آثار صغيرة.</string>
+    <string name="widget_today_label">كناش اليوم</string>
+    <string name="widget_today_desc">رسمة اليوم، كبيرة وهادئة.</string>
+    <string name="widget_small_label">كناش صغير</string>
+    <string name="widget_small_desc">رسمة اليوم، صغيرة.</string>
 </resources>

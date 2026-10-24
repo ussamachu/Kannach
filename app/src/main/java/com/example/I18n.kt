@@ -294,7 +294,13 @@ object I18n {
         val notifAfternoon: List<String>,
         val notifEvening: List<String>,
         val notifNight: List<String>,
-        val notifComeback: List<String>
+        val notifComeback: List<String>,
+        val widgetDaysPlanted: String,
+        val widgetPlantToday: String,
+        val widgetAddTitle: String,
+        val widgetAddYear: String,
+        val widgetAddToday: String,
+        val widgetAddSmall: String
     ) {
         fun messagesForPool(pool: NotificationPool): List<String> {
             return when (pool) {

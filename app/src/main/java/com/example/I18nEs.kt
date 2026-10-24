@@ -322,5 +322,11 @@ val ES: Strings = Strings(
         "Qué bueno volver al escritorio — no hay nada que recuperar.",
         "Retomar desde hoy, tan ligero como posar el trazo en el papel.",
         "El cuaderno sigue aquí, tranquilo y sin prisa."
-    )
+    ),
+    widgetDaysPlanted = "%d días sembrados",
+    widgetPlantToday = "Siembra hoy",
+    widgetAddTitle = "Añadir un widget",
+    widgetAddYear = "Jardín del año",
+    widgetAddToday = "Huella de hoy",
+    widgetAddSmall = "Huella pequeña"
 )
