@@ -87,7 +87,7 @@ abstract class KannachWidgetProvider : AppWidgetProvider() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val initialFallback = WidgetRenderer.renderFallback(context, widthPx, heightPx, message = null)
+        val initialFallback = WidgetRenderer.renderFallback(context, widthPx, heightPx)
         val initialViews = RemoteViews(context.packageName, R.layout.widget_image).apply {
             setImageViewBitmap(R.id.widget_image, initialFallback)
             setOnClickPendingIntent(R.id.widget_image, pendingIntent)
@@ -103,18 +103,6 @@ abstract class KannachWidgetProvider : AppWidgetProvider() {
             manager.updateAppWidget(id, views)
         } catch (t: Throwable) {
             Log.e("KannachWidget", "render failed", t)
-            // TODO remove the message before release
-            val errorBitmap = WidgetRenderer.renderFallback(
-                context,
-                widthPx,
-                heightPx,
-                message = t.javaClass.simpleName + ": " + (t.message ?: "") + " @" + (t.stackTrace.firstOrNull()?.let { it.fileName + ":" + it.lineNumber } ?: "")
-            )
-            val errorViews = RemoteViews(context.packageName, R.layout.widget_image).apply {
-                setImageViewBitmap(R.id.widget_image, errorBitmap)
-                setOnClickPendingIntent(R.id.widget_image, pendingIntent)
-            }
-            manager.updateAppWidget(id, errorViews)
         }
     }
 }

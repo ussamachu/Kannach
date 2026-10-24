@@ -32,8 +32,7 @@ object WidgetRenderer {
     fun renderFallback(
         context: Context,
         widthPx: Int,
-        heightPx: Int,
-        message: String?
+        heightPx: Int
     ): Bitmap {
         val (w, h) = clampDimensions(widthPx, heightPx)
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -41,15 +40,13 @@ object WidgetRenderer {
 
         val metrics = context.resources.displayMetrics
         val density = metrics.density
-        @Suppress("DEPRECATION")
-        val scaledDensity = metrics.scaledDensity
 
         val nowMonth = Calendar.getInstance().get(Calendar.MONTH) + 1
         val p = getSeasonalPalette(nowMonth)
         drawPaperBackground(canvas, w.toFloat(), h.toFloat(), density, p)
 
         val cx = w / 2f
-        val cy = if (message != null) h * 0.38f else h / 2f
+        val cy = h / 2f
         val s = 12f * density
 
         val sproutPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -74,27 +71,6 @@ object WidgetRenderer {
             quadTo(cx + s * 0.15f, cy - s * 0.85f, cx, cy - s * 0.15f)
         }
         canvas.drawPath(leafPath, sproutPaint)
-
-        if (message != null) {
-            val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                textSize = 10f * scaledDensity
-                color = withAlpha(p.ink.toArgb(), 0.7f)
-            }
-            val padPx = (12f * density).roundToInt()
-            val layoutWidth = max(20, w - padPx * 2)
-            val staticLayout = StaticLayout.Builder
-                .obtain(message, 0, message.length, textPaint, layoutWidth)
-                .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .setMaxLines(4)
-                .setEllipsize(TextUtils.TruncateAt.END)
-                .build()
-
-            val textTop = cy + s + 6f * density
-            canvas.save()
-            canvas.translate(padPx.toFloat(), textTop)
-            staticLayout.draw(canvas)
-            canvas.restore()
-        }
 
         return bitmap
     }
