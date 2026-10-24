@@ -53,6 +53,7 @@
 
         <receiver
             android:name=".YearWidgetProvider"
+            android:enabled="true"
             android:exported="true"
             android:label="@string/widget_year_label">
             <intent-filter>
@@ -68,6 +69,7 @@
 
         <receiver
             android:name=".TodayWidgetProvider"
+            android:enabled="true"
             android:exported="true"
             android:label="@string/widget_today_label">
             <intent-filter>
@@ -83,6 +85,7 @@
 
         <receiver
             android:name=".SmallWidgetProvider"
+            android:enabled="true"
             android:exported="true"
             android:label="@string/widget_small_label">
             <intent-filter>
