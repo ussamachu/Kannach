@@ -323,7 +323,7 @@ val EN: Strings = Strings(
         "Pick up from today, as lightly as setting a pen on paper.",
         "The notebook is still here, quiet and unhurried."
     ),
-    widgetDaysPlanted = "%d days planted",
+    widgetDaysPlanted = "%s days planted",
     widgetPlantToday = "Plant today",
     widgetAddTitle = "Add a widget",
     widgetAddYear = "Year garden",

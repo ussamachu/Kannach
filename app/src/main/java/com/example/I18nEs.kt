@@ -323,7 +323,7 @@ val ES: Strings = Strings(
         "Retomar desde hoy, tan ligero como posar el trazo en el papel.",
         "El cuaderno sigue aquí, tranquilo y sin prisa."
     ),
-    widgetDaysPlanted = "%d días sembrados",
+    widgetDaysPlanted = "%s días sembrados",
     widgetPlantToday = "Siembra hoy",
     widgetAddTitle = "Añadir un widget",
     widgetAddYear = "Jardín del año",

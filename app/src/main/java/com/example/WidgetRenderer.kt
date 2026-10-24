@@ -312,20 +312,11 @@ object WidgetRenderer {
         val totalValidCount = validSorted.size
         val todayEntry = entries[todayKey]?.takeIf { isValidEntry(it) }
 
-        val shownPair: Pair<String, DayEntry>? = if (todayEntry != null) {
-            todayKey to todayEntry
+        val rankNumber = if (todayEntry != null) {
+            validSorted.indexOfFirst { it.key == todayKey } + 1
         } else {
-            val mostRecentUpToToday = validSorted.lastOrNull { it.key <= todayKey }
-            val fallback = mostRecentUpToToday ?: validSorted.lastOrNull()
-            fallback?.let { it.key to it.value }
+            totalValidCount + 1
         }
-
-        val shownRank = if (shownPair != null) {
-            validSorted.indexOfFirst { it.key == shownPair.first } + 1
-        } else {
-            0
-        }
-        val isShownToday = shownPair?.first == todayKey
 
         // Top row
         val topFontSizeSp = if (compact) 11f else 12f
@@ -346,16 +337,14 @@ object WidgetRenderer {
             )
         }
 
-        if (shownPair != null && shownRank > 0) {
-            val rankPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.typeface = typeface
-                textSize = topFontSizeSp * scaledDensity
-                color = withAlpha(p.inkSoft.toArgb(), 0.8f)
-                textAlign = alignFor(isStart = false)
-            }
-            val rankStr = "#" + I18n.formatNumber(shownRank, language, useArabicIndic)
-            canvas.drawText(rankStr, x(isStart = false), topBaseline, rankPaint)
+        val rankPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.typeface = typeface
+            textSize = topFontSizeSp * scaledDensity
+            color = withAlpha(p.inkSoft.toArgb(), 0.8f)
+            textAlign = alignFor(isStart = false)
         }
+        val rankStr = "#" + I18n.formatNumber(rankNumber, language, useArabicIndic)
+        canvas.drawText(rankStr, x(isStart = false), topBaseline, rankPaint)
 
         // Bottom row
         val weekdaySp = if (compact) 13f else 15f
@@ -398,7 +387,7 @@ object WidgetRenderer {
 
         val boxFraction = if (compact) 0.70f else 0.62f
         val boxSide = min(freeW, freeH * boxFraction)
-        val showPromptUnder = shownPair == null || !isShownToday
+        val showPromptUnder = todayEntry == null
         val promptShift = if (showPromptUnder) 7f * density else 0f
 
         val centerX = w / 2f
@@ -410,9 +399,8 @@ object WidgetRenderer {
             centerY + boxSide / 2f
         )
 
-        if (shownPair != null) {
-            val alphaMul = if (isShownToday) 1f else 0.45f
-            drawDoodle(canvas, shownPair.second, doodleBox, alphaMul, p.green.toArgb())
+        if (todayEntry != null) {
+            drawDoodle(canvas, todayEntry, doodleBox, 1f, p.green.toArgb())
         } else {
             drawSproutDoodle(canvas, doodleBox, p.ink.toArgb(), withAlpha(p.green.toArgb(), 0.5f), density)
         }

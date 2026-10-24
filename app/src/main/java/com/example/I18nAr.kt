@@ -354,7 +354,7 @@ val AR: Strings = Strings(
         "البدءُ من اليوم، بخفَّةِ وضعِ القلم على الورق.",
         "الدفترُ ما زال هنا، هادئاً وبلا أيِّ عجلة."
     ),
-    widgetDaysPlanted = "الأيام المزروعة: %d",
+    widgetDaysPlanted = "الأيام المزروعة: %s",
     widgetPlantToday = "ازرع يومك",
     widgetAddTitle = "إضافة ويدجت",
     widgetAddYear = "حديقة السنة",
