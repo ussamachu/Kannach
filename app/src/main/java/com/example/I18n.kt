@@ -302,6 +302,20 @@ object I18n {
         val widgetAddToday: String,
         val widgetAddSmall: String
     ) {
+        var backupSaveBtn: String = ""
+        var backupShareBtn: String = ""
+        var backupDriveHint: String = ""
+        var backupPreviewTitle: String = ""
+        var backupPreviewLine: String = ""
+        var backupNewerNote: String = ""
+        var backupMergeBtn: String = ""
+        var backupReplaceBtn: String = ""
+        var backupReplaceWarn: String = ""
+        var backupInvalidFile: String = ""
+        var backupNewerVersion: String = ""
+        var backupSavedToast: String = ""
+        var backupCancelBtn: String = ""
+
         fun messagesForPool(pool: NotificationPool): List<String> {
             return when (pool) {
                 NotificationPool.MORNING -> notifMorning.ifEmpty { reminderMsgs }

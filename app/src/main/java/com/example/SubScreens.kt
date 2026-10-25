@@ -1954,6 +1954,7 @@ fun SettingsScreen(
     val userSettings by viewModel.userSettings.collectAsState()
     val exportSignature by viewModel.exportSignature.collectAsState()
     val reminder by viewModel.reminder.collectAsState()
+    val pendingBackup by viewModel.pendingBackup.collectAsState()
     val reduceMotion = rememberReduceMotion()
     val context = LocalContext.current
 
@@ -1964,10 +1965,14 @@ fun SettingsScreen(
     var showWidgetDialog by remember { mutableStateOf(false) }
     var isMoreExpanded by remember { mutableStateOf(false) }
 
-    androidx.activity.compose.BackHandler(enabled = showLanguageSheet || showBackupSheet || showAboutSheet || showWidgetDialog) {
+    androidx.activity.compose.BackHandler(enabled = showLanguageSheet || showBackupSheet || showAboutSheet || showWidgetDialog || pendingBackup != null) {
         when {
+            pendingBackup != null -> viewModel.cancelRestore()
             showLanguageSheet -> showLanguageSheet = false
-            showBackupSheet -> showBackupSheet = false
+            showBackupSheet -> {
+                showBackupSheet = false
+                viewModel.cancelRestore()
+            }
             showAboutSheet -> showAboutSheet = false
             showWidgetDialog -> showWidgetDialog = false
         }
@@ -2020,15 +2025,39 @@ fun SettingsScreen(
         }
     }
 
-    // JSON file picker launcher for restoring backups
-    val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+    val saveLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri: Uri? ->
         if (uri != null) {
             try {
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    val text = BufferedReader(InputStreamReader(stream)).readText()
-                    viewModel.importBackup(text)
+                val bytes = viewModel.createBackupBytes()
+                val written = context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    stream.write(bytes)
+                    stream.flush()
+                    true
+                } ?: false
+                if (written) {
+                    viewModel.recordBackupSaved()
+                    viewModel.showToast(I18n.forLanguage(language).backupSavedToast)
+                } else {
+                    viewModel.showToast(I18n.forLanguage(language).saveError)
+                }
+            } catch (e: Exception) {
+                viewModel.showToast(I18n.forLanguage(language).saveError)
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes != null) {
+                    viewModel.previewBackup(bytes)
+                } else {
+                    viewModel.showToast(I18n.forLanguage(language).importError)
                 }
             } catch (e: Exception) {
                 viewModel.showToast(I18n.forLanguage(language).importError)
@@ -2737,7 +2766,10 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(palette.scrim)
-                        .clickable { showBackupSheet = false }
+                        .clickable {
+                            showBackupSheet = false
+                            viewModel.cancelRestore()
+                        }
                         .testTag("settings_backup_sheet_scrim"),
                     contentAlignment = Alignment.BottomCenter
                 ) {
@@ -2771,7 +2803,10 @@ fun SettingsScreen(
                                 color = palette.greenDeep
                             )
                             IconButton(
-                                onClick = { showBackupSheet = false },
+                                onClick = {
+                                    showBackupSheet = false
+                                    viewModel.cancelRestore()
+                                },
                                 modifier = Modifier.size(40.dp)
                             ) {
                                 KannachIcon(
@@ -2783,63 +2818,185 @@ fun SettingsScreen(
                             }
                         }
 
-                        // Export
-                        SettingsPaperActionRow(
-                            label = strings.exportBtn,
-                            icon = KannachIconType.UPLOAD,
-                            onClick = { viewModel.exportBackup(context) },
-                            modifier = Modifier.testTag("settings_export_btn")
-                        )
-
-                        // Import
-                        SettingsPaperActionRow(
-                            label = strings.importBtn,
-                            icon = KannachIconType.NOTEBOOK,
-                            onClick = { importLauncher.launch("application/json") },
-                            modifier = Modifier.testTag("settings_import_btn")
-                        )
-
-                        // Last backup: {date}
-                        Text(
-                            text = strings.settingsLastBackup.replace("{d}", lastSavedDateStr),
-                            fontSize = 13.sp,
-                            fontFamily = LocalKannachHandFont.current,
-                            color = palette.inkSoft,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.testTag("settings_last_backup_text")
-                        )
-
-                        SettingsThinDivider()
-
-                        // Monthly copy reminder switch (default off)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        val preview = pendingBackup
+                        if (preview == null) {
                             Text(
-                                text = "${strings.settingsCopyReminderLabel} (${strings.copyReminderMonthly})",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = palette.ink,
+                                text = strings.backupDriveHint,
+                                fontSize = 13.sp,
+                                color = palette.inkSoft
+                            )
+
+                            SettingsPaperActionRow(
+                                label = strings.backupSaveBtn,
+                                icon = KannachIconType.UPLOAD,
+                                onClick = { saveLauncher.launch(viewModel.backupFileName()) },
+                                modifier = Modifier.testTag("settings_backup_save_btn")
+                            )
+
+                            SettingsPaperActionRow(
+                                label = strings.backupShareBtn,
+                                icon = KannachIconType.SPARKLE,
+                                onClick = { viewModel.shareBackup(context) },
+                                modifier = Modifier.testTag("settings_backup_share_btn")
+                            )
+
+                            SettingsPaperActionRow(
+                                label = strings.importBtn,
+                                icon = KannachIconType.NOTEBOOK,
+                                onClick = { importLauncher.launch(arrayOf("*/*")) },
+                                modifier = Modifier.testTag("settings_import_btn")
+                            )
+
+                            // Last backup: {date}
+                            Text(
+                                text = strings.settingsLastBackup.replace("{d}", lastSavedDateStr),
+                                fontSize = 13.sp,
+                                fontFamily = LocalKannachHandFont.current,
+                                color = palette.inkSoft,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.testTag("settings_last_backup_text")
                             )
-                            Switch(
-                                checked = userSettings.copyReminder == "monthly",
-                                onCheckedChange = { enabled ->
-                                    viewModel.setCopyReminder(if (enabled) "monthly" else "off")
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = palette.onGreen,
-                                    checkedTrackColor = palette.green
-                                ),
-                                modifier = Modifier.testTag("settings_copy_reminder_switch")
+
+                            SettingsThinDivider()
+
+                            // Monthly copy reminder switch (default off)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${strings.settingsCopyReminderLabel} (${strings.copyReminderMonthly})",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = palette.ink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Switch(
+                                    checked = userSettings.copyReminder == "monthly",
+                                    onCheckedChange = { enabled ->
+                                        viewModel.setCopyReminder(if (enabled) "monthly" else "off")
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = palette.onGreen,
+                                        checkedTrackColor = palette.green
+                                    ),
+                                    modifier = Modifier.testTag("settings_copy_reminder_switch")
+                                )
+                            }
+                        } else {
+                            var confirmReplace by remember(preview) { mutableStateOf(false) }
+
+                            fun formatPreviewDate(iso: String?): String {
+                                if (iso.isNullOrBlank()) return "—"
+                                val parts = iso.split("-")
+                                if (parts.size != 3) return iso
+                                val y = parts[0].toIntOrNull() ?: return iso
+                                val m = parts[1].toIntOrNull() ?: return iso
+                                val d = parts[2].toIntOrNull() ?: return iso
+                                val raw = String.format(Locale.US, "%02d.%02d.%04d", d, m, y)
+                                return I18n.applyNumerals(raw, activeLang, userSettings.useArabicIndicNumerals)
+                            }
+
+                            val minStr = formatPreviewDate(preview.firstDate)
+                            val maxStr = formatPreviewDate(preview.lastDate)
+                            val countStr = I18n.formatNumber(preview.entryCount, activeLang, userSettings.useArabicIndicNumerals)
+
+                            Text(
+                                text = strings.backupPreviewTitle,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.ink
                             )
+
+                            Text(
+                                text = String.format(strings.backupPreviewLine, countStr, minStr, maxStr),
+                                fontSize = 14.sp,
+                                color = palette.ink
+                            )
+
+                            if (preview.newerLocalCount > 0) {
+                                val newerStr = I18n.formatNumber(preview.newerLocalCount, activeLang, userSettings.useArabicIndicNumerals)
+                                Text(
+                                    text = String.format(strings.backupNewerNote, newerStr),
+                                    fontSize = 13.sp,
+                                    color = palette.inkSoft
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clip(HandDrawnRadiusShape)
+                                    .background(palette.green)
+                                    .clickable { viewModel.confirmRestore(RestoreMode.MERGE) }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                                    .testTag("settings_restore_merge"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = strings.backupMergeBtn,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = palette.onGreen
+                                )
+                            }
+
+                            if (confirmReplace) {
+                                Text(
+                                    text = strings.backupReplaceWarn,
+                                    fontSize = 13.sp,
+                                    color = palette.red
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clip(HandDrawnRadiusShape)
+                                    .background(palette.paper)
+                                    .border(1.3.dp, palette.ink.copy(alpha = 0.65f), HandDrawnRadiusShape)
+                                    .clickable {
+                                        if (!confirmReplace) {
+                                            confirmReplace = true
+                                        } else {
+                                            viewModel.confirmRestore(RestoreMode.REPLACE)
+                                        }
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                                    .testTag("settings_restore_replace"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = strings.backupReplaceBtn,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = palette.ink
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 44.dp)
+                                    .clickable { viewModel.cancelRestore() }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = strings.backupCancelBtn,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = palette.inkSoft
+                                )
+                            }
                         }
                     }
                 }

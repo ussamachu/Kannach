@@ -140,11 +140,11 @@ val FR: Strings = Strings(
     greetDone = "Aujourd’hui est planté.",
     greetBack = "Bon retour dans le carnet.",
     todayRowEmpty = "Quelle est la trace du jour ?",
-    onboardingBeat1 = "Kannach est un carnet de papier paisible.",
-    onboardingBeat1Sub = "Un coin calme pour tes jours.",
-    onboardingBeat2 = "Une petite trace pour chaque jour",
-    onboardingBeat2Sub = "Quelques traits fleurissent ta journée.",
-    onboardingBeat3 = "Toucher un jour pour planter une première trace.",
+    onboardingBeat1 = "Un carnet tout calme",
+    onboardingBeat1Sub = "Tes jours, doucement gardés.",
+    onboardingBeat2 = "Une trace par jour",
+    onboardingBeat2Sub = "Quelques traits, une petite fleur.",
+    onboardingBeat3 = "Touche un jour",
     onboardingBeat3Sub = "Chaque trace gardée y fleurit.",
     onboardingBeat4 = "Rien que pour toi",
     onboardingBeat4Sub = "Sans compte, sans Internet.",
@@ -329,4 +329,18 @@ val FR: Strings = Strings(
     widgetAddYear = "Jardin de l'année",
     widgetAddToday = "Trace du jour",
     widgetAddSmall = "Petite trace"
-)
+).apply {
+    backupSaveBtn = "Enregistrer une copie"
+    backupShareBtn = "Partager une copie"
+    backupDriveHint = "Choisis Google Drive pour garder ton carnet en sécurité dans le cloud."
+    backupPreviewTitle = "Sauvegarde trouvée"
+    backupPreviewLine = "%s jours, du %s au %s"
+    backupNewerNote = "Les jours plus récents sur ce téléphone sont conservés."
+    backupMergeBtn = "Ajouter à mon carnet"
+    backupReplaceBtn = "Remplacer mon carnet"
+    backupReplaceWarn = "Cela remplace tout sur ce téléphone. Une copie de sécurité est gardée."
+    backupInvalidFile = "Ce n'est pas une sauvegarde Kannach."
+    backupNewerVersion = "Cette sauvegarde vient d'un Kannach plus récent. Mets l'application à jour."
+    backupSavedToast = "Copie enregistrée"
+    backupCancelBtn = "Annuler"
+}

@@ -8,10 +8,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 /**
  * Kannach (كُنَّاش) Models & Storage Layer.
@@ -182,6 +186,17 @@ data class BackupPayload(
     val entries: Map<String, DayEntry> = emptyMap(),
     val capsules: List<TimeCapsule> = emptyList()
 )
+
+data class BackupPreview(
+    val payload: BackupPayload,
+    val entryCount: Int,
+    val capsuleCount: Int,
+    val firstDate: String?,
+    val lastDate: String?,
+    val newerLocalCount: Int
+)
+
+enum class RestoreMode { MERGE, REPLACE }
 
 /**
  * Local offline repository managing entries, time capsules, reminder settings,
@@ -649,7 +664,7 @@ class KannachRepository(private val context: Context) {
         prefs.edit().putBoolean(KEY_FIRST_PLANT_CELEBRATED, true).apply()
     }
 
-    // --- Export & Import Backup (Matching original Kannach schema v2) ---
+    // --- Export & Import Backup ---
 
     /**
      * Creates a complete backup JSON payload matching original Kannach export format.
@@ -666,49 +681,144 @@ class KannachRepository(private val context: Context) {
         return json.encodeToString(payload)
     }
 
+    fun createBackupBytes(): ByteArray {
+        val rawBytes = createBackupJson().toByteArray(Charsets.UTF_8)
+        val baos = ByteArrayOutputStream()
+        GZIPOutputStream(baos).use { gzip ->
+            gzip.write(rawBytes)
+        }
+        return baos.toByteArray()
+    }
+
+    fun backupFileName(): String =
+        "kannach-backup-" + SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) + ".kannach"
+
     /**
-     * Writes backup JSON to a file in cache/exports for easy sharing via FileProvider.
+     * Writes GZIP-compressed backup bytes to a file in cache/exports for sharing via FileProvider.
      */
     fun exportBackupToFile(): File {
         val exportDir = File(context.cacheDir, "exports")
         if (!exportDir.exists()) exportDir.mkdirs()
 
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val todayKey = dateFormat.format(Date())
-        val file = File(exportDir, "kannach-backup-$todayKey.json")
-        file.writeText(createBackupJson(), Charsets.UTF_8)
+        val file = File(exportDir, backupFileName())
+        file.writeBytes(createBackupBytes())
         return file
     }
 
-    /**
-     * Restores entries and capsules from a backup JSON string.
-     * Replicates the merge-and-migrate behavior of the original web app.
-     */
-    fun restoreFromBackupJson(jsonString: String): Result<Unit> {
+    fun readBackup(bytes: ByteArray): Result<BackupPreview> {
         return try {
-            val payload = json.decodeFromString<BackupPayload>(jsonString)
-            if (payload.app != "kannach" && payload.entries.isEmpty() && payload.capsules.isEmpty()) {
-                return Result.failure(IllegalArgumentException("Invalid Kannach backup file format"))
+            if (bytes.size > 100 * 1024 * 1024) {
+                return Result.failure(IllegalArgumentException("invalid"))
+            }
+            val jsonString = if (
+                bytes.size >= 2 &&
+                (bytes[0].toInt() and 0xFF) == 0x1f &&
+                (bytes[1].toInt() and 0xFF) == 0x8b
+            ) {
+                GZIPInputStream(ByteArrayInputStream(bytes)).use { gis ->
+                    gis.readBytes().toString(Charsets.UTF_8)
+                }
+            } else {
+                bytes.toString(Charsets.UTF_8)
             }
 
-            // Merge entries (restored entries overwrite or add to existing)
-            val currentEntries = _entriesFlow.value.toMutableMap()
-            payload.entries.forEach { (key, entry) ->
-                currentEntries[key] = entry
+            val payload = json.decodeFromString<BackupPayload>(jsonString)
+            if (payload.app != "kannach" || (payload.entries.isEmpty() && payload.capsules.isEmpty())) {
+                return Result.failure(IllegalArgumentException("invalid"))
             }
-            val migratedEntries = migrate(currentEntries)
+            if (payload.version > SCHEMA_VERSION) {
+                return Result.failure(IllegalArgumentException("newer"))
+            }
+
+            val countedEntries = payload.entries.filter { (_, entry) ->
+                entry.text.isNotBlank() || entry.strokes.isNotEmpty()
+            }
+            val entryCount = countedEntries.size
+            val firstDate = countedEntries.keys.minOrNull()
+            val lastDate = countedEntries.keys.maxOrNull()
+            val capsuleCount = payload.capsules.size
+
+            val localEntries = _entriesFlow.value
+            val newerLocalCount = payload.entries.count { (dateKey, fileEntry) ->
+                val localEntry = localEntries[dateKey]
+                localEntry != null && localEntry.updatedAt > fileEntry.updatedAt
+            }
+
+            Result.success(
+                BackupPreview(
+                    payload = payload,
+                    entryCount = entryCount,
+                    capsuleCount = capsuleCount,
+                    firstDate = firstDate,
+                    lastDate = lastDate,
+                    newerLocalCount = newerLocalCount
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun writePreRestoreCopy() {
+        try {
+            val backupDir = File(context.filesDir, "backups")
+            if (!backupDir.exists()) backupDir.mkdirs()
+            val safetyFile = File(backupDir, "pre-restore-${System.currentTimeMillis()}.kannach")
+            safetyFile.writeBytes(createBackupBytes())
+
+            val files = backupDir.listFiles()
+                ?.filter { it.isFile }
+                ?.sortedBy { it.lastModified() }
+                ?: emptyList()
+            if (files.size > 3) {
+                files.dropLast(3).forEach { it.delete() }
+            }
+        } catch (_: Exception) {
+            // Failure must NOT stop the restore
+        }
+    }
+
+    fun applyBackup(payload: BackupPayload, mode: RestoreMode): Result<Unit> {
+        return try {
+            writePreRestoreCopy()
+
+            val targetEntries: Map<String, DayEntry>
+            val targetCapsules: List<TimeCapsule>
+
+            when (mode) {
+                RestoreMode.MERGE -> {
+                    val mergedEntries = _entriesFlow.value.toMutableMap()
+                    payload.entries.forEach { (dateKey, fileEntry) ->
+                        val localEntry = mergedEntries[dateKey]
+                        if (localEntry == null || fileEntry.updatedAt > localEntry.updatedAt) {
+                            mergedEntries[dateKey] = fileEntry
+                        }
+                    }
+                    targetEntries = mergedEntries
+
+                    val mergedCapsules = _capsulesFlow.value.toMutableList()
+                    payload.capsules.forEach { fileCapsule ->
+                        if (mergedCapsules.none { it.id == fileCapsule.id }) {
+                            mergedCapsules.add(fileCapsule)
+                        }
+                    }
+                    targetCapsules = mergedCapsules
+                }
+                RestoreMode.REPLACE -> {
+                    targetEntries = payload.entries
+                    targetCapsules = payload.capsules
+                    _draftsFlow.value = emptyMap()
+                    persistDrafts(emptyMap())
+                    clearCapsuleDraft()
+                }
+            }
+
+            val migratedEntries = migrate(targetEntries)
             _entriesFlow.value = migratedEntries
             persistEntries(migratedEntries)
 
-            // Merge capsules (skip duplicates by id)
-            val currentCapsules = _capsulesFlow.value.toMutableList()
-            payload.capsules.forEach { restored ->
-                if (currentCapsules.none { it.id == restored.id }) {
-                    currentCapsules.add(restored)
-                }
-            }
-            _capsulesFlow.value = currentCapsules
-            persistCapsules(currentCapsules)
+            _capsulesFlow.value = targetCapsules
+            persistCapsules(targetCapsules)
 
             Result.success(Unit)
         } catch (e: Exception) {

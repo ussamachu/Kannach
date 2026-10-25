@@ -140,11 +140,11 @@ val EN: Strings = Strings(
     greetDone = "Today is planted.",
     greetBack = "Welcome back to your notebook.",
     todayRowEmpty = "What’s today’s mark?",
-    onboardingBeat1 = "Kannach is a quiet paper diary.",
-    onboardingBeat1Sub = "A quiet place for your days.",
-    onboardingBeat2 = "A small mark for every day",
-    onboardingBeat2Sub = "A few strokes bloom into your day.",
-    onboardingBeat3 = "Touch any day to plant your first small mark.",
+    onboardingBeat1 = "A quiet paper diary",
+    onboardingBeat1Sub = "Your days, softly kept.",
+    onboardingBeat2 = "A mark for every day",
+    onboardingBeat2Sub = "A few strokes, a small flower.",
+    onboardingBeat3 = "Touch a day to begin",
     onboardingBeat3Sub = "Every mark you keep blooms here.",
     onboardingBeat4 = "Yours alone",
     onboardingBeat4Sub = "No account. No internet.",
@@ -329,4 +329,18 @@ val EN: Strings = Strings(
     widgetAddYear = "Year garden",
     widgetAddToday = "Today's mark",
     widgetAddSmall = "Small mark"
-)
+).apply {
+    backupSaveBtn = "Save a copy"
+    backupShareBtn = "Share a copy"
+    backupDriveHint = "Choose Google Drive to keep your diary safe in the cloud."
+    backupPreviewTitle = "Backup found"
+    backupPreviewLine = "%s days, from %s to %s"
+    backupNewerNote = "Newer days on this phone are kept."
+    backupMergeBtn = "Add to my diary"
+    backupReplaceBtn = "Replace my diary"
+    backupReplaceWarn = "This replaces everything on this phone. A safety copy is kept."
+    backupInvalidFile = "This is not a Kannach backup."
+    backupNewerVersion = "This backup comes from a newer Kannach. Please update the app."
+    backupSavedToast = "Copy saved"
+    backupCancelBtn = "Cancel"
+}

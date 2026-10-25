@@ -205,6 +205,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _exportSignature = MutableStateFlow(repository.getUserSettings().exportSignature)
     val exportSignature: StateFlow<Boolean> = _exportSignature.asStateFlow()
 
+    private val _pendingBackup = MutableStateFlow<BackupPreview?>(null)
+    val pendingBackup: StateFlow<BackupPreview?> = _pendingBackup.asStateFlow()
+
     // --- Just Draw v5 Emotional Polish State (JD1, JD3, JD5, JD6) ---
     private var lastWhisperIndex = -1
     private val _sketchWhisperIndex = MutableStateFlow(0)
@@ -1829,38 +1832,69 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.updateUserSettings { it.copy(lastBackupTimestamp = timestamp) }
     }
 
-    fun exportBackup(context: Context) {
+    fun backupFileName(): String = repository.backupFileName()
+
+    fun createBackupBytes(): ByteArray = repository.createBackupBytes()
+
+    fun previewBackup(bytes: ByteArray) {
+        val strings = I18n.forLanguage(language.value)
+        val result = repository.readBackup(bytes)
+        result.fold(
+            onSuccess = { preview ->
+                _pendingBackup.value = preview
+            },
+            onFailure = { e ->
+                if (e.message == "newer") {
+                    showToast(strings.backupNewerVersion)
+                } else {
+                    showToast(strings.backupInvalidFile)
+                }
+            }
+        )
+    }
+
+    fun confirmRestore(mode: RestoreMode) {
+        val preview = _pendingBackup.value ?: return
+        val strings = I18n.forLanguage(language.value)
+        val result = repository.applyBackup(preview.payload, mode)
+        if (result.isSuccess) {
+            _pendingBackup.value = null
+            checkOnThisDay()
+            checkReadyCapsule()
+            KannachWidgets.updateAll(getApplication())
+            val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            capsules.value.filter { !it.opened && it.unlockDate > todayIso }.forEach { capsule ->
+                NotificationHelper.scheduleCapsuleNotification(getApplication(), capsule)
+            }
+            vibrate(14)
+            showToast(strings.importedToast)
+        } else {
+            showToast(strings.importError)
+        }
+    }
+
+    fun cancelRestore() {
+        _pendingBackup.value = null
+    }
+
+    fun shareBackup(context: Context) {
         val strings = I18n.forLanguage(language.value)
         try {
             val file = repository.exportBackupToFile()
-            recordBackupSaved(System.currentTimeMillis())
             val uri = StrokeMath.getShareableUri(context, file)
 
             val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/json"
+                type = "application/octet-stream"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val chooser = Intent.createChooser(sendIntent, strings.exportBtn).apply {
+            val chooser = Intent.createChooser(sendIntent, strings.backupShareBtn).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
             showToast(strings.exportedToast)
         } catch (e: Exception) {
             showToast(strings.saveError)
-        }
-    }
-
-    fun importBackup(jsonString: String) {
-        val strings = I18n.forLanguage(language.value)
-        val result = repository.restoreFromBackupJson(jsonString)
-        if (result.isSuccess) {
-            checkOnThisDay()
-            checkReadyCapsule()
-            vibrate(14)
-            showToast(strings.importedToast)
-        } else {
-            showToast(strings.importError)
         }
     }
 

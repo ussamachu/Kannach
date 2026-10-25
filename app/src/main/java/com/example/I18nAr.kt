@@ -151,11 +151,11 @@ val AR: Strings = Strings(
     greetDone = "غُرس اليوم.",
     greetBack = "أهلاً بعودتك.. الدفتر بانتظارك.",
     todayRowEmpty = "ما أثر اليوم؟",
-    onboardingBeat1 = "كُنَّاش دفتر ورقي هادئ.",
-    onboardingBeat1Sub = "مساحة هادئة لأيامك وخواطرك.",
-    onboardingBeat2 = "أثر مرسوم لكل يوم",
-    onboardingBeat2Sub = "ضربات قلم تنبت زهرة تحكي يومك.",
-    onboardingBeat3 = "لمس أي يوم لغرس أول رسمة صغيرة.",
+    onboardingBeat1 = "دفتر ورقي هادئ",
+    onboardingBeat1Sub = "أيامك محفوظة بهدوء.",
+    onboardingBeat2 = "أثر لكل يوم",
+    onboardingBeat2Sub = "بضع ضربات، زهرة صغيرة.",
+    onboardingBeat3 = "المس يومًا لتبدأ",
     onboardingBeat3Sub = "كل أثر تحفظه يزهر في دفترك.",
     onboardingBeat4 = "لك وحدك",
     onboardingBeat4Sub = "بلا حساب ولا إنترنت.",
@@ -360,4 +360,18 @@ val AR: Strings = Strings(
     widgetAddYear = "حديقة السنة",
     widgetAddToday = "أثر اليوم",
     widgetAddSmall = "أثر صغير"
-)
+).apply {
+    backupSaveBtn = "احفظ نسخة"
+    backupShareBtn = "شارك نسخة"
+    backupDriveHint = "اختر Google Drive لحفظ دفترك بأمان في السحابة."
+    backupPreviewTitle = "وُجدت نسخة احتياطية"
+    backupPreviewLine = "%s يومًا، من %s إلى %s"
+    backupNewerNote = "تبقى الأيام الأحدث الموجودة على هذا الهاتف."
+    backupMergeBtn = "أضفها إلى دفتري"
+    backupReplaceBtn = "استبدل دفتري"
+    backupReplaceWarn = "هذا يستبدل كل شيء على هذا الهاتف. تُحفظ نسخة أمان."
+    backupInvalidFile = "هذا ليس ملف نسخة احتياطية من كناش."
+    backupNewerVersion = "هذه النسخة من إصدار أحدث من كناش. حدّث التطبيق."
+    backupSavedToast = "تم حفظ النسخة"
+    backupCancelBtn = "إلغاء"
+}

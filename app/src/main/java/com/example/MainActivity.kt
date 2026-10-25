@@ -102,6 +102,9 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         KannachWidgets.updateAll(applicationContext)
+        if (KannachWidgets.hasAnyWidget(applicationContext)) {
+            KannachWidgets.scheduleDailyRefresh(applicationContext)
+        }
     }
 
     private fun handleWidgetIntent(intent: Intent?) {

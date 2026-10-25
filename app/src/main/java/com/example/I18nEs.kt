@@ -140,11 +140,11 @@ val ES: Strings = Strings(
     greetDone = "Hoy quedó plantado.",
     greetBack = "Qué bueno volver al cuaderno.",
     todayRowEmpty = "¿Cuál es la huella de hoy?",
-    onboardingBeat1 = "Kannach es un cuaderno de papel tranquilo.",
-    onboardingBeat1Sub = "Un rincón tranquilo para tus días.",
-    onboardingBeat2 = "Un pequeño trazo para cada día",
-    onboardingBeat2Sub = "Unos trazos florecen en tu día.",
-    onboardingBeat3 = "Toca cualquier día para plantar tu primera huella.",
+    onboardingBeat1 = "Un cuaderno tranquilo",
+    onboardingBeat1Sub = "Tus días, guardados con calma.",
+    onboardingBeat2 = "Una huella por día",
+    onboardingBeat2Sub = "Unos trazos, una pequeña flor.",
+    onboardingBeat3 = "Toca un día",
     onboardingBeat3Sub = "Cada huella guardada florece aquí.",
     onboardingBeat4 = "Solo tuyo",
     onboardingBeat4Sub = "Sin cuenta, sin internet.",
@@ -329,4 +329,18 @@ val ES: Strings = Strings(
     widgetAddYear = "Jardín del año",
     widgetAddToday = "Huella de hoy",
     widgetAddSmall = "Huella pequeña"
-)
+).apply {
+    backupSaveBtn = "Guardar una copia"
+    backupShareBtn = "Compartir una copia"
+    backupDriveHint = "Elige Google Drive para guardar tu cuaderno a salvo en la nube."
+    backupPreviewTitle = "Copia encontrada"
+    backupPreviewLine = "%s días, del %s al %s"
+    backupNewerNote = "Se conservan los días más recientes de este teléfono."
+    backupMergeBtn = "Añadir a mi cuaderno"
+    backupReplaceBtn = "Reemplazar mi cuaderno"
+    backupReplaceWarn = "Esto reemplaza todo en este teléfono. Se guarda una copia de seguridad."
+    backupInvalidFile = "Este archivo no es una copia de Kannach."
+    backupNewerVersion = "Esta copia viene de un Kannach más nuevo. Actualiza la app."
+    backupSavedToast = "Copia guardada"
+    backupCancelBtn = "Cancelar"
+}
