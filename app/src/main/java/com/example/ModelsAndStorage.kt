@@ -199,6 +199,94 @@ data class BackupPreview(
 enum class RestoreMode { MERGE, REPLACE }
 
 /**
+ * Shared language resolution used by both [KannachRepository] and [WidgetData].
+ */
+internal fun resolveKannachSystemLanguage(): String {
+    val sysLang = I18n.normalizeCode(Locale.getDefault().language)
+    return if (I18n.all.containsKey(sysLang)) sysLang else "en"
+}
+
+internal fun resolveKannachLanguage(savedLang: String?): String {
+    if (!savedLang.isNullOrBlank() && !savedLang.equals("system", ignoreCase = true)) {
+        val normSaved = I18n.normalizeCode(savedLang)
+        if (I18n.all.containsKey(normSaved)) return normSaved
+    }
+    return resolveKannachSystemLanguage()
+}
+
+data class WidgetSnapshot(
+    val entries: Map<String, DayEntry>,
+    val language: String,
+    val useArabicIndic: Boolean
+)
+
+object WidgetData {
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
+    @Volatile
+    private var cachedRawEntries: String? = null
+    @Volatile
+    private var cachedRawLang: String? = null
+    @Volatile
+    private var cachedRawSettings: String? = null
+    @Volatile
+    private var cachedSnapshot: WidgetSnapshot? = null
+
+    @Synchronized
+    fun load(context: Context): WidgetSnapshot {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val rawEntries = prefs.getString(KEY_ENTRIES, null)
+        val rawLang = prefs.getString(KEY_LANG, null)
+        val rawSettings = prefs.getString(KEY_USER_SETTINGS, null)
+
+        val currentSnapshot = cachedSnapshot
+        val resolvedLang = resolveKannachLanguage(rawLang)
+        if (currentSnapshot != null &&
+            rawEntries == cachedRawEntries &&
+            rawLang == cachedRawLang &&
+            rawSettings == cachedRawSettings &&
+            currentSnapshot.language == resolvedLang
+        ) {
+            return currentSnapshot
+        }
+
+        val entries: Map<String, DayEntry> = if (rawEntries.isNullOrEmpty()) {
+            emptyMap()
+        } else {
+            try {
+                json.decodeFromString<Map<String, DayEntry>>(rawEntries)
+            } catch (_: Exception) {
+                emptyMap()
+            }
+        }
+
+        val useArabicIndic: Boolean = if (rawSettings.isNullOrEmpty()) {
+            false
+        } else {
+            try {
+                json.decodeFromString<UserSettings>(rawSettings).useArabicIndicNumerals
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        val snapshot = WidgetSnapshot(
+            entries = entries,
+            language = resolvedLang,
+            useArabicIndic = useArabicIndic
+        )
+        cachedRawEntries = rawEntries
+        cachedRawLang = rawLang
+        cachedRawSettings = rawSettings
+        cachedSnapshot = snapshot
+        return snapshot
+    }
+}
+
+/**
  * Local offline repository managing entries, time capsules, reminder settings,
  * user settings, and data migrations matching Kannach's storage behavior.
  */
@@ -211,7 +299,7 @@ class KannachRepository(private val context: Context) {
         ignoreUnknownKeys = true
         isLenient = true
         encodeDefaults = true
-        prettyPrint = true
+        prettyPrint = false
     }
 
     private val _entriesFlow = MutableStateFlow<Map<String, DayEntry>>(emptyMap())
@@ -305,10 +393,7 @@ class KannachRepository(private val context: Context) {
         _reminderFlow.value = loadRawReminder()
     }
 
-    private fun resolveSystemLanguage(): String {
-        val sysLang = I18n.normalizeCode(Locale.getDefault().language)
-        return if (I18n.all.containsKey(sysLang)) sysLang else "en"
-    }
+    private fun resolveSystemLanguage(): String = resolveKannachSystemLanguage()
 
     private fun loadLanguageChoice(): String {
         val saved = prefs.getString(KEY_LANG, null)
@@ -323,12 +408,7 @@ class KannachRepository(private val context: Context) {
      * Determines initial language from saved preference or system locale.
      */
     private fun detectInitialLanguage(): String {
-        val saved = prefs.getString(KEY_LANG, null)
-        if (!saved.isNullOrBlank() && !saved.equals("system", ignoreCase = true)) {
-            val normSaved = I18n.normalizeCode(saved)
-            if (I18n.all.containsKey(normSaved)) return normSaved
-        }
-        return resolveSystemLanguage()
+        return resolveKannachLanguage(prefs.getString(KEY_LANG, null))
     }
 
     private fun loadLanguage(): String {

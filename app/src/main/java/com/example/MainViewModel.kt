@@ -9,6 +9,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
 import java.io.File
@@ -1837,39 +1839,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun createBackupBytes(): ByteArray = repository.createBackupBytes()
 
     fun previewBackup(bytes: ByteArray) {
-        val strings = I18n.forLanguage(language.value)
-        val result = repository.readBackup(bytes)
-        result.fold(
-            onSuccess = { preview ->
-                _pendingBackup.value = preview
-            },
-            onFailure = { e ->
-                if (e.message == "newer") {
-                    showToast(strings.backupNewerVersion)
-                } else {
-                    showToast(strings.backupInvalidFile)
-                }
+        viewModelScope.launch {
+            val strings = I18n.forLanguage(language.value)
+            val result = withContext(Dispatchers.Default) {
+                repository.readBackup(bytes)
             }
-        )
+            result.fold(
+                onSuccess = { preview ->
+                    _pendingBackup.value = preview
+                },
+                onFailure = { e ->
+                    if (e.message == "newer") {
+                        showToast(strings.backupNewerVersion)
+                    } else {
+                        showToast(strings.backupInvalidFile)
+                    }
+                }
+            )
+        }
     }
 
     fun confirmRestore(mode: RestoreMode) {
         val preview = _pendingBackup.value ?: return
-        val strings = I18n.forLanguage(language.value)
-        val result = repository.applyBackup(preview.payload, mode)
-        if (result.isSuccess) {
-            _pendingBackup.value = null
-            checkOnThisDay()
-            checkReadyCapsule()
-            KannachWidgets.updateAll(getApplication())
-            val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            capsules.value.filter { !it.opened && it.unlockDate > todayIso }.forEach { capsule ->
-                NotificationHelper.scheduleCapsuleNotification(getApplication(), capsule)
+        viewModelScope.launch {
+            val strings = I18n.forLanguage(language.value)
+            val result = withContext(Dispatchers.Default) {
+                repository.applyBackup(preview.payload, mode)
             }
-            vibrate(14)
-            showToast(strings.importedToast)
-        } else {
-            showToast(strings.importError)
+            if (result.isSuccess) {
+                _pendingBackup.value = null
+                checkOnThisDay()
+                checkReadyCapsule()
+                KannachWidgets.updateAll(getApplication())
+                val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                capsules.value.filter { !it.opened && it.unlockDate > todayIso }.forEach { capsule ->
+                    NotificationHelper.scheduleCapsuleNotification(getApplication(), capsule)
+                }
+                vibrate(14)
+                showToast(strings.importedToast)
+            } else {
+                showToast(strings.importError)
+            }
         }
     }
 

@@ -14,6 +14,9 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.RemoteViews
 import java.util.Calendar
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 abstract class KannachWidgetProvider : AppWidgetProvider() {
@@ -154,27 +157,39 @@ class SmallWidgetProvider : KannachWidgetProvider() {
 }
 
 object KannachWidgets {
+    private val updateExecutor = ScheduledThreadPoolExecutor(1) { r ->
+        Thread(r, "KannachWidgetUpdater").apply { isDaemon = true }
+    }
+
+    @Volatile
+    private var pendingUpdate: ScheduledFuture<*>? = null
+
+    @Synchronized
     fun updateAll(context: Context) {
-        val manager = AppWidgetManager.getInstance(context)
-        val providers = listOf(
-            YearWidgetProvider(),
-            TodayWidgetProvider(),
-            SmallWidgetProvider()
-        )
-        for (provider in providers) {
-            try {
-                val ids = manager.getAppWidgetIds(ComponentName(context, provider::class.java))
-                for (id in ids) {
-                    try {
-                        provider.refresh(context, manager, id)
-                    } catch (t: Throwable) {
-                        Log.e("KannachWidget", "refresh failed", t)
+        val appContext = context.applicationContext
+        pendingUpdate?.cancel(false)
+        pendingUpdate = updateExecutor.schedule({
+            val manager = AppWidgetManager.getInstance(appContext)
+            val providers = listOf(
+                YearWidgetProvider(),
+                TodayWidgetProvider(),
+                SmallWidgetProvider()
+            )
+            for (provider in providers) {
+                try {
+                    val ids = manager.getAppWidgetIds(ComponentName(appContext, provider::class.java))
+                    for (id in ids) {
+                        try {
+                            provider.refresh(appContext, manager, id)
+                        } catch (t: Throwable) {
+                            Log.e("KannachWidget", "refresh failed", t)
+                        }
                     }
+                } catch (t: Throwable) {
+                    Log.e("KannachWidget", "updateAll failed", t)
                 }
-            } catch (t: Throwable) {
-                Log.e("KannachWidget", "updateAll failed", t)
             }
-        }
+        }, 300L, TimeUnit.MILLISECONDS)
     }
 
     fun scheduleDailyRefresh(context: Context) {

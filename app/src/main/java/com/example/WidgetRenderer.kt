@@ -85,10 +85,10 @@ object WidgetRenderer {
         @Suppress("DEPRECATION")
         val scaledDensity = metrics.scaledDensity
 
-        val repo = KannachRepository(context.applicationContext)
-        val entries = repo.getEntries()
-        val language = repo.getLanguage()
-        val useArabicIndic = repo.getUserSettings().useArabicIndicNumerals
+        val snapshot = WidgetData.load(context.applicationContext)
+        val entries = snapshot.entries
+        val language = snapshot.language
+        val useArabicIndic = snapshot.useArabicIndic
         val strings = I18n.forLanguage(language)
         val isRtl = I18n.isRtl(language)
 
@@ -244,10 +244,10 @@ object WidgetRenderer {
         @Suppress("DEPRECATION")
         val scaledDensity = metrics.scaledDensity
 
-        val repo = KannachRepository(context.applicationContext)
-        val entries = repo.getEntries()
-        val language = repo.getLanguage()
-        val useArabicIndic = repo.getUserSettings().useArabicIndicNumerals
+        val snapshot = WidgetData.load(context.applicationContext)
+        val entries = snapshot.entries
+        val language = snapshot.language
+        val useArabicIndic = snapshot.useArabicIndic
         val strings = I18n.forLanguage(language)
         val isRtl = I18n.isRtl(language)
 

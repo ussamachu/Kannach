@@ -108,8 +108,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.text.SimpleDateFormat
@@ -186,7 +188,8 @@ fun GalleryScreen(
             val limitDay = if (currentYear == thisYear && m == thisMonth) cal.get(Calendar.DAY_OF_MONTH) else daysInM
             val unwrittenDays = (1..limitDay).filter { d ->
                 val dKey = String.format(Locale.US, "%04d-%02d-%02d", currentYear, m, d)
-                entries[dKey] == null || (entries[dKey]!!.strokes.isEmpty() && entries[dKey]!!.text.isBlank())
+                val e = entries[dKey]
+                e == null || (e.strokes.isEmpty() && e.text.isBlank())
             }
             Triple(m, writtenInMonth, unwrittenDays)
         }
@@ -2025,25 +2028,28 @@ fun SettingsScreen(
         }
     }
 
+    val scope = rememberCoroutineScope()
+
     val saveLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                val bytes = viewModel.createBackupBytes()
-                val written = context.contentResolver.openOutputStream(uri)?.use { stream ->
-                    stream.write(bytes)
-                    stream.flush()
-                    true
-                } ?: false
-                if (written) {
-                    viewModel.recordBackupSaved()
-                    viewModel.showToast(I18n.forLanguage(language).backupSavedToast)
-                } else {
-                    viewModel.showToast(I18n.forLanguage(language).saveError)
+            val strings = I18n.forLanguage(language)
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    try {
+                        val data = viewModel.createBackupBytes()
+                        context.contentResolver.openOutputStream(uri)?.use { it.write(data) } != null
+                    } catch (e: Exception) {
+                        false
+                    }
                 }
-            } catch (e: Exception) {
-                viewModel.showToast(I18n.forLanguage(language).saveError)
+                if (ok) {
+                    viewModel.recordBackupSaved()
+                    viewModel.showToast(strings.backupSavedToast)
+                } else {
+                    viewModel.showToast(strings.saveError)
+                }
             }
         }
     }
@@ -2052,15 +2058,20 @@ fun SettingsScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (bytes != null) {
-                    viewModel.previewBackup(bytes)
-                } else {
-                    viewModel.showToast(I18n.forLanguage(language).importError)
+            val strings = I18n.forLanguage(language)
+            scope.launch {
+                val bytes = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    } catch (e: Exception) {
+                        null
+                    }
                 }
-            } catch (e: Exception) {
-                viewModel.showToast(I18n.forLanguage(language).importError)
+                if (bytes == null) {
+                    viewModel.showToast(strings.backupInvalidFile)
+                } else {
+                    viewModel.previewBackup(bytes)
+                }
             }
         }
     }
@@ -3521,9 +3532,7 @@ fun ConfirmDialogOverlay(
     viewModel: MainViewModel
 ) {
     val dialogData by viewModel.confirmDialog.collectAsState()
-    if (dialogData == null) return
-
-    val data = dialogData!!
+    val data = dialogData ?: return
     val palette = LocalKannachPalette.current
 
     Box(
