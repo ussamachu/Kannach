@@ -33,7 +33,7 @@ val EN: Strings = Strings(
     entryPlaceholder = "Dear notebook, today…",
     settingsDescLanguage = "Choose the language of your diary",
     settingsDescReminder = "A gentle nudge to draw your day",
-    settingsDescSeasons = "Colours that follow the seasons",
+    settingsDescSeasons = "Colors that follow the seasons",
     settingsDescBackup = "Save or restore your whole diary",
     settingsDescHide = "Blank screen in recent apps. Also blocks screenshots.",
     settingsDescMore = "Week start, handwriting size and more",
@@ -68,7 +68,7 @@ val EN: Strings = Strings(
     galleryEmptySub = "Every day is a fresh page waiting for your touch",
     plantTodayBtn = "Plant today’s doodle",
     searchHint = "Search your memories…",
-    searchNoMatch = "No doodles or notes matched \"{q}\"",
+    searchNoMatch = "No doodles or notes matched “{q}”",
     noMemoriesYet = "No written memories yet",
     onThisDay = "On this day, {y}…",
     dismiss = "Dismiss",
@@ -114,7 +114,7 @@ val EN: Strings = Strings(
         "Somewhere in today, there is a sentence worth keeping.",
         "The page is still blank, patient and unhurried.",
         "Before sleep, one quiet line to close the day.",
-        "A notebook doesn't count the quiet days. Today's page is simply open."
+        "A notebook doesn’t count the quiet days. Today’s page is simply open."
     ),
     months = listOf(
         "January", "February", "March", "April", "May", "June",
@@ -136,7 +136,7 @@ val EN: Strings = Strings(
     greetMorning = "Morning light on a quiet page.",
     greetDay = "A quiet pause to leave a mark.",
     greetEvening = "Evening stillness on the page.",
-    greetNight = "Night stillness.. a quiet line.",
+    greetNight = "Night stillness… a quiet line.",
     greetDone = "Today is planted.",
     greetBack = "Welcome back to your notebook.",
     todayRowEmpty = "What’s today’s mark?",
@@ -212,11 +212,11 @@ val EN: Strings = Strings(
     capsulePresetTomorrow = "Tomorrow",
     capsulePreset1w = "One week",
     capsulePreset1m = "One month",
-    capsulePreset3m = "3 months",
+    capsulePreset3m = "Three months",
     capsulePreset6m = "Six months",
     capsulePreset1y = "One year",
     capsulePickDate = "Pick a date",
-    capsuleSealConfirmMsg = "Once sealed, you won't see it until {d}.",
+    capsuleSealConfirmMsg = "Once sealed, you won’t see it until {d}.",
     capsuleKeepWriting = "Keep writing",
     capsuleWriteBack = "Write back",
     capsuleNotifPermNote = "Notifications are off — your letter will wait for you inside the app.",
@@ -263,16 +263,16 @@ val EN: Strings = Strings(
     settingsSignatureExport = "Signature on exported drawings",
     settingsReplayWelcome = "Show the welcome again",
     settingsTellFriend = "Tell a friend",
-    settingsTellFriendMsg = "I've been keeping a quiet daily doodle diary in Kannach — a notebook that grows.",
+    settingsTellFriendMsg = "I’ve been keeping a quiet daily doodle diary in Kannach — a notebook that grows.",
     settingsBackupRow = "Back up my diary",
     settingsMore = "More",
-    madeBy = "Made By Ossamah",
-    drawWhisper1 = "What words can't say, a line sometimes can.",
+    madeBy = "Made by Ossamah",
+    drawWhisper1 = "What words can’t say, a line sometimes can.",
     drawWhisper2 = "No right or wrong here — only the trace of a hand.",
     drawWhisper3 = "One line is enough for everything to begin.",
-    drawWhisper4 = "A blank page is patient. There's no hurry.",
+    drawWhisper4 = "A blank page is patient. There’s no hurry.",
     drawSaved1 = "Saved. The drawing now has a memory.",
-    drawSaved2 = "From the hand to the paper, from the paper to for good.",
+    drawSaved2 = "From the hand to the paper, and from the paper to forever.",
     notifMorning = listOf(
         "Morning light is on the paper. A single line is enough for today.",
         "Before the day begins to hurry, the page is quiet and open.",
@@ -300,7 +300,7 @@ val EN: Strings = Strings(
         "No need for a long story — one honest line is plenty.",
         "As the noise fades, the paper listens quietly.",
         "A small flower or a quiet word for how this evening feels.",
-        "The desk is calm, and today's page is still here.",
+        "The desk is calm, and today’s page is still here.",
         "Letting the day rest on paper before night falls."
     ),
     notifNight = listOf(
@@ -314,12 +314,12 @@ val EN: Strings = Strings(
         "Good night to the day — a tiny mark and then rest."
     ),
     notifComeback = listOf(
-        "A notebook doesn't count the quiet days. Today's page is simply open.",
+        "A notebook doesn’t count the quiet days. Today’s page is simply open.",
         "Quiet days are part of the year too. Start again anywhere.",
         "The paper waited patiently. One small line whenever it feels right.",
         "Nothing is behind, nothing is owed. Just a fresh page for today.",
         "Every garden has quiet seasons. A single dot brings the ink back.",
-        "Welcome back to the desk — there's no catching up to do.",
+        "Welcome back to the desk — there’s no catching up to do.",
         "Pick up from today, as lightly as setting a pen on paper.",
         "The notebook is still here, quiet and unhurried."
     ),
@@ -327,7 +327,7 @@ val EN: Strings = Strings(
     widgetPlantToday = "Plant today",
     widgetAddTitle = "Add a widget",
     widgetAddYear = "Year garden",
-    widgetAddToday = "Today's mark",
+    widgetAddToday = "Today’s mark",
     widgetAddSmall = "Small mark"
 ).apply {
     backupSaveBtn = "Save a copy"

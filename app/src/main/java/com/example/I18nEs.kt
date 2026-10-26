@@ -56,8 +56,8 @@ val ES: Strings = Strings(
     exportedToast = "Tu copia está lista para guardar",
     saveError = "No se pudo guardar — inténtalo de nuevo",
     aboutText = "Kannach es un cuaderno de papel tranquilo. Cada día escribes unas pocas palabras y dibujas una pequeña forma — al final del año tus días se convierten en un pequeño jardín. Todo permanece en tu dispositivo.",
-    openGallery = "Your little garden",
-    galleryTitle = "Your little garden",
+    openGallery = "Tu pequeño jardín",
+    galleryTitle = "Tu pequeño jardín",
     galleryCount = PluralString(
         zero = "Aún no hay días escritos",
         one = "{n} día escrito hasta ahora",
@@ -114,7 +114,7 @@ val ES: Strings = Strings(
         "En algún rincón de hoy hay una frase que merece quedarse.",
         "La página sigue en blanco, paciente y sin prisa.",
         "Antes de dormir, una línea tranquila para cerrar el día.",
-        "Un cuaderno no cuenta los días en silencio. La página de hoy simplemente está abierta."
+        "Un cuaderno no cuenta los días tranquilos. La página de hoy simplemente está abierta."
     ),
     months = listOf(
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -212,7 +212,7 @@ val ES: Strings = Strings(
     capsulePresetTomorrow = "Mañana",
     capsulePreset1w = "Una semana",
     capsulePreset1m = "Un mes",
-    capsulePreset3m = "3 meses",
+    capsulePreset3m = "Tres meses",
     capsulePreset6m = "Seis meses",
     capsulePreset1y = "Un año",
     capsulePickDate = "Elegir fecha",
@@ -262,7 +262,7 @@ val ES: Strings = Strings(
     copyReminderNotifMsg = "Un recordatorio tranquilo para guardar una copia de tu cuaderno.",
     settingsSignatureExport = "Firma en los dibujos exportados",
     settingsReplayWelcome = "Ver la bienvenida de nuevo",
-    settingsTellFriend = "Contar a un amigo",
+    settingsTellFriend = "Contárselo a un amigo",
     settingsTellFriendMsg = "Llevo un diario tranquilo de pequeños dibujos en Kannach — un cuaderno que florece.",
     settingsBackupRow = "Copia de seguridad de mi diario",
     settingsMore = "Más",
@@ -299,7 +299,7 @@ val ES: Strings = Strings(
         "En algún rincón de hoy hay una frase que merece quedarse.",
         "No hace falta una larga historia — una línea sincera es suficiente.",
         "Cuando el ruido baja, el papel escucha en silencio.",
-        "Una pequeña flor o una palabra suave para el sentir de esta tarde.",
+        "Una pequeña flor o una palabra suave para lo que sientes esta tarde.",
         "El escritorio está en calma y la página de hoy sigue aquí.",
         "Dejar que el día descanse en el papel antes de la noche."
     ),
@@ -314,10 +314,10 @@ val ES: Strings = Strings(
         "Buenas noches al día — una pequeña huella y a descansar."
     ),
     notifComeback = listOf(
-        "Un cuaderno no cuenta los días en silencio. La página de hoy simplemente está abierta.",
+        "Un cuaderno no cuenta los días tranquilos. La página de hoy simplemente está abierta.",
         "Los días tranquilos también son parte del año. Siempre se puede empezar de nuevo.",
         "El papel esperó con paciencia. Un pequeño trazo cuando se sienta bien.",
-        "Nada va con retraso, nada se debe. Solo una página nueva para hoy.",
+        "Nada va atrasado, nada se debe. Solo una página nueva para hoy.",
         "Todo jardín tiene estaciones tranquilas. Un solo punto devuelve la tinta.",
         "Qué bueno volver al escritorio — no hay nada que recuperar.",
         "Retomar desde hoy, tan ligero como posar el trazo en el papel.",
