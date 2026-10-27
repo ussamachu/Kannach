@@ -100,11 +100,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -118,6 +122,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
+private const val DEVELOPER_URL = "https://oussamachu.framer.website/"
 
 /**
  * 1. GalleryScreen (حديقتك الصغيرة):
@@ -1943,7 +1949,7 @@ private fun PaperTypeMiniSwatch(
  * 6. More (expandable row, collapsed by default, state not persisted: Week starts on, Handwriting size,
  *    Add signature to exported drawings, Reminder days, Send a test reminder, Replay welcome tour)
  * 7. Tell a friend (text button)
- * — Footer: centered, 13 sp, palette.inkFaint: strings.madeBy
+ * — Footer: centered, 13 sp, palette.inkFaint: strings.madeByPrefix + strings.madeByName
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1960,6 +1966,11 @@ fun SettingsScreen(
     val pendingBackup by viewModel.pendingBackup.collectAsState()
     val reduceMotion = rememberReduceMotion()
     val context = LocalContext.current
+    val openDeveloperPage = {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DEVELOPER_URL)))
+        } catch (_: Exception) { }
+    }
 
     // Sheet & expansion states (not persisted)
     var showLanguageSheet by remember { mutableStateOf(false) }
@@ -2642,16 +2653,43 @@ fun SettingsScreen(
                     // =========================================================================
                     // FOOTER: centered, 13 sp, palette.inkFaint: "Made By" line
                     // =========================================================================
-                    Text(
-                        text = strings.madeBy,
-                        fontSize = 13.sp,
-                        color = palette.inkFaint,
-                        textAlign = TextAlign.Center,
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 24.dp, bottom = 8.dp)
-                            .testTag("settings_version_text")
-                    )
+                            .testTag("settings_version_text"),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.madeByPrefix,
+                            fontSize = 13.sp,
+                            color = palette.inkFaint,
+                            fontFamily = LocalKannachHandFont.current
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clickable(onClick = openDeveloperPage)
+                                .heightIn(min = 48.dp)
+                                .padding(horizontal = 6.dp)
+                                .semantics {
+                                    role = Role.Button
+                                    contentDescription = strings.madeByPrefix + " " + strings.madeByName
+                                }
+                                .testTag("settings_developer_link"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.madeByName,
+                                fontSize = 13.sp,
+                                color = palette.inkSoft,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = LocalKannachHandFont.current,
+                                textDecoration = TextDecoration.Underline
+                            )
+                        }
+                    }
                 }
             }
 
