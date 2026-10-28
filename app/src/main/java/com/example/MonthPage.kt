@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -159,8 +160,10 @@ fun MonthPage(
 
                     Text(
                         text = strings.appTitle,
-                        fontSize = 20.sp,
-                        fontFamily = handFont,
+                        fontSize = if (isRtl) 24.sp else 20.sp,
+                        fontFamily = if (isRtl) KannachFonts.handAr else handFont,
+                        fontWeight = if (isRtl) FontWeight.SemiBold else null,
+                        style = TextStyle(fontSynthesis = if (isRtl) FontSynthesis.Weight else null),
                         color = palette.inkSoft,
                         textAlign = TextAlign.Center,
                         maxLines = 1

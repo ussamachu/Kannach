@@ -13,7 +13,7 @@ import kotlin.math.roundToInt
 
 /**
  * Mathematical routines for smoothing, normalizing, and rasterizing
- * freehand strokes in Kannach (كُنَّاش).
+ * freehand strokes in Kannach (كناش).
  *
  * Faithfully matches the exact bezier curve midpoints and 300x300 normalization
  * mathematics from `kannach.html`.
@@ -330,7 +330,7 @@ object StrokeMath {
      *   and procedural paper texture (plain, ruled, dotted, kraft)
      * - Strokes scaled to fit inside the card with 48px padding
      * - SK9 Signature inside the card's bottom-end corner, inset 36px:
-     *   sprout vector path + "Kannach" / "كُنَّاش" (28px, hand Typeface from res/font, palette.greenDeep at 0.72 alpha)
+     *   sprout vector path + "Kannach" / "كناش" (28px, hand Typeface from res/font, palette.greenDeep at 0.72 alpha)
      *   + localized today date below (20px, UI Typeface from res/font, palette.inkSoft at 0.65 alpha)
      * - SK10 Story 9:16 safe zone: top >= 260px, bottom >= 340px, signature inside card well above bottom 340px
      */
@@ -604,7 +604,7 @@ object StrokeMath {
                 null
             } ?: android.graphics.Typeface.DEFAULT
 
-            val brandWord = if (isRtl) "كُنَّاش" else "Kannach"
+            val brandWord = if (isRtl) "كناش" else "Kannach"
             val dateText = dateLabelOverride ?: run {
                 val cal = java.util.Calendar.getInstance()
                 val y = cal.get(java.util.Calendar.YEAR)

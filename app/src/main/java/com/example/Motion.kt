@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 const val ENABLE_LETTERS = false
 
 /**
- * Authentic motion constants and easing curves for Kannach (كُنَّاش).
+ * Authentic motion constants and easing curves for Kannach (كناش).
  * Follows the emotional UX specification §4.
  */
 object KannachMotion {

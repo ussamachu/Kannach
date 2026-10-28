@@ -18,7 +18,7 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
 /**
- * Kannach (كُنَّاش) Models & Storage Layer.
+ * Kannach (كناش) Models & Storage Layer.
  * SCHEMA_VERSION = 2 strictly matches the web/Cordova JSON structure
  * for 100% export/import backward & forward compatibility.
  */

@@ -2610,7 +2610,7 @@ fun DrawingCanvas(
 
 /**
  * R2: 3-beat first run onboarding welcoming new users into the quiet paper world of Kannach:
- * - Beat 1: The sprout draws itself via AnimatedSprout + "كُنَّاش دفتر ورقي هادئ."
+ * - Beat 1: The sprout draws itself via AnimatedSprout + "كناش دفتر ورقي هادئ."
  * - Beat 2: An authentic sample day cell sprouts a gentle flower glyph via GlyphView.
  * - Beat 3: A poetic call to action: "المس أي يوم لتغرس أول رسمة صغيرة."
  * Skippable after Beat 1.
