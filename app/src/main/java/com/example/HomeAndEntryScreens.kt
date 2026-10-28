@@ -363,9 +363,8 @@ fun SplashScreen(
                 Text(
                     text = appName,
                     fontSize = 34.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = kannachTitleStyle(),
                     color = palette.greenDeep,
-                    fontFamily = LocalKannachHandFont.current,
                     modifier = Modifier.alpha(titleAlpha.value)
                 )
                 if (appSub.isNotBlank()) {
@@ -1232,8 +1231,7 @@ private fun MemoryCardView(
                             text = formattedDate,
                             fontSize = 17.sp,
                             lineHeight = 24.sp,
-                            style = ArabicDisplayStyle,
-                            fontWeight = FontWeight.Bold,
+                            style = kannachTitleStyle(),
                             color = palette.greenDeep,
                             maxLines = 2,
                             modifier = Modifier.padding(top = 4.dp)
@@ -1254,7 +1252,7 @@ private fun MemoryCardView(
                             Text(
                                 text = distanceLineText,
                                 fontSize = 12.5.sp,
-                                fontFamily = LocalKannachHandFont.current,
+                                style = kannachTitleStyle(),
                                 color = palette.greenDeep,
                                 modifier = Modifier.padding(top = 2.dp)
                             )
@@ -1655,7 +1653,7 @@ private fun WritePulseOne(
                 Text(
                     text = pillDateText,
                     fontSize = 14.sp,
-                    fontFamily = LocalKannachHandFont.current,
+                    style = kannachTitleStyle(),
                     color = palette.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1796,7 +1794,7 @@ private fun WritePulseTwo(
             Text(
                 text = strings.drawLabel,
                 fontSize = 16.sp,
-                fontFamily = LocalKannachHandFont.current,
+                style = kannachTitleStyle(),
                 color = palette.greenDeep,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f)
@@ -2753,8 +2751,7 @@ fun FirstRunOnboarding(
                 Text(
                     text = title,
                     fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = handFont,
+                    style = kannachTitleStyle(),
                     color = palette.ink,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.graphicsLayer {

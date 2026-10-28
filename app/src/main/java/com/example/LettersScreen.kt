@@ -254,8 +254,7 @@ private fun CapsuleShelfScreen(
                     Text(
                         text = strings.capsuleTitle,
                         fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = LocalKannachHandFont.current,
+                        style = kannachTitleStyle(),
                         color = palette.greenDeep
                     )
                     Spacer(modifier = Modifier.size(48.dp))
@@ -550,8 +549,7 @@ private fun CapsuleShelfScreen(
                         Text(
                             text = strings.capsuleDeleteTitle,
                             fontSize = 19.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = LocalKannachHandFont.current,
+                            style = kannachTitleStyle(),
                             color = palette.ink
                         )
                         Text(
@@ -627,8 +625,7 @@ private fun ShelfSectionHeader(
         Text(
             text = title,
             fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = LocalKannachHandFont.current,
+            style = kannachTitleStyle(),
             color = palette.greenDeep
         )
         Box(
@@ -1035,8 +1032,7 @@ private fun CapsuleComposeScreen(
                 Text(
                     text = strings.capsuleComposeTitle,
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = LocalKannachHandFont.current,
+                    style = kannachTitleStyle(),
                     color = palette.greenDeep,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1102,8 +1098,7 @@ private fun CapsuleComposeScreen(
                     Text(
                         text = strings.capsuleDateLabel,
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = LocalKannachHandFont.current,
+                        style = kannachTitleStyle(),
                         color = palette.greenDeep,
                         modifier = Modifier.padding(horizontal = 4.dp)
                     )
@@ -1456,8 +1451,7 @@ private fun CapsuleComposeScreen(
                     Text(
                         text = strings.capsuleDraftSheetTitle,
                         fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = LocalKannachHandFont.current,
+                        style = kannachTitleStyle(),
                         color = palette.greenDeep,
                         textAlign = TextAlign.Center
                     )
@@ -2075,14 +2069,14 @@ fun OpenedCapsuleOverlay(
                             Text(
                                 text = strings.capsuleWrittenStamp.replace("{d}", writtenLong),
                                 fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = kannachTitleStyle(),
                                 color = palette.greenDeep
                             )
                             if (distanceCopy.isNotBlank()) {
                                 Text(
                                     text = distanceCopy,
                                     fontSize = 14.sp,
-                                    fontFamily = LocalKannachHandFont.current,
+                                    style = kannachTitleStyle(),
                                     color = palette.greenDeep,
                                     modifier = Modifier
                                         .padding(top = 2.dp)

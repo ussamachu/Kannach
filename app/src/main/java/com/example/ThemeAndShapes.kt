@@ -42,8 +42,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Typography
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import java.util.Calendar
 import kotlin.random.Random
@@ -608,6 +610,23 @@ val KannachUiFont = FontFamily(
 
 val LocalKannachHandFont = staticCompositionLocalOf { KannachFonts.handAr }
 val LocalKannachUiFont = staticCompositionLocalOf { KannachUiFont }
+
+@Composable
+fun kannachTitleStyle(): TextStyle {
+    return if (LocalLayoutDirection.current == LayoutDirection.Rtl) {
+        TextStyle(
+            fontFamily = LocalKannachHandFont.current,
+            fontWeight = FontWeight.SemiBold,
+            fontSynthesis = FontSynthesis.Weight,
+            letterSpacing = TextUnit.Unspecified
+        )
+    } else {
+        TextStyle(
+            fontFamily = LocalKannachHandFont.current,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
 
 /**
  * C1: Shared TextStyle for large Arabic display text (AppHeader month name,

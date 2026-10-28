@@ -253,8 +253,7 @@ fun GalleryScreen(
                     Text(
                         text = strings.galleryTitle,
                         fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = LocalKannachHandFont.current,
+                        style = kannachTitleStyle(),
                         color = palette.greenDeep
                     )
                     Spacer(modifier = Modifier.size(48.dp))
@@ -488,8 +487,7 @@ fun GalleryScreen(
                             Text(
                                 text = strings.galleryEmptyTitle,
                                 fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = LocalKannachHandFont.current,
+                                style = kannachTitleStyle(),
                                 color = palette.greenDeep,
                                 textAlign = TextAlign.Center
                             )
@@ -555,8 +553,7 @@ fun GalleryScreen(
                                         Text(
                                             text = I18n.forLanguage(language).months.getOrElse(monthNum - 1) { "" },
                                             fontSize = 17.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = LocalKannachHandFont.current,
+                                            style = kannachTitleStyle(),
                                             color = palette.greenDeep
                                         )
                                         Text(
@@ -737,7 +734,7 @@ fun YearWrapScreen(
                 Text(
                     text = strings.wrapTitle,
                     fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = kannachTitleStyle(),
                     color = palette.greenDeep
                 )
                 Spacer(modifier = Modifier.size(40.dp))
@@ -1053,7 +1050,7 @@ fun SketchpadScreen(
                 Text(
                     text = strings.sketchTitle,
                     fontSize = 18.sp,
-                    fontFamily = LocalKannachHandFont.current,
+                    style = kannachTitleStyle(),
                     color = palette.inkSoft,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1700,8 +1697,7 @@ fun SketchpadScreen(
                             Text(
                                 text = strings.exportTitle,
                                 fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = LocalKannachHandFont.current,
+                                style = kannachTitleStyle(),
                                 color = palette.greenDeep
                             )
                             IconButton(
@@ -2185,7 +2181,7 @@ fun SettingsScreen(
                     Text(
                         text = strings.settings,
                         fontSize = 22.sp,
-                        fontFamily = LocalKannachHandFont.current,
+                        style = kannachTitleStyle(),
                         color = palette.inkSoft,
                         modifier = Modifier.testTag("settings_header_title")
                     )
@@ -2431,7 +2427,7 @@ fun SettingsScreen(
                                 Text(
                                     text = strings.settingsWeekStartLabel,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    style = kannachTitleStyle(),
                                     color = palette.inkSoft,
                                     maxLines = 1
                                 )
@@ -2466,7 +2462,7 @@ fun SettingsScreen(
                                 Text(
                                     text = strings.settingsHandSizeLabel,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    style = kannachTitleStyle(),
                                     color = palette.inkSoft,
                                     maxLines = 1
                                 )
@@ -2526,7 +2522,7 @@ fun SettingsScreen(
                                 Text(
                                     text = strings.reminderDaysLabel,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    style = kannachTitleStyle(),
                                     color = palette.inkSoft,
                                     maxLines = 1
                                 )
@@ -2730,8 +2726,7 @@ fun SettingsScreen(
                             Text(
                                 text = strings.language,
                                 fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = LocalKannachHandFont.current,
+                                style = kannachTitleStyle(),
                                 color = palette.greenDeep
                             )
                             IconButton(
@@ -2847,8 +2842,7 @@ fun SettingsScreen(
                             Text(
                                 text = strings.settingsBackupRow,
                                 fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = LocalKannachHandFont.current,
+                                style = kannachTitleStyle(),
                                 color = palette.greenDeep
                             )
                             IconButton(
@@ -2959,7 +2953,7 @@ fun SettingsScreen(
                             Text(
                                 text = strings.backupPreviewTitle,
                                 fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = kannachTitleStyle(),
                                 color = palette.ink
                             )
 
@@ -3109,7 +3103,7 @@ fun SettingsScreen(
                         Text(
                             text = strings.aboutTitle,
                             fontSize = 22.sp,
-                            fontFamily = LocalKannachHandFont.current,
+                            style = kannachTitleStyle(),
                             color = palette.greenDeep,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
@@ -3120,8 +3114,7 @@ fun SettingsScreen(
                         Text(
                             text = strings.aboutWhatTitle,
                             fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = LocalKannachHandFont.current,
+                            style = kannachTitleStyle(),
                             color = palette.ink
                         )
 
@@ -3140,8 +3133,7 @@ fun SettingsScreen(
                         Text(
                             text = strings.aboutPrivacyTitle,
                             fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = LocalKannachHandFont.current,
+                            style = kannachTitleStyle(),
                             color = palette.ink
                         )
 
@@ -3227,8 +3219,7 @@ fun SettingsScreen(
                                 Text(
                                     text = strings.widgetAddTitle,
                                     fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = LocalKannachHandFont.current,
+                                    style = kannachTitleStyle(),
                                     color = palette.greenDeep
                                 )
                                 IconButton(
@@ -3595,7 +3586,7 @@ fun ConfirmDialogOverlay(
                 Text(
                     text = data.title,
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = kannachTitleStyle(),
                     color = palette.greenDeep,
                     textAlign = TextAlign.Center
                 )
