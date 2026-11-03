@@ -411,6 +411,8 @@ fun KannachApp(viewModel: MainViewModel) {
             if (!showSplash && isFirstRun) {
                 FirstRunOnboarding(
                     strings = strings,
+                    currentLanguage = language,
+                    onLanguageSelected = { viewModel.setLanguage(it) },
                     onFinish = { viewModel.completeFirstRun() }
                 )
             }

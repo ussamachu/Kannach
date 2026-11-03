@@ -16,6 +16,7 @@ android {
     versionName = "1.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    androidResources.localeFilters += listOf("ar", "en", "fr", "es")
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,

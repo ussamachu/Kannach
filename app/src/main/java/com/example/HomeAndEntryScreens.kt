@@ -2616,12 +2616,16 @@ fun DrawingCanvas(
 @Composable
 fun FirstRunOnboarding(
     strings: I18n.Strings,
+    currentLanguage: String = "ar",
+    onLanguageSelected: (String) -> Unit = {},
     onFinish: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalKannachPalette.current
-    val handFont = LocalKannachHandFont.current
-    val pagerState = rememberPagerState(pageCount = { 4 })
+    val isRtl = I18n.isRtl(currentLanguage)
+    val layoutDirection = if (isRtl) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr
+    val activeHandFont = if (isRtl) KannachFonts.handAr else KannachFonts.handLatin
+    val pagerState = rememberPagerState(pageCount = { 5 })
     val coroutineScope = rememberCoroutineScope()
 
     BackHandler(enabled = pagerState.currentPage > 0) {
@@ -2630,190 +2634,266 @@ fun FirstRunOnboarding(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .paperBackground(palette.paper)
-            .statusBarsPadding()
-            .navigationBarsPadding(),
-        horizontalAlignment = Alignment.CenterHorizontally
+    CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalLayoutDirection provides layoutDirection,
+        LocalKannachHandFont provides activeHandFont
     ) {
-        // Top row (56.dp, horizontal padding 24.dp): 4 page dots in centre, Skip at the end (hidden on last page)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = 24.dp)
+        val handFont = LocalKannachHandFont.current
+
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .paperBackground(palette.paper)
+                .statusBarsPadding()
+                .navigationBarsPadding(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                for (i in 0 until 4) {
-                    val isCurrent = pagerState.currentPage == i
-                    val dotSize by animateDpAsState(
-                        targetValue = if (isCurrent) 10.dp else 8.dp,
-                        animationSpec = tween(200),
-                        label = "OnboardingDotSize"
-                    )
-                    Canvas(modifier = Modifier.size(12.dp)) {
-                        val r = dotSize.toPx() / 2f
-                        if (isCurrent) {
-                            drawCircle(
-                                color = palette.ink,
-                                radius = r,
-                                center = center
-                            )
-                        } else {
-                            drawCircle(
-                                color = palette.inkFaint,
-                                radius = r,
-                                center = center,
-                                style = Stroke(width = 1.5.dp.toPx())
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (pagerState.currentPage < 3) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .heightIn(min = 48.dp)
-                        .widthIn(min = 48.dp)
-                        .clickable { onFinish() }
-                        .padding(horizontal = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = strings.onboardingSkip,
-                        fontSize = 15.sp,
-                        fontFamily = handFont,
-                        color = palette.inkSoft
-                    )
-                }
-            }
-        }
-
-        // Four-page HorizontalPager
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) { page ->
-            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
-            val isCurrentPage = pagerState.currentPage == page
-            val textAlpha = (1f - abs(pageOffset)).coerceIn(0f, 1f)
-
-            val title = when (page) {
-                0 -> strings.onboardingBeat1
-                1 -> strings.onboardingBeat2
-                2 -> strings.onboardingBeat3
-                else -> strings.onboardingBeat4
-            }
-            val subtitle = when (page) {
-                0 -> strings.onboardingBeat1Sub
-                1 -> strings.onboardingBeat2Sub
-                2 -> strings.onboardingBeat3Sub
-                else -> strings.onboardingBeat4Sub
-            }
-
-            Column(
+            // Top row (56.dp, horizontal padding 24.dp): 5 page dots in centre, Skip at the end (shown on pages 1..3)
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 24.dp)
             ) {
-                Spacer(modifier = Modifier.weight(0.6f))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(260.dp)
-                        .graphicsLayer {
-                            translationX = pageOffset * 40.dp.toPx()
-                        },
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    when (page) {
-                        0 -> DrawnScene(SceneWelcome, active = isCurrentPage, modifier = Modifier.fillMaxSize(), swayDegrees = 2.5f)
-                        1 -> SceneDrawDay(active = isCurrentPage, modifier = Modifier.fillMaxSize())
-                        2 -> SceneYearGrid(active = isCurrentPage)
-                        else -> DrawnScene(ScenePrivate, active = isCurrentPage, modifier = Modifier.fillMaxSize(), pulse = 0.05f)
+                    for (i in 0 until 5) {
+                        val isCurrent = pagerState.currentPage == i
+                        val dotSize by animateDpAsState(
+                            targetValue = if (isCurrent) 10.dp else 8.dp,
+                            animationSpec = tween(200),
+                            label = "OnboardingDotSize"
+                        )
+                        Canvas(modifier = Modifier.size(12.dp)) {
+                            val r = dotSize.toPx() / 2f
+                            if (isCurrent) {
+                                drawCircle(
+                                    color = palette.ink,
+                                    radius = r,
+                                    center = center
+                                )
+                            } else {
+                                drawCircle(
+                                    color = palette.inkFaint,
+                                    radius = r,
+                                    center = center,
+                                    style = Stroke(width = 1.5.dp.toPx())
+                                )
+                            }
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(28.dp))
-
-                Text(
-                    text = title,
-                    fontSize = 26.sp,
-                    style = kannachTitleStyle(),
-                    color = palette.ink,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = textAlpha
+                if (pagerState.currentPage in 1..3) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .heightIn(min = 48.dp)
+                            .widthIn(min = 48.dp)
+                            .clickable { onFinish() }
+                            .padding(horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = strings.onboardingSkip,
+                            fontSize = 15.sp,
+                            fontFamily = handFont,
+                            color = palette.inkSoft
+                        )
                     }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = subtitle,
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp,
-                    fontFamily = handFont,
-                    color = palette.inkSoft,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    modifier = Modifier
-                        .widthIn(max = 320.dp)
-                        .graphicsLayer {
-                            alpha = textAlpha
-                        }
-                )
-
-                Spacer(modifier = Modifier.weight(0.4f))
+                }
             }
-        }
 
-        // Bottom button (height 56.dp, fillMaxWidth(0.8f), bottom padding 28.dp, centred)
-        Box(
-            modifier = Modifier
-                .padding(bottom = 28.dp)
-                .fillMaxWidth(0.8f)
-                .height(56.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(palette.green)
-                .clickable {
-                    if (pagerState.currentPage < 3) {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+            // Five-page HorizontalPager
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) { page ->
+                val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                val isCurrentPage = pagerState.currentPage == page
+                val textAlpha = (1f - abs(pageOffset)).coerceIn(0f, 1f)
+
+                if (page == 0) {
+                    val languageOptions = listOf(
+                        "ar" to "العربية",
+                        "en" to "English",
+                        "fr" to "Français",
+                        "es" to "Español"
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                                .graphicsLayer {
+                                    translationX = pageOffset * 40.dp.toPx()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            DrawnScene(SceneWelcome, active = isCurrentPage, modifier = Modifier.fillMaxSize(), swayDegrees = 2.5f)
                         }
-                    } else {
-                        onFinish()
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        languageOptions.forEachIndexed { rowIndex, (code, label) ->
+                            val isSelected = currentLanguage == code
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        onLanguageSelected(code)
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 22.sp,
+                                    fontFamily = if (code == "ar") KannachFonts.handAr else LocalKannachHandFont.current,
+                                    color = if (isSelected) palette.ink else palette.inkSoft,
+                                    textAlign = TextAlign.Center,
+                                    modifier = if (isSelected) {
+                                        Modifier.drawBehind {
+                                            val y = size.height
+                                            inkLine(
+                                                from = Offset(0f, y),
+                                                to = Offset(size.width, y),
+                                                seed = rowIndex,
+                                                color = palette.red.copy(alpha = 0.85f),
+                                                widthPx = 1.6.dp.toPx(),
+                                                wobblePx = 1.5.dp.toPx()
+                                            )
+                                        }
+                                    } else {
+                                        Modifier
+                                    }
+                                )
+                            }
+                        }
                     }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            AnimatedContent(
-                targetState = if (pagerState.currentPage < 3) strings.onboardingNext else strings.onboardingStart,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(200)).togetherWith(fadeOut(animationSpec = tween(200)))
-                },
-                label = "OnboardingButtonText"
-            ) { label ->
-                Text(
-                    text = label,
-                    fontSize = 18.sp,
-                    fontFamily = handFont,
-                    fontWeight = FontWeight.Bold,
-                    color = palette.onGreen,
-                    textAlign = TextAlign.Center
-                )
+                } else {
+                    val title = when (page) {
+                        1 -> strings.onboardingBeat1
+                        2 -> strings.onboardingBeat2
+                        3 -> strings.onboardingBeat3
+                        else -> strings.onboardingBeat4
+                    }
+                    val subtitle = when (page) {
+                        1 -> strings.onboardingBeat1Sub
+                        2 -> strings.onboardingBeat2Sub
+                        3 -> strings.onboardingBeat3Sub
+                        else -> strings.onboardingBeat4Sub
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.weight(0.6f))
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(260.dp)
+                                .graphicsLayer {
+                                    translationX = pageOffset * 40.dp.toPx()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            when (page) {
+                                1 -> DrawnScene(SceneWelcome, active = isCurrentPage, modifier = Modifier.fillMaxSize(), swayDegrees = 2.5f)
+                                2 -> SceneDrawDay(active = isCurrentPage, modifier = Modifier.fillMaxSize())
+                                3 -> SceneYearGrid(active = isCurrentPage)
+                                else -> DrawnScene(ScenePrivate, active = isCurrentPage, modifier = Modifier.fillMaxSize(), pulse = 0.05f)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(28.dp))
+
+                        Text(
+                            text = title,
+                            fontSize = 26.sp,
+                            style = kannachTitleStyle(),
+                            color = palette.ink,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.graphicsLayer {
+                                alpha = textAlpha
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = subtitle,
+                            fontSize = 16.sp,
+                            lineHeight = 24.sp,
+                            fontFamily = handFont,
+                            color = palette.inkSoft,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            modifier = Modifier
+                                .widthIn(max = 320.dp)
+                                .graphicsLayer {
+                                    alpha = textAlpha
+                                }
+                        )
+
+                        Spacer(modifier = Modifier.weight(0.4f))
+                    }
+                }
+            }
+
+            // Bottom button (height 56.dp, fillMaxWidth(0.8f), bottom padding 28.dp, centred)
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 28.dp)
+                    .fillMaxWidth(0.8f)
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(palette.green)
+                    .clickable {
+                        if (pagerState.currentPage < 4) {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                            }
+                        } else {
+                            onFinish()
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                AnimatedContent(
+                    targetState = if (pagerState.currentPage < 4) strings.onboardingNext else strings.onboardingStart,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(200)).togetherWith(fadeOut(animationSpec = tween(200)))
+                    },
+                    label = "OnboardingButtonText"
+                ) { label ->
+                    Text(
+                        text = label,
+                        fontSize = 18.sp,
+                        fontFamily = handFont,
+                        fontWeight = FontWeight.Bold,
+                        color = palette.onGreen,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
