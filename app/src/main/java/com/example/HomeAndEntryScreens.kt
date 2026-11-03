@@ -2687,13 +2687,17 @@ fun FirstRunOnboarding(
                     }
                 }
 
-                if (pagerState.currentPage in 1..3) {
+                if (pagerState.currentPage in 0..3) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .heightIn(min = 48.dp)
                             .widthIn(min = 48.dp)
-                            .clickable { onFinish() }
+                            .clickable {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(4)
+                                }
+                            }
                             .padding(horizontal = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -2718,7 +2722,7 @@ fun FirstRunOnboarding(
                 val isCurrentPage = pagerState.currentPage == page
                 val textAlpha = (1f - abs(pageOffset)).coerceIn(0f, 1f)
 
-                if (page == 0) {
+                if (page == 4) {
                     val languageOptions = listOf(
                         "ar" to "العربية",
                         "en" to "English",
@@ -2728,6 +2732,7 @@ fun FirstRunOnboarding(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
                             .padding(horizontal = 32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
@@ -2735,16 +2740,16 @@ fun FirstRunOnboarding(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(140.dp)
+                                .height(180.dp)
                                 .graphicsLayer {
                                     translationX = pageOffset * 40.dp.toPx()
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            DrawnScene(SceneWelcome, active = isCurrentPage, modifier = Modifier.fillMaxSize(), swayDegrees = 2.5f)
+                            DrawnScene(SceneLanguages, active = isCurrentPage, modifier = Modifier.fillMaxSize(), swayDegrees = 1.5f)
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
                         languageOptions.forEachIndexed { rowIndex, (code, label) ->
                             val isSelected = currentLanguage == code
@@ -2787,15 +2792,15 @@ fun FirstRunOnboarding(
                     }
                 } else {
                     val title = when (page) {
-                        1 -> strings.onboardingBeat1
-                        2 -> strings.onboardingBeat2
-                        3 -> strings.onboardingBeat3
+                        0 -> strings.onboardingBeat1
+                        1 -> strings.onboardingBeat2
+                        2 -> strings.onboardingBeat3
                         else -> strings.onboardingBeat4
                     }
                     val subtitle = when (page) {
-                        1 -> strings.onboardingBeat1Sub
-                        2 -> strings.onboardingBeat2Sub
-                        3 -> strings.onboardingBeat3Sub
+                        0 -> strings.onboardingBeat1Sub
+                        1 -> strings.onboardingBeat2Sub
+                        2 -> strings.onboardingBeat3Sub
                         else -> strings.onboardingBeat4Sub
                     }
 
@@ -2817,9 +2822,9 @@ fun FirstRunOnboarding(
                             contentAlignment = Alignment.Center
                         ) {
                             when (page) {
-                                1 -> DrawnScene(SceneWelcome, active = isCurrentPage, modifier = Modifier.fillMaxSize(), swayDegrees = 2.5f)
-                                2 -> SceneDrawDay(active = isCurrentPage, modifier = Modifier.fillMaxSize())
-                                3 -> SceneYearGrid(active = isCurrentPage)
+                                0 -> DrawnScene(SceneWelcome, active = isCurrentPage, modifier = Modifier.fillMaxSize(), swayDegrees = 2.5f)
+                                1 -> SceneDrawDay(active = isCurrentPage, modifier = Modifier.fillMaxSize())
+                                2 -> SceneYearGrid(active = isCurrentPage)
                                 else -> DrawnScene(ScenePrivate, active = isCurrentPage, modifier = Modifier.fillMaxSize(), pulse = 0.05f)
                             }
                         }
