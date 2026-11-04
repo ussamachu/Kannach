@@ -2767,7 +2767,7 @@ fun FirstRunOnboarding(
                             ) {
                                 Text(
                                     text = label,
-                                    fontSize = 22.sp,
+                                    fontSize = if (code == "ar") 28.sp else 22.sp,
                                     fontFamily = if (code == "ar") KannachFonts.handAr else LocalKannachHandFont.current,
                                     color = if (isSelected) palette.ink else palette.inkSoft,
                                     textAlign = TextAlign.Center,
