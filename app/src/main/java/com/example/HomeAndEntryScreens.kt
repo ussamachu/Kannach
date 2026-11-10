@@ -307,31 +307,43 @@ fun SplashScreen(
     val palette = LocalKannachPalette.current
     val reduceMotion = rememberReduceMotion()
     var visible by remember { mutableStateOf(true) }
+    var skip by remember { mutableStateOf(false) }
     val sproutProgress = remember { Animatable(if (reduceMotion) 1f else 0f) }
     val titleAlpha = remember { Animatable(if (reduceMotion) 1f else 0f) }
 
     LaunchedEffect(Unit) {
-        if (!reduceMotion) {
-            // Draw sprout stroke by stroke over ~900ms
-            sproutProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = KannachMotion.CEREMONY,
-                    easing = KannachMotion.Settle
+        val animJob = launch {
+            if (!reduceMotion) {
+                // Draw sprout stroke by stroke
+                sproutProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(
+                        durationMillis = 450,
+                        easing = KannachMotion.Settle
+                    )
                 )
-            )
-            // Fade in app title smoothly
-            titleAlpha.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = KannachMotion.SOFT,
-                    easing = KannachMotion.Settle
+                // Fade in app title smoothly
+                titleAlpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(
+                        durationMillis = 250,
+                        easing = KannachMotion.Settle
+                    )
                 )
-            )
-            delay(550)
-        } else {
-            delay(600)
+                delay(150)
+            } else {
+                delay(200)
+            }
         }
+        val skipJob = launch {
+            androidx.compose.runtime.snapshotFlow { skip }.collect { isSkipped ->
+                if (isSkipped) {
+                    animJob.cancel()
+                }
+            }
+        }
+        animJob.join()
+        skipJob.cancel()
         visible = false
         delay(KannachMotion.SOFT.toLong())
         onFinished()
@@ -346,7 +358,12 @@ fun SplashScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .paperBackground(palette.paper)
-                .clickable(enabled = false) {},
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    skip = true
+                },
             contentAlignment = Alignment.Center
         ) {
             Column(
