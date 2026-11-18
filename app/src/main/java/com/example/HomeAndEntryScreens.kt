@@ -364,7 +364,7 @@ fun SplashScreen(
                     text = appName,
                     fontSize = 34.sp,
                     style = kannachTitleStyle(),
-                    color = palette.greenDeep,
+                    color = palette.ink,
                     modifier = Modifier.alpha(titleAlpha.value)
                 )
                 if (appSub.isNotBlank()) {
