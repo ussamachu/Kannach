@@ -143,6 +143,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import java.util.Calendar
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
@@ -231,73 +232,6 @@ fun GlyphView(
     )
 }
 
-/**
- * R1: Progressive stroke-by-stroke drawing of the sprout icon:
- * 1. Stem: M12 21V10.5
- * 2. Left leaf: M12 11c0-3.5-2.5-6-6.8-6.6C4.6 8.9 6.8 12 12 11z
- * 3. Right leaf: M12 11c0-3 2.2-5.3 6.1-5.8.6 3.7-1.3 6.3-6.1 5.8z
- * Animates across ~900ms via PathMeasure matching HTML stroke-dashoffset.
- */
-@Composable
-fun AnimatedSprout(
-    progress: Float,
-    tint: Color,
-    modifier: Modifier = Modifier,
-    strokeWidthDp: androidx.compose.ui.unit.Dp = 2.8.dp
-) {
-    val pm = remember { PathMeasure() }
-
-    // Deconstruct overall progress [0f..1f] into sequential growth phases
-    val stemProg = (progress / 0.35f).coerceIn(0f, 1f)
-    val leftProg = ((progress - 0.28f) / 0.38f).coerceIn(0f, 1f)
-    val rightProg = ((progress - 0.58f) / 0.42f).coerceIn(0f, 1f)
-
-    Canvas(modifier = modifier) {
-        val sx = size.width / 24f
-        val sy = size.height / 24f
-        val stroke = Stroke(
-            width = strokeWidthDp.toPx(),
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round
-        )
-
-        fun parse(pathData: String): Path {
-            val nodes = PathParser().parsePathString(pathData).toNodes()
-            val path = Path()
-            PathParser().addPathNodes(nodes).toPath(path)
-            val matrix = Matrix().apply {
-                scale(x = sx, y = sy)
-            }
-            path.transform(matrix)
-            return path
-        }
-
-        val stemPath = parse("M12 21V10.5")
-        val leftLeafPath = parse("M12 11c0-3.5-2.5-6-6.8-6.6C4.6 8.9 6.8 12 12 11z")
-        val rightLeafPath = parse("M12 11c0-3 2.2-5.3 6.1-5.8.6 3.7-1.3 6.3-6.1 5.8z")
-
-        if (stemProg > 0f) {
-            val seg = Path()
-            pm.setPath(stemPath, forceClosed = false)
-            pm.getSegment(0f, stemProg * pm.length, seg, true)
-            drawPath(seg, tint, style = stroke)
-        }
-
-        if (leftProg > 0f) {
-            val seg = Path()
-            pm.setPath(leftLeafPath, forceClosed = false)
-            pm.getSegment(0f, leftProg * pm.length, seg, true)
-            drawPath(seg, tint, style = stroke)
-        }
-
-        if (rightProg > 0f) {
-            val seg = Path()
-            pm.setPath(rightLeafPath, forceClosed = false)
-            pm.getSegment(0f, rightProg * pm.length, seg, true)
-            drawPath(seg, tint, style = stroke)
-        }
-    }
-}
 
 /**
  * 2. SplashScreen (R1):
@@ -372,25 +306,59 @@ fun SplashScreen(
                 },
             contentAlignment = Alignment.Center
         ) {
-            val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+            val dir = if (LocalLayoutDirection.current == LayoutDirection.Rtl) 1f else -1f
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Image(
-                    painter = painterResource(R.drawable.splash_mascot),
-                    contentDescription = null,
-                    colorFilter = ColorFilter.tint(palette.ink),
-                    contentScale = ContentScale.Fit,
+                Box(
                     modifier = Modifier
-                        .width(220.dp)
-                        .height(188.dp)
-                        .graphicsLayer {
-                            alpha = sproutProgress.value
-                            translationX = (1f - sproutProgress.value) * (if (isRtl) 48.dp.toPx() else -48.dp.toPx())
-                            rotationZ = (1f - sproutProgress.value) * -4f
-                        }
-                )
+                        .width(150.dp)
+                        .height(128.dp)
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.splash_mascot),
+                        contentDescription = null,
+                        colorFilter = ColorFilter.tint(palette.ink),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                if (reduceMotion) {
+                                    alpha = 1f
+                                } else {
+                                    val p = sproutProgress.value
+                                    alpha = p
+                                    translationX = (1f - p) * 56.dp.toPx() * dir
+                                    translationY = -abs(sin(p * 3.0 * PI)).toFloat() * (1f - p) * 10.dp.toPx()
+                                    rotationZ = (1f - p) * -3f * dir
+                                }
+                            }
+                    )
+                    Image(
+                        painter = painterResource(R.drawable.splash_mascot_sparkle),
+                        contentDescription = null,
+                        colorFilter = ColorFilter.tint(palette.ink),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                if (reduceMotion) {
+                                    alpha = 1f
+                                    scaleX = 1f
+                                    scaleY = 1f
+                                } else {
+                                    val t = titleAlpha.value
+                                    val s = 0.4f + 0.6f * t
+                                    alpha = t
+                                    scaleX = s
+                                    scaleY = s
+                                    rotationZ = (1f - t) * -14f
+                                    transformOrigin = TransformOrigin(0.875f, 0.235f)
+                                }
+                            }
+                    )
+                }
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
                     text = appName,
