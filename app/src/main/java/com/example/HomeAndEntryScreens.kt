@@ -123,8 +123,13 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -133,6 +138,7 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -366,15 +372,24 @@ fun SplashScreen(
                 },
             contentAlignment = Alignment.Center
         ) {
+            val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                AnimatedSprout(
-                    progress = sproutProgress.value,
-                    tint = palette.greenDeep,
-                    strokeWidthDp = 2.8.dp,
-                    modifier = Modifier.size(96.dp)
+                Image(
+                    painter = painterResource(R.drawable.splash_mascot),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(palette.ink),
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .width(220.dp)
+                        .height(188.dp)
+                        .graphicsLayer {
+                            alpha = sproutProgress.value
+                            translationX = (1f - sproutProgress.value) * (if (isRtl) 48.dp.toPx() else -48.dp.toPx())
+                            rotationZ = (1f - sproutProgress.value) * -4f
+                        }
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
